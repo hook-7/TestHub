@@ -7,6 +7,8 @@ alwaysApply: true
 本项目用于生产测试上位机，技术栈为 **FastAPI (Python)** + **Vue3 (Vite + Element Plus)**。  
 目标：保证 **代码规范、可维护、可追溯**，适配工厂长期使用。
 
+.py 文件统一使用  uv run XXX.py 来运行
+
 
 ---
 

@@ -17,15 +17,38 @@
 - 原始数据收发
 - 现代化Web界面
 
+## 环境要求
+
+- Python 3.8+
+- uv (Python包管理器)
+- Node.js 16+ (仅开发模式需要)
+
+**安装uv:**
+- Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Windows: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
 ## 快速开始
 
-### 后端启动
+### 跨平台启动 (推荐)
 
+项目提供了Python启动脚本，支持Windows和Linux：
+
+**生产模式启动:**
 ```bash
-cd /workspace
-source $HOME/.local/bin/env
+python3 start.py
+```
+
+**开发模式启动:**
+```bash
+python3 start.py --dev
+```
+
+### 传统启动方式
+
+**后端启动:**
+```bash
 uv sync
-uv run python backend/app/main.py
+uv run python backend/start.py
 ```
 
 ### 前端开发
