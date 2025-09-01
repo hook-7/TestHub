@@ -17,15 +17,18 @@ fi
 # Set PATH for uv
 export PATH="$HOME/.local/bin:$PATH"
 
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # Install backend dependencies
 echo "📦 Installing backend dependencies..."
-cd /workspace
 uv sync
 
 # Check if frontend is built
-if [ ! -d "/workspace/frontend/dist" ]; then
+if [ ! -d "frontend/dist" ]; then
     echo "🎨 Building frontend..."
-    cd /workspace/frontend
+    cd frontend
     
     if [ ! -d "node_modules" ]; then
         echo "📦 Installing frontend dependencies..."
@@ -33,7 +36,7 @@ if [ ! -d "/workspace/frontend/dist" ]; then
     fi
     
     npm run build
-    cd /workspace
+    cd "$SCRIPT_DIR"
 fi
 
 echo ""
