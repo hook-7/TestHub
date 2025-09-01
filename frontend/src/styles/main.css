@@ -1,0 +1,120 @@
+/* Global styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100vh;
+}
+
+/* Custom Element Plus variables */
+:root {
+  --el-color-primary: #667eea;
+  --el-color-primary-light-3: rgba(102, 126, 234, 0.7);
+  --el-color-primary-light-5: rgba(102, 126, 234, 0.5);
+  --el-color-primary-light-7: rgba(102, 126, 234, 0.3);
+  --el-color-primary-light-8: rgba(102, 126, 234, 0.2);
+  --el-color-primary-light-9: rgba(102, 126, 234, 0.1);
+}
+
+/* Custom classes */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0 16px 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-row .el-form-item {
+  flex: 1;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-indicator.connected {
+  background-color: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+  border: 1px solid var(--el-color-success-light-5);
+}
+
+.status-indicator.disconnected {
+  background-color: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+  border: 1px solid var(--el-color-danger-light-5);
+}
+
+.log-item {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border-left: 4px solid;
+  background-color: var(--el-bg-color-page);
+}
+
+.log-item.sent {
+  border-left-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+.log-item.received.success {
+  border-left-color: var(--el-color-success);
+  background-color: var(--el-color-success-light-9);
+}
+
+.log-item.received.error {
+  border-left-color: var(--el-color-danger);
+  background-color: var(--el-color-danger-light-9);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.log-timestamp {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.log-data {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  background-color: var(--el-fill-color-light);
+  padding: 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  margin-top: 8px;
+}
