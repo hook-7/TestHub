@@ -1,0 +1,69 @@
+---
+alwaysApply: true
+---
+
+# 🚦 项目开发规范 (FastAPI + Vue3 + Element Plus)
+
+本项目用于生产测试上位机，技术栈为 **FastAPI (Python)** + **Vue3 (Vite + Element Plus)**。  
+目标：保证 **代码规范、可维护、可追溯**，适配工厂长期使用。
+
+
+---
+
+## 1. 项目结构
+
+### 后端 (FastAPI)
+
+backend/
+
+
+
+
+### 前端 (Vue3 + Element Plus)
+frontend/
+
+
+
+---
+
+## 2. 编码规范
+
+### Python (FastAPI)
+- 遵循 **PEP8**
+- 文件/变量：`snake_case`
+- 类：`PascalCase`
+- 严格区分：路由 (api)、业务 (services)、驱动 (drivers)
+- 所有 API 请求/响应必须定义 **Pydantic Schema**
+- 关键日志必须记录：时间、工位、设备ID、SN、操作员
+
+### Vue3
+- 使用 **组合式 API (script setup)**
+- 组件名/文件名：`PascalCase`
+- API 请求必须通过 `api/` 封装，禁止在组件里直接写 axios
+- 状态统一由 **Pinia** 管理
+- 样式：`<style scoped>` + Element Plus 主题变量
+
+---
+
+## 3. API 设计
+
+- 路由使用 **RESTful 风格**，带版本号
+
+
+- 响应格式统一：
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {...}
+}
+
+错误码：
+
+0 = 成功
+
+400 = 参数错误
+
+500 = 系统错误
+
+1xxx = 业务错误
