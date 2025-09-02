@@ -19,7 +19,7 @@ const router = createRouter({
       path: '/communication',
       name: 'Communication',
       component: Communication,
-      meta: { title: '通信测试' }
+      meta: { title: 'AT指令交互' }
     }
   ]
 })
