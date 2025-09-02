@@ -41,14 +41,14 @@ export interface RawDataResponse {
 export const serialAPI = {
   // 获取可用串口列表
   async getAvailablePorts(): Promise<SerialPortInfo[]> {
-    const response = await api.get('/serial/ports')
-    return response.data
+    const response = await api.get<SerialPortInfo[]>('/serial/ports')
+    return response
   },
 
   // 自动检测串口
   async autoDetectPort(): Promise<string> {
-    const response = await api.get('/serial/auto-detect')
-    return response.data.port
+    const response = await api.get<{ port: string }>('/serial/auto-detect')
+    return response.port
   },
 
   // 连接串口
@@ -63,19 +63,19 @@ export const serialAPI = {
 
   // 获取连接状态
   async getConnectionStatus(): Promise<SerialConnectionStatus> {
-    const response = await api.get('/serial/status')
-    return response.data
+    const response = await api.get<SerialConnectionStatus>('/serial/status')
+    return response
   },
 
   // 发送指令（支持AT指令和其他自定义指令）
   async sendATCommand(command: string): Promise<RawDataResponse> {
-    const response = await api.post('/serial/send-at', { data: command })
-    return response.data
+    const response = await api.post<RawDataResponse>('/serial/send-at', { data: command })
+    return response
   },
 
   // 发送原始数据
   async sendRawData(data: string): Promise<RawDataResponse> {
-    const response = await api.post('/serial/raw-data', { data })
-    return response.data
+    const response = await api.post<RawDataResponse>('/serial/raw-data', { data })
+    return response
   },
 }

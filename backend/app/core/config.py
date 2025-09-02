@@ -3,6 +3,7 @@ Application Configuration
 """
 
 import os
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
 
@@ -41,6 +42,20 @@ class Settings(BaseSettings):
     # Logging settings
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+    # Data storage settings - 数据存储配置
+    @property
+    def DATA_DIR(self) -> Path:
+        """获取数据存储目录，跨平台兼容"""
+        # 使用当前工作目录下的 data 文件夹
+        data_dir = Path.cwd() / "data"
+        data_dir.mkdir(exist_ok=True)  # 确保目录存在
+        return data_dir
+    
+    @property
+    def COMMANDS_FILE(self) -> Path:
+        """常用指令存储文件路径"""
+        return self.DATA_DIR / "saved_commands.json"
     
     class Config:
         env_file = ".env"
