@@ -67,11 +67,33 @@ async def validate_session(
     )
 
 
+@router.post("/heartbeat", response_model=APIResponse)
+async def session_heartbeat(
+    request: Request,
+    session_id: Optional[str] = Depends(get_session_id_from_header)
+):
+    """会话心跳 - 保持会话活跃"""
+    if not session_id:
+        return APIResponse.error(code=400, msg="缺少会话ID")
+    
+    try:
+        is_valid = await session_service.update_session_activity(session_id, request)
+        if is_valid:
+            return APIResponse.success(
+                data={"active": True, "last_activity": session_service.get_session_last_activity(session_id)},
+                msg="心跳更新成功"
+            )
+        else:
+            return APIResponse.error(code=401, msg="会话无效或已过期")
+    except Exception as e:
+        logger.error(f"Heartbeat error: {e}")
+        return APIResponse.error(code=500, msg="心跳更新失败")
+
+
 @router.post("/cleanup", response_model=APIResponse)
 async def force_cleanup_sessions():
-    """强制清理所有会话（管理员功能）"""
-    success = await session_service.force_cleanup_session()
-    return APIResponse.success(
-        data={"cleaned": success},
-        msg="会话清理成功" if success else "会话清理失败"
+    """强制清理所有会话（已禁用 - 为保证系统安全）"""
+    return APIResponse.error(
+        code=403,
+        msg="为保证系统安全，强制清理会话功能已被禁用。请等待会话自然超时或用户主动退出。"
     )
