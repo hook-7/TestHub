@@ -14,13 +14,36 @@
               size="large"
             >
               <el-icon>
-                <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
+                <Connection />
               </el-icon>
               {{ connectionStore.isConnected ? '已连接' : '未连接' }}
             </el-tag>
           </div>
         </div>
       </el-header>
+
+      <!-- Navigation -->
+      <div class="navigation">
+        <el-menu 
+          :default-active="$route.path" 
+          mode="horizontal" 
+          router
+          class="nav-menu"
+        >
+          <el-menu-item index="/serial-config">
+            <el-icon><Setting /></el-icon>
+            <span>串口配置</span>
+          </el-menu-item>
+          <el-menu-item index="/communication">
+            <el-icon><ChatLineRound /></el-icon>
+            <span>AT指令交互</span>
+          </el-menu-item>
+          <el-menu-item index="/terminal">
+            <el-icon><Monitor /></el-icon>
+            <span>命令行终端</span>
+          </el-menu-item>
+        </el-menu>
+      </div>
 
       <!-- Main Content -->
       <el-main class="main-content">
@@ -32,6 +55,12 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { 
+  Connection, 
+  Setting, 
+  ChatLineRound, 
+  Monitor 
+} from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 
 const connectionStore = useConnectionStore()
@@ -78,8 +107,62 @@ onMounted(() => {
   gap: 8px;
 }
 
+.navigation {
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.nav-menu {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  border-bottom: none;
+}
+
+.nav-menu .el-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.nav-menu .el-menu-item:hover {
+  background-color: #f5f7fa;
+}
+
+.nav-menu .el-menu-item.is-active {
+  background-color: #ecf5ff;
+  color: #409eff;
+}
+
 .main-content {
   background-color: #f5f7fa;
-  padding: 20px;
+  padding: 0;
+  overflow: auto;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .header-content {
+    padding: 0 12px;
+  }
+  
+  .title {
+    font-size: 20px;
+  }
+  
+  .nav-menu {
+    padding: 0 12px;
+  }
+  
+  .nav-menu .el-menu-item {
+    font-size: 14px;
+  }
+  
+  .nav-menu .el-menu-item span {
+    display: none;
+  }
 }
 </style>
