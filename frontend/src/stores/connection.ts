@@ -51,6 +51,17 @@ export const useConnectionStore = defineStore('connection', () => {
       return false
     }
   }
+
+  const connectWithLogin = async (config: any) => {
+    try {
+      const response = await serialAPI.connectSerialAndLogin(config)
+      await checkStatus()
+      return response
+    } catch (error) {
+      console.error('Failed to connect with login:', error)
+      throw error
+    }
+  }
   
   const disconnect = async () => {
     try {
@@ -77,6 +88,7 @@ export const useConnectionStore = defineStore('connection', () => {
     loadAvailablePorts,
     autoDetectPort,
     connect,
+    connectWithLogin,
     disconnect,
   }
 })

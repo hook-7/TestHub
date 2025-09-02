@@ -16,17 +16,7 @@
             size="small"
           >
             <el-icon><SwitchButton /></el-icon>
-            登出
-          </el-button>
-          <el-button 
-            v-else
-            type="primary" 
-            @click="login"
-            :loading="sessionStore.isLoading"
-            size="small"
-          >
-            <el-icon><Connection /></el-icon>
-            登录
+            断开并登出
           </el-button>
         </div>
       </template>
@@ -205,13 +195,13 @@
           <div style="display: flex; gap: 16px;">
             <el-button 
               type="primary" 
-              @click="connect"
+              @click="connectAndLogin"
               :loading="connecting"
-              :disabled="connectionStore.isConnected || !sessionStore.isLoggedIn"
+              :disabled="connectionStore.isConnected"
               size="large"
             >
               <el-icon><Connection /></el-icon>
-              连接串口
+              连接串口并登录
             </el-button>
             
             <el-button 
@@ -245,10 +235,20 @@
             </el-button>
           </div>
           
-          <!-- 未登录提示 -->
-          <div v-if="!sessionStore.isLoggedIn" class="login-hint">
+          <!-- 连接提示 -->
+          <div v-if="!sessionStore.isLoggedIn && !connectionStore.isConnected" class="login-hint">
             <el-alert
-              title="请先登录后再进行串口操作"
+              title="点击'连接串口并登录'按钮进行串口配置和系统登录"
+              type="info"
+              :closable="false"
+              show-icon
+            />
+          </div>
+          
+          <!-- 其他客户端占用提示 -->
+          <div v-if="sessionStore.hasActiveSession && !sessionStore.isLoggedIn" class="login-hint">
+            <el-alert
+              :title="`已有其他客户端连接中（IP: ${sessionStore.currentSession?.client_ip}），请断开其他连接后重试`"
               type="warning"
               :closable="false"
               show-icon
@@ -363,12 +363,37 @@ const connect = async () => {
   }
 }
 
+const connectAndLogin = async () => {
+  if (!formRef.value) return
+  
+  const valid = await formRef.value.validate()
+  if (!valid) return
+  
+  connecting.value = true
+  try {
+    // 使用新的串口连接并登录方法
+    const success = await sessionStore.loginWithSerial(form)
+    if (success) {
+      // 登录成功后刷新连接状态和会话状态
+      await Promise.all([
+        connectionStore.checkStatus(),
+        sessionStore.refreshSessionStatus()
+      ])
+    }
+  } finally {
+    connecting.value = false
+  }
+}
+
 const disconnect = async () => {
   disconnecting.value = true
   try {
+    // 先断开串口连接
     const success = await connectionStore.disconnect()
     if (success) {
-      ElMessage.success('串口断开成功')
+      // 然后登出会话
+      await sessionStore.logout()
+      ElMessage.success('串口断开并登出成功')
     }
   } finally {
     disconnecting.value = false
@@ -405,8 +430,8 @@ const login = async () => {
 const logout = async () => {
   try {
     await ElMessageBox.confirm(
-      '确定要登出吗？登出后将无法进行串口操作。',
-      '确认登出',
+      '确定要断开串口连接并登出吗？',
+      '确认断开并登出',
       {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
@@ -414,6 +439,10 @@ const logout = async () => {
       }
     )
     
+    // 先断开串口连接，再登出会话
+    if (connectionStore.isConnected) {
+      await connectionStore.disconnect()
+    }
     await sessionStore.logout()
     // 登出后刷新会话状态
     await sessionStore.refreshSessionStatus()

@@ -51,6 +51,17 @@ export const serialAPI = {
     return response.data.port
   },
 
+  // 连接串口并登录
+  async connectSerialAndLogin(config: SerialConfig): Promise<{
+    session_id: string
+    token: string
+    expires_in: number
+    serial_connected: boolean
+  }> {
+    const response = await api.post('/serial/connect-and-login', config)
+    return response.data
+  },
+
   // 连接串口
   async connectSerial(config: SerialConfig): Promise<void> {
     await api.post('/serial/connect', config)

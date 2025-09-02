@@ -17,6 +17,7 @@ from app.schemas.websocket import (
     WSMessageType
 )
 from app.services.command_service import CommandService
+from app.services.session_service import session_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -159,6 +160,62 @@ async def websocket_terminal(websocket: WebSocket, client_id: str):
     except Exception as e:
         logger.error(f"WebSocket连接异常: {str(e)}")
         manager.disconnect(client_id)
+
+
+@router.websocket("/ws/heartbeat/{session_id}")
+async def websocket_heartbeat(websocket: WebSocket, session_id: str):
+    """
+    WebSocket心跳端点 - 用于维持会话活跃状态
+    
+    Args:
+        websocket: WebSocket连接
+        session_id: 会话ID
+    """
+    await websocket.accept()
+    
+    try:
+        while True:
+            # 接收心跳消息
+            data = await websocket.receive_text()
+            
+            try:
+                # 解析消息
+                message_data = json.loads(data)
+                
+                if message_data.get("type") == "heartbeat":
+                    # 创建简化的请求对象用于心跳验证
+                    class MockRequest:
+                        def __init__(self, client_host: str):
+                            self.client = type('Client', (), {'host': client_host})()
+                            self.headers = {}
+                    
+                    client_host = websocket.client.host if websocket.client else "unknown"
+                    mock_request = MockRequest(client_host)
+                    
+                    # 更新心跳
+                    success = await session_service.update_heartbeat(session_id, mock_request)
+                    
+                    if success:
+                        # 发送心跳响应
+                        response = {
+                            "type": "heartbeat_ack",
+                            "timestamp": datetime.now().isoformat(),
+                            "success": True
+                        }
+                        await websocket.send_text(json.dumps(response))
+                    else:
+                        # 会话无效，关闭连接
+                        await websocket.close(code=4001, reason="Session invalid")
+                        break
+                        
+            except json.JSONDecodeError:
+                # 忽略无效的JSON消息
+                continue
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket心跳客户端 {session_id} 断开连接")
+    except Exception as e:
+        logger.error(f"WebSocket心跳连接异常: {str(e)}")
 
 
 @router.get("/ws/status")

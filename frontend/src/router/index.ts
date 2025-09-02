@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useSessionStore } from '@/stores/session'
 import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
 
@@ -19,9 +20,22 @@ const router = createRouter({
       path: '/communication',
       name: 'Communication',
       component: Communication,
-      meta: { title: 'AT指令交互' }
+      meta: { title: 'AT指令交互', requiresAuth: true }
     }
   ]
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const sessionStore = useSessionStore()
+  
+  // 检查是否需要认证
+  if (to.meta.requiresAuth && !sessionStore.isLoggedIn) {
+    // 未登录，重定向到串口配置页面
+    next('/serial-config')
+  } else {
+    next()
+  }
 })
 
 export default router

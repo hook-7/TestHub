@@ -53,5 +53,10 @@ export const sessionAPI = {
   async forceCleanupSessions(): Promise<{ cleaned: boolean }> {
     const response = await api.post('/session/cleanup')
     return response.data
+  },
+
+  // 更新心跳
+  async updateHeartbeat(): Promise<void> {
+    await api.post('/session/heartbeat')
   }
 }
