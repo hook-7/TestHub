@@ -18,119 +18,160 @@
     </el-card>
 
     <el-row :gutter="20">
-      <!-- 左侧：操作面板 -->
+      <!-- 左侧：AT指令操作面板 -->
       <el-col :span="12">
         <el-card>
           <template #header>
             <div class="card-header">
               <h3>
                 <el-icon><Operation /></el-icon>
-                通信操作
+                AT指令交互
               </h3>
             </div>
           </template>
 
-          <el-tabs v-model="activeTab" type="border-card">
-            <!-- 读取寄存器 -->
-            <el-tab-pane label="读取寄存器" name="read">
-              <el-form :model="readForm" label-width="100px">
-                <el-form-item label="从站ID">
-                  <el-input-number v-model="readForm.slave_id" :min="1" :max="247" />
-                </el-form-item>
-                <el-form-item label="起始地址">
-                  <el-input-number v-model="readForm.start_addr" :min="0" :max="65535" />
-                </el-form-item>
-                <el-form-item label="数量">
-                  <el-input-number v-model="readForm.count" :min="1" :max="125" />
-                </el-form-item>
-                <el-form-item label="功能码">
-                  <el-select v-model="readForm.function_code">
-                    <el-option label="03 - 保持寄存器" :value="3" />
-                    <el-option label="04 - 输入寄存器" :value="4" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item>
+          <!-- AT指令输入区 -->
+          <el-form :model="atForm" label-width="80px">
+            <el-form-item label="AT指令">
+              <el-input
+                v-model="atForm.command"
+                placeholder="输入AT指令，例如: AT+GMR"
+                style="font-family: monospace;"
+                @keyup.enter="sendATCommand"
+              >
+                <template #append>
                   <el-button 
                     type="primary" 
-                    @click="readRegisters"
+                    @click="sendATCommand"
                     :disabled="!connectionStore.isConnected"
-                    :loading="readLoading"
+                    :loading="atLoading"
                   >
-                    <el-icon><View /></el-icon>
-                    读取
+                    <el-icon><Position /></el-icon>
+                    发送
                   </el-button>
-                </el-form-item>
-              </el-form>
-            </el-tab-pane>
+                </template>
+              </el-input>
+            </el-form-item>
+            
+            <!-- AT指令控制选项 -->
+            <el-form-item label="控制选项">
+              <div class="at-controls">
+                <el-checkbox v-model="atForm.autoAddCRLF" size="small">
+                  自动添加\r\n
+                </el-checkbox>
+                <el-select v-model="atForm.lineEnding" size="small" style="width: 120px; margin-left: 12px;">
+                  <el-option label="\r\n (CRLF)" value="\r\n" />
+                  <el-option label="\r (CR)" value="\r" />
+                  <el-option label="\n (LF)" value="\n" />
+                  <el-option label="无终止符" value="" />
+                </el-select>
+                <el-button 
+                  size="small" 
+                  @click="clearATInput" 
+                  style="margin-left: 12px;"
+                >
+                  清空
+                </el-button>
+              </div>
+            </el-form-item>
+          </el-form>
 
-            <!-- 写入寄存器 -->
-            <el-tab-pane label="写入寄存器" name="write">
-              <el-form :model="writeForm" label-width="100px">
-                <el-form-item label="从站ID">
-                  <el-input-number v-model="writeForm.slave_id" :min="1" :max="247" />
-                </el-form-item>
-                <el-form-item label="寄存器地址">
-                  <el-input-number v-model="writeForm.addr" :min="0" :max="65535" />
-                </el-form-item>
-                <el-form-item label="寄存器值">
-                  <el-input-number v-model="writeForm.value" :min="0" :max="65535" />
-                </el-form-item>
-                <el-form-item>
-                  <el-button 
-                    type="primary" 
-                    @click="writeRegister"
-                    :disabled="!connectionStore.isConnected"
-                    :loading="writeLoading"
-                  >
-                    <el-icon><Edit /></el-icon>
-                    写入
-                  </el-button>
-                </el-form-item>
-              </el-form>
-            </el-tab-pane>
+          <!-- 常用AT指令快捷按钮 -->
+          <div style="margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0;">常用AT指令</h4>
+              <div>
+                <el-button size="small" @click="showHistory = !showHistory">
+                  <el-icon><Clock /></el-icon>
+                  历史记录
+                </el-button>
+                <el-button size="small" @click="showBatchSend = !showBatchSend">
+                  <el-icon><List /></el-icon>
+                  批量发送
+                </el-button>
+              </div>
+            </div>
+            <div class="quick-commands">
+              <el-button 
+                v-for="cmd in quickCommands" 
+                :key="cmd.command"
+                size="small"
+                @click="sendQuickCommand(cmd.command)"
+                :disabled="!connectionStore.isConnected"
+                :title="cmd.description"
+              >
+                {{ cmd.command.replace(/\r\n|\r|\n/g, '') }}
+              </el-button>
+            </div>
+          </div>
 
-            <!-- 批量写入 -->
-            <el-tab-pane label="批量写入" name="batch-write">
-              <el-form :model="batchWriteForm" label-width="100px">
-                <el-form-item label="从站ID">
-                  <el-input-number v-model="batchWriteForm.slave_id" :min="1" :max="247" />
-                </el-form-item>
-                <el-form-item label="起始地址">
-                  <el-input-number v-model="batchWriteForm.start_addr" :min="0" :max="65535" />
-                </el-form-item>
-                <el-form-item label="寄存器值">
-                  <el-input
-                    v-model="batchWriteForm.valuesText"
-                    type="textarea"
-                    :rows="3"
-                    placeholder="输入寄存器值，用逗号分隔，例如: 100,200,300"
-                  />
-                </el-form-item>
-                <el-form-item>
-                  <el-button 
-                    type="primary" 
-                    @click="writeBatchRegisters"
-                    :disabled="!connectionStore.isConnected"
-                    :loading="batchWriteLoading"
-                  >
-                    <el-icon><DocumentAdd /></el-icon>
-                    批量写入
-                  </el-button>
-                </el-form-item>
-              </el-form>
-            </el-tab-pane>
+          <!-- 历史记录 -->
+          <el-collapse-transition>
+            <div v-show="showHistory" style="margin-top: 16px;">
+              <h4>指令历史</h4>
+              <div class="history-commands">
+                <el-tag 
+                  v-for="(cmd, index) in commandHistory" 
+                  :key="index"
+                  size="small"
+                  style="margin: 2px; cursor: pointer;"
+                  @click="atForm.command = cmd"
+                  :title="`点击填入: ${cmd}`"
+                >
+                  {{ cmd }}
+                </el-tag>
+                <el-button v-if="commandHistory.length > 0" size="small" @click="clearHistory">
+                  清空历史
+                </el-button>
+              </div>
+            </div>
+          </el-collapse-transition>
 
-            <!-- 原始数据 -->
-            <el-tab-pane label="原始数据" name="raw">
-              <el-form :model="rawForm" label-width="100px">
-                <el-form-item label="十六进制数据">
-                  <el-input
-                    v-model="rawForm.data"
-                    placeholder="输入十六进制数据，例如: 01 03 00 00 00 01 84 0A"
-                    style="font-family: monospace;"
-                  />
-                </el-form-item>
-                <el-form-item>
+          <!-- 批量发送 -->
+          <el-collapse-transition>
+            <div v-show="showBatchSend" style="margin-top: 16px;">
+              <h4>批量发送</h4>
+              <el-input
+                v-model="batchCommands"
+                type="textarea"
+                :rows="4"
+                placeholder="每行一个AT指令，例如:&#10;AT&#10;AT+GMR&#10;AT+CSQ"
+                style="font-family: monospace;"
+              />
+              <div style="margin-top: 8px;">
+                <el-button 
+                  type="primary" 
+                  size="small"
+                  @click="sendBatchCommands"
+                  :disabled="!connectionStore.isConnected"
+                  :loading="batchLoading"
+                >
+                  批量发送
+                </el-button>
+                <el-input-number 
+                  v-model="batchDelay"
+                  :min="100"
+                  :max="10000"
+                  :step="100"
+                  size="small"
+                  style="width: 120px; margin-left: 8px;"
+                />
+                <span style="margin-left: 4px; font-size: 12px; color: #666;">ms间隔</span>
+              </div>
+            </div>
+          </el-collapse-transition>
+
+          <!-- 原始数据发送 -->
+          <el-divider>原始数据发送</el-divider>
+          <el-form :model="rawForm" label-width="80px">
+            <el-form-item label="十六进制">
+              <el-input
+                v-model="rawForm.data"
+                placeholder="输入十六进制数据，例如: 41 54 0D 0A"
+                style="font-family: monospace;"
+                @keyup.enter="sendRawData"
+              >
+                <template #append>
                   <el-button 
                     type="primary" 
                     @click="sendRawData"
@@ -140,35 +181,10 @@
                     <el-icon><Position /></el-icon>
                     发送
                   </el-button>
-                </el-form-item>
-              </el-form>
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
-
-        <!-- 寄存器数据显示 -->
-        <el-card style="margin-top: 20px;" v-if="registerData.length > 0">
-          <template #header>
-            <h3>
-              <el-icon><DataBoard /></el-icon>
-              寄存器数据
-            </h3>
-          </template>
-          
-          <el-table :data="registerData" size="small" border>
-            <el-table-column prop="address" label="地址" width="100" />
-            <el-table-column prop="value" label="值" width="100" />
-            <el-table-column label="十六进制" width="120">
-              <template #default="{ row }">
-                <code>0x{{ row.value.toString(16).toUpperCase().padStart(4, '0') }}</code>
-              </template>
-            </el-table-column>
-            <el-table-column label="二进制">
-              <template #default="{ row }">
-                <code>{{ row.value.toString(2).padStart(16, '0') }}</code>
-              </template>
-            </el-table-column>
-          </el-table>
+                </template>
+              </el-input>
+            </el-form-item>
+          </el-form>
         </el-card>
       </el-col>
 
@@ -181,10 +197,16 @@
                 <el-icon><ChatDotSquare /></el-icon>
                 通信日志
               </h3>
-              <el-button @click="clearLogs" size="small">
-                <el-icon><Delete /></el-icon>
-                清空日志
-              </el-button>
+              <div>
+                <el-button @click="clearLogs" size="small">
+                  <el-icon><Delete /></el-icon>
+                  清空日志
+                </el-button>
+                <el-button @click="exportLogs" size="small" style="margin-left: 8px;">
+                  <el-icon><Download /></el-icon>
+                  导出日志
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -235,103 +257,165 @@ const connectionStore = useConnectionStore()
 const communicationStore = useCommunicationStore()
 
 // 状态
-const activeTab = ref('read')
-const readLoading = ref(false)
-const writeLoading = ref(false)
-const batchWriteLoading = ref(false)
+const atLoading = ref(false)
 const rawLoading = ref(false)
-const registerData = ref<any[]>([])
+const batchLoading = ref(false)
+const showHistory = ref(false)
+const showBatchSend = ref(false)
+const commandHistory = ref<string[]>([])
+const batchCommands = ref('')
+const batchDelay = ref(1000)
 
 // 表单数据
-const readForm = reactive({
-  slave_id: 1,
-  start_addr: 0,
-  count: 10,
-  function_code: 3,
-})
-
-const writeForm = reactive({
-  slave_id: 1,
-  addr: 0,
-  value: 0,
-})
-
-const batchWriteForm = reactive({
-  slave_id: 1,
-  start_addr: 0,
-  valuesText: '',
+const atForm = reactive({
+  command: '',
+  autoAddCRLF: true,
+  lineEnding: '\r\n',
 })
 
 const rawForm = reactive({
   data: '',
 })
 
+// 常用AT指令 - 包含完整格式
+const quickCommands = [
+  { command: 'AT\r\n', description: '测试连接' },
+  { command: 'AT+GMR\r\n', description: '查询固件版本' },
+  { command: 'AT+CGMI\r\n', description: '查询制造商' },
+  { command: 'AT+CGMM\r\n', description: '查询模块型号' },
+  { command: 'AT+CGMR\r\n', description: '查询软件版本' },
+  { command: 'AT+CGSN\r\n', description: '查询IMEI' },
+  { command: 'AT+CIMI\r\n', description: '查询IMSI' },
+  { command: 'AT+CCID\r\n', description: '查询ICCID' },
+  { command: 'AT+CSQ\r\n', description: '查询信号强度' },
+  { command: 'AT+CREG?\r\n', description: '查询网络注册状态' },
+  { command: 'AT+CGATT?\r\n', description: '查询GPRS附着状态' },
+  { command: 'AT+COPS?\r\n', description: '查询运营商' },
+  { command: 'AT+CFUN?\r\n', description: '查询功能状态' },
+  { command: 'AT+CFUN=1\r\n', description: '启用全功能' },
+  { command: 'AT+CFUN=0\r\n', description: '关闭射频' },
+  { command: 'ATZ\r\n', description: '重置设备' },
+]
+
 // 方法
-const readRegisters = async () => {
-  readLoading.value = true
-  try {
-    const result = await communicationStore.readRegisters(readForm)
-    if (result) {
-      registerData.value = result.registers
-      ElMessage.success(`成功读取${result.registers.length}个寄存器`)
+const formatATCommand = (command: string) => {
+  // 前端完全控制AT指令格式
+  let formattedCommand = command.trim()
+  
+  // 如果启用自动添加终止符且指令中没有终止符
+  if (atForm.autoAddCRLF && atForm.lineEnding && !hasLineEnding(formattedCommand)) {
+    formattedCommand += atForm.lineEnding
+  }
+  
+  return formattedCommand
+}
+
+const hasLineEnding = (command: string) => {
+  return command.includes('\r') || command.includes('\n')
+}
+
+const addToHistory = (command: string) => {
+  const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
+  if (cleanCommand && !commandHistory.value.includes(cleanCommand)) {
+    commandHistory.value.unshift(cleanCommand)
+    // 限制历史记录数量
+    if (commandHistory.value.length > 20) {
+      commandHistory.value = commandHistory.value.slice(0, 20)
     }
-  } catch (error) {
-    console.error('Read registers error:', error)
-  } finally {
-    readLoading.value = false
   }
 }
 
-const writeRegister = async () => {
-  writeLoading.value = true
-  try {
-    const result = await communicationStore.writeRegister(writeForm)
-    if (result.success) {
-      ElMessage.success('寄存器写入成功')
-    } else {
-      ElMessage.error(result.message)
-    }
-  } catch (error) {
-    console.error('Write register error:', error)
-  } finally {
-    writeLoading.value = false
-  }
+const clearHistory = () => {
+  commandHistory.value = []
 }
 
-const writeBatchRegisters = async () => {
-  if (!batchWriteForm.valuesText.trim()) {
-    ElMessage.error('请输入寄存器值')
+const sendATCommand = async () => {
+  if (!atForm.command.trim()) {
+    ElMessage.error('请输入AT指令')
     return
   }
   
+  atLoading.value = true
   try {
-    const values = batchWriteForm.valuesText
-      .split(',')
-      .map(v => parseInt(v.trim()))
-      .filter(v => !isNaN(v) && v >= 0 && v <= 65535)
-    
-    if (values.length === 0) {
-      ElMessage.error('请输入有效的寄存器值')
-      return
-    }
-    
-    batchWriteLoading.value = true
-    
-    const result = await communicationStore.writeRegisters({
-      slave_id: batchWriteForm.slave_id,
-      start_addr: batchWriteForm.start_addr,
-      values,
-    })
-    
-    if (result.success) {
-      ElMessage.success(`成功写入${values.length}个寄存器`)
-    } else {
-      ElMessage.error(result.message)
-    }
+    const formattedCommand = formatATCommand(atForm.command)
+    const result = await communicationStore.sendATCommand(formattedCommand)
+    ElMessage.success('AT指令发送成功')
+    // 添加到历史记录
+    addToHistory(atForm.command)
   } catch (error) {
-    console.error('Batch write error:', error)
+    console.error('Send AT command error:', error)
   } finally {
-    batchWriteLoading.value = false
+    atLoading.value = false
+  }
+}
+
+const clearATInput = () => {
+  atForm.command = ''
+}
+
+const sendQuickCommand = async (command: string) => {
+  // 直接发送预设的完整格式指令，不经过formatATCommand处理
+  atLoading.value = true
+  try {
+    const result = await communicationStore.sendATCommand(command)
+    ElMessage.success('AT指令发送成功')
+    // 同时更新输入框显示（去掉终止符显示）
+    const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
+    atForm.command = cleanCommand
+    // 添加到历史记录
+    addToHistory(cleanCommand)
+  } catch (error) {
+    console.error('Send AT command error:', error)
+  } finally {
+    atLoading.value = false
+  }
+}
+
+const sendBatchCommands = async () => {
+  if (!batchCommands.value.trim()) {
+    ElMessage.error('请输入要批量发送的AT指令')
+    return
+  }
+  
+  const commands = batchCommands.value
+    .split('\n')
+    .map(cmd => cmd.trim())
+    .filter(cmd => cmd.length > 0)
+  
+  if (commands.length === 0) {
+    ElMessage.error('没有有效的AT指令')
+    return
+  }
+  
+  batchLoading.value = true
+  
+  try {
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i]
+      const formattedCommand = formatATCommand(command)
+      
+      ElMessage.info(`发送第${i + 1}/${commands.length}个指令: ${command}`)
+      
+      try {
+        await communicationStore.sendATCommand(formattedCommand)
+        addToHistory(command)
+      } catch (error) {
+        console.error(`Command ${i + 1} failed:`, error)
+        ElMessage.error(`第${i + 1}个指令发送失败: ${command}`)
+      }
+      
+      // 如果不是最后一个指令，等待指定间隔
+      if (i < commands.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, batchDelay.value))
+      }
+    }
+    
+    ElMessage.success(`批量发送完成，共发送${commands.length}个指令`)
+  } catch (error) {
+    console.error('Batch send error:', error)
+    ElMessage.error('批量发送过程中出现错误')
+  } finally {
+    batchLoading.value = false
   }
 }
 
@@ -366,6 +450,44 @@ const clearLogs = async () => {
   }
 }
 
+const exportLogs = () => {
+  try {
+    const logs = communicationStore.logs.map(log => ({
+      时间: new Date(log.timestamp).toLocaleString(),
+      方向: log.direction === 'sent' ? '发送' : '接收',
+      描述: log.description,
+      数据: log.data,
+      状态: log.success ? '成功' : '失败'
+    }))
+    
+    const csvContent = [
+      ['时间', '方向', '描述', '数据', '状态'].join(','),
+      ...logs.map(log => [
+        `"${log.时间}"`,
+        `"${log.方向}"`, 
+        `"${log.描述}"`,
+        `"${log.数据}"`,
+        `"${log.状态}"`
+      ].join(','))
+    ].join('\n')
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `通信日志_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    ElMessage.success('日志导出成功')
+  } catch (error) {
+    console.error('Export logs error:', error)
+    ElMessage.error('日志导出失败')
+  }
+}
+
 const getLogIcon = (log: CommunicationLog) => {
   if (log.direction === 'sent') {
     return 'Top'
@@ -388,12 +510,92 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page-container {
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.status-indicator.connected {
+  background-color: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
+.status-indicator.disconnected {
+  background-color: var(--el-color-error-light-9);
+  color: var(--el-color-error);
+}
+
+.quick-commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .log-container {
   height: 500px;
   overflow-y: auto;
   padding: 10px;
   background-color: var(--el-bg-color-page);
   border-radius: 8px;
+}
+
+.log-item {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+
+.log-item.sent {
+  background-color: var(--el-color-primary-light-9);
+  border-left-color: var(--el-color-primary);
+}
+
+.log-item.received.success {
+  background-color: var(--el-color-success-light-9);
+  border-left-color: var(--el-color-success);
+}
+
+.log-item.received.error {
+  background-color: var(--el-color-error-light-9);
+  border-left-color: var(--el-color-error);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.log-timestamp {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.log-data {
+  font-family: monospace;
+  font-size: 14px;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  border-radius: 4px;
+  word-break: break-all;
 }
 
 .empty-logs {
@@ -403,11 +605,23 @@ onMounted(() => {
   justify-content: center;
 }
 
-.el-input-number {
-  width: 100%;
+.el-divider {
+  margin: 24px 0 16px 0;
 }
 
-.el-select {
-  width: 100%;
+.at-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-commands {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 8px;
+  background-color: var(--el-bg-color-page);
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color-light);
 }
 </style>
