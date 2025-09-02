@@ -28,8 +28,8 @@ export interface CreateSessionRequest {
 export const sessionAPI = {
   // 创建会话（登录）
   async createSession(request: CreateSessionRequest): Promise<SessionResponse> {
-    const response = await api.post('/session/create', request)
-    return response.data
+    const response = await api.post<SessionResponse>('/session/create', request)
+    return response
   },
 
   // 销毁会话（登出）
@@ -39,25 +39,25 @@ export const sessionAPI = {
 
   // 获取会话状态
   async getSessionStatus(): Promise<SessionStatus> {
-    const response = await api.get('/session/status')
-    return response.data
+    const response = await api.get<SessionStatus>('/session/status')
+    return response
   },
 
   // 验证会话
   async validateSession(): Promise<{ valid: boolean }> {
-    const response = await api.post('/session/validate')
-    return response.data
+    const response = await api.post<{ valid: boolean }>('/session/validate')
+    return response
   },
 
   // 会话心跳
   async sendHeartbeat(): Promise<{ active: boolean; last_activity: string }> {
-    const response = await api.post('/session/heartbeat')
-    return response.data
+    const response = await api.post<{ active: boolean; last_activity: string }>('/session/heartbeat')
+    return response
   },
 
   // 强制清理会话
   async forceCleanupSessions(): Promise<{ cleaned: boolean }> {
-    const response = await api.post('/session/cleanup')
-    return response.data
+    const response = await api.post<{ cleaned: boolean }>('/session/cleanup')
+    return response
   }
 }

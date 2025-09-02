@@ -1,231 +1,225 @@
 """
-命令行服务
-处理WebSocket命令的解析和执行
+Command Service
+常用指令管理服务
 """
 
-import asyncio
+import json
 import logging
-import subprocess
-import sys
-import platform
+import uuid
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-from app.schemas.websocket import CommandType, WSResponseMessage, WSMessageType
+
+from app.core.config import settings
+from app.schemas.command_schemas import SavedCommand, CreateCommandRequest, UpdateCommandRequest
 
 logger = logging.getLogger(__name__)
 
 
 class CommandService:
-    """命令行服务类"""
+    """常用指令管理服务"""
     
     def __init__(self):
-        self.available_commands = {
-            "help": self._help_command,
-            "system": self._system_command,
-            "device": self._device_command,
-            "clear": self._clear_command,
-            "ping": self._ping_command,
-            "status": self._status_command,
-            "version": self._version_command,
-            "ls": self._ls_command,
-            "pwd": self._pwd_command,
-            "date": self._date_command,
-        }
+        self.commands_file = settings.COMMANDS_FILE
+        logger.info(f"Commands storage file: {self.commands_file}")
     
-    async def execute_command(self, command: str, args: List[str] = None) -> WSResponseMessage:
-        """
-        执行命令
-        
-        Args:
-            command: 命令名称
-            args: 命令参数
-            
-        Returns:
-            WSResponseMessage: 响应消息
-        """
-        if args is None:
-            args = []
-            
+    def _ensure_file_exists(self) -> None:
+        """确保存储文件存在"""
+        if not self.commands_file.exists():
+            self.commands_file.parent.mkdir(parents=True, exist_ok=True)
+            self._save_commands([])
+            logger.info(f"Created commands storage file: {self.commands_file}")
+    
+    def _load_commands(self) -> List[SavedCommand]:
+        """从文件加载指令"""
         try:
-            logger.info(f"执行命令: {command} {' '.join(args)}")
+            self._ensure_file_exists()
             
-            if command in self.available_commands:
-                result = await self.available_commands[command](args)
-                return WSResponseMessage(
-                    type=WSMessageType.RESPONSE,
-                    message=result,
-                    timestamp=datetime.now().isoformat(),
-                    success=True
-                )
-            else:
-                # 尝试执行系统命令
-                result = await self._execute_system_command(command, args)
-                return WSResponseMessage(
-                    type=WSMessageType.RESPONSE,
-                    message=result,
-                    timestamp=datetime.now().isoformat(),
-                    success=True
-                )
+            with open(self.commands_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            commands = []
+            for item in data:
+                # 处理时间戳转换
+                if isinstance(item.get('created_at'), (int, float)):
+                    item['created_at'] = datetime.fromtimestamp(item['created_at'] / 1000)
+                elif isinstance(item.get('created_at'), str):
+                    try:
+                        item['created_at'] = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+                    except ValueError:
+                        item['created_at'] = datetime.now()
+                else:
+                    item['created_at'] = datetime.now()
                 
-        except Exception as e:
-            logger.error(f"命令执行失败: {command} - {str(e)}")
-            return WSResponseMessage(
-                type=WSMessageType.ERROR,
-                message=f"命令执行失败: {str(e)}",
-                timestamp=datetime.now().isoformat(),
-                success=False
-            )
-    
-    async def _help_command(self, args: List[str]) -> str:
-        """帮助命令"""
-        help_text = """
-可用命令:
-  help          - 显示帮助信息
-  system        - 显示系统信息
-  device        - 设备相关操作
-  clear         - 清屏
-  ping          - 网络连通性测试
-  status        - 显示系统状态
-  version       - 显示版本信息
-  ls [path]     - 列出目录内容
-  pwd           - 显示当前目录
-  date          - 显示当前时间
-  
-系统命令:
-  大部分Linux/Windows系统命令都可以使用
-  例如: ps, top, df, free, netstat等
-        """
-        return help_text.strip()
-    
-    async def _system_command(self, args: List[str]) -> str:
-        """系统信息命令"""
-        info = {
-            "操作系统": platform.system(),
-            "系统版本": platform.release(),
-            "架构": platform.machine(),
-            "处理器": platform.processor(),
-            "Python版本": sys.version,
-            "当前时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        result = "系统信息:\n"
-        for key, value in info.items():
-            result += f"  {key}: {value}\n"
-        
-        return result.strip()
-    
-    async def _device_command(self, args: List[str]) -> str:
-        """设备操作命令"""
-        if not args:
-            return "设备命令用法:\n  device list - 列出设备\n  device status - 设备状态"
-        
-        if args[0] == "list":
-            return "设备列表:\n  - 暂无设备连接"
-        elif args[0] == "status":
-            return "设备状态:\n  - 系统正常运行"
-        else:
-            return f"未知的设备命令: {args[0]}"
-    
-    async def _clear_command(self, args: List[str]) -> str:
-        """清屏命令"""
-        return "\033[2J\033[H"  # ANSI清屏序列
-    
-    async def _ping_command(self, args: List[str]) -> str:
-        """Ping命令"""
-        target = args[0] if args else "127.0.0.1"
-        try:
-            if platform.system().lower() == "windows":
-                cmd = ["ping", "-n", "4", target]
-            else:
-                cmd = ["ping", "-c", "4", target]
+                commands.append(SavedCommand(**item))
             
-            result = await self._execute_system_command(cmd[0], cmd[1:])
-            return result
-        except Exception as e:
-            return f"Ping失败: {str(e)}"
-    
-    async def _status_command(self, args: List[str]) -> str:
-        """状态命令"""
-        return f"系统状态: 正常\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n服务: 运行中"
-    
-    async def _version_command(self, args: List[str]) -> str:
-        """版本命令"""
-        return "Industrial HMI v1.0.0\nFastAPI + Vue3 + Element Plus"
-    
-    async def _ls_command(self, args: List[str]) -> str:
-        """列出目录内容"""
-        path = args[0] if args else "."
-        try:
-            if platform.system().lower() == "windows":
-                result = await self._execute_system_command("dir", [path])
-            else:
-                result = await self._execute_system_command("ls", ["-la", path])
-            return result
-        except Exception as e:
-            return f"无法列出目录内容: {str(e)}"
-    
-    async def _pwd_command(self, args: List[str]) -> str:
-        """显示当前目录"""
-        try:
-            if platform.system().lower() == "windows":
-                result = await self._execute_system_command("cd")
-            else:
-                result = await self._execute_system_command("pwd")
-            return result
-        except Exception as e:
-            return f"无法获取当前目录: {str(e)}"
-    
-    async def _date_command(self, args: List[str]) -> str:
-        """显示当前时间"""
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    async def _execute_system_command(self, command: str, args: List[str] = None) -> str:
-        """
-        执行系统命令
-        
-        Args:
-            command: 命令名称
-            args: 命令参数
+            return commands
             
-        Returns:
-            str: 命令输出
-        """
-        if args is None:
-            args = []
-        
+        except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+            logger.error(f"Error loading commands: {e}")
+            return []
+    
+    def _save_commands(self, commands: List[SavedCommand]) -> bool:
+        """保存指令到文件"""
         try:
-            # 安全检查：禁止执行危险命令
-            dangerous_commands = ["rm", "del", "format", "fdisk", "mkfs", "dd"]
-            if command.lower() in dangerous_commands:
-                return f"出于安全考虑，禁止执行命令: {command}"
+            # 转换为可序列化的字典列表
+            data = []
+            for cmd in commands:
+                cmd_dict = {
+                    "id": cmd.id,
+                    "name": cmd.name,
+                    "command": cmd.command,
+                    "description": cmd.description,
+                    "created_at": int(cmd.created_at.timestamp() * 1000)  # 毫秒时间戳
+                }
+                data.append(cmd_dict)
             
-            # 构建完整命令
-            full_command = [command] + args
+            # 写入文件，确保原子性
+            temp_file = self.commands_file.with_suffix('.tmp')
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             
-            # 执行命令
-            process = await asyncio.create_subprocess_exec(
-                *full_command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=None
+            # 原子性替换
+            temp_file.replace(self.commands_file)
+            
+            logger.debug(f"Saved {len(commands)} commands to {self.commands_file}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving commands: {e}")
+            return False
+    
+    async def get_all_commands(self) -> List[SavedCommand]:
+        """获取所有常用指令"""
+        try:
+            commands = self._load_commands()
+            # 按创建时间降序排序（最新的在前面）
+            commands.sort(key=lambda x: x.created_at, reverse=True)
+            logger.debug(f"Loaded {len(commands)} commands")
+            return commands
+        except Exception as e:
+            logger.error(f"Error getting all commands: {e}")
+            return []
+    
+    async def get_command_by_id(self, command_id: str) -> Optional[SavedCommand]:
+        """根据ID获取指令"""
+        try:
+            commands = self._load_commands()
+            for cmd in commands:
+                if cmd.id == command_id:
+                    return cmd
+            return None
+        except Exception as e:
+            logger.error(f"Error getting command by id {command_id}: {e}")
+            return None
+    
+    async def create_command(self, request: CreateCommandRequest) -> Optional[SavedCommand]:
+        """创建新的常用指令"""
+        try:
+            commands = self._load_commands()
+            
+            # 检查是否已存在相同名称的指令
+            if any(cmd.name.strip().lower() == request.name.strip().lower() for cmd in commands):
+                logger.warning(f"Command with name '{request.name}' already exists")
+                return None
+            
+            # 创建新指令
+            new_command = SavedCommand(
+                id=str(uuid.uuid4()),
+                name=request.name.strip(),
+                command=request.command.strip(),
+                description=request.description.strip(),
+                created_at=datetime.now()
             )
             
-            # 等待命令完成，设置超时
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10.0)
-            except asyncio.TimeoutError:
-                process.kill()
-                return "命令执行超时"
+            # 添加到列表开头
+            commands.insert(0, new_command)
             
-            # 处理输出
-            if process.returncode == 0:
-                output = stdout.decode('utf-8', errors='ignore').strip()
-                return output if output else "命令执行成功，无输出"
+            # 保存到文件
+            if self._save_commands(commands):
+                logger.info(f"Created new command: {new_command.name}")
+                return new_command
             else:
-                error = stderr.decode('utf-8', errors='ignore').strip()
-                return f"命令执行失败 (退出码: {process.returncode}): {error}"
+                return None
                 
-        except FileNotFoundError:
-            return f"命令未找到: {command}"
         except Exception as e:
-            return f"命令执行异常: {str(e)}"
+            logger.error(f"Error creating command: {e}")
+            return None
+    
+    async def update_command(self, command_id: str, request: UpdateCommandRequest) -> Optional[SavedCommand]:
+        """更新指令"""
+        try:
+            commands = self._load_commands()
+            
+            # 查找要更新的指令
+            target_command = None
+            for i, cmd in enumerate(commands):
+                if cmd.id == command_id:
+                    target_command = cmd
+                    break
+            
+            if not target_command:
+                logger.warning(f"Command with id {command_id} not found")
+                return None
+            
+            # 检查名称冲突（如果要更新名称的话）
+            if request.name and request.name.strip().lower() != target_command.name.lower():
+                if any(cmd.name.strip().lower() == request.name.strip().lower() for cmd in commands if cmd.id != command_id):
+                    logger.warning(f"Command with name '{request.name}' already exists")
+                    return None
+            
+            # 更新字段
+            if request.name is not None:
+                target_command.name = request.name.strip()
+            if request.command is not None:
+                target_command.command = request.command.strip()
+            if request.description is not None:
+                target_command.description = request.description.strip()
+            
+            # 保存到文件
+            if self._save_commands(commands):
+                logger.info(f"Updated command: {target_command.name}")
+                return target_command
+            else:
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error updating command {command_id}: {e}")
+            return None
+    
+    async def delete_command(self, command_id: str) -> bool:
+        """删除指令"""
+        try:
+            commands = self._load_commands()
+            
+            # 查找并删除指令
+            original_count = len(commands)
+            commands = [cmd for cmd in commands if cmd.id != command_id]
+            
+            if len(commands) == original_count:
+                logger.warning(f"Command with id {command_id} not found")
+                return False
+            
+            # 保存到文件
+            if self._save_commands(commands):
+                logger.info(f"Deleted command with id: {command_id}")
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error deleting command {command_id}: {e}")
+            return False
+    
+    async def get_commands_count(self) -> int:
+        """获取指令总数"""
+        try:
+            commands = self._load_commands()
+            return len(commands)
+        except Exception as e:
+            logger.error(f"Error getting commands count: {e}")
+            return 0
+
+
+# 创建全局实例
+command_service = CommandService()

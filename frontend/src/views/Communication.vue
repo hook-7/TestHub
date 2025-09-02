@@ -98,10 +98,18 @@
                 :key="cmd.id"
                 size="small"
                 @click="sendQuickCommand(cmd.command)"
+                @contextmenu.prevent="handleCommandRightClick($event, cmd)"
                 :disabled="!connectionStore.isConnected"
                 :title="cmd.description"
               >
                 {{ cmd.name }}
+                <el-icon 
+                  class="delete-icon" 
+                  @click.stop="deleteCommand(cmd)"
+                  :title="`删除指令: ${cmd.name}`"
+                >
+                  <Delete />
+                </el-icon>
               </el-button>
               
               <!-- 当没有常用指令时显示提示 -->
@@ -296,10 +304,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
 import type { CommunicationLog } from '@/stores/communication'
+import * as commandsAPI from '@/api/commands'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
@@ -406,12 +416,13 @@ const clearCommandInput = () => {
 }
 
 const sendQuickCommand = async (command: string) => {
-  // 直接发送预设的完整格式指令，不经过formatCommand处理
+  // 应用用户设置的控制选项（自动添加终止符等）
   commandLoading.value = true
   try {
-    await communicationStore.sendATCommand(command)
+    const formattedCommand = formatCommand(command)
+    await communicationStore.sendATCommand(formattedCommand)
     ElMessage.success('指令发送成功')
-    // 同时更新输入框显示（去掉终止符显示）
+    // 同时更新输入框显示（显示原始指令，不显示终止符）
     const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
     commandForm.command = cleanCommand
     // 添加到历史记录
@@ -471,65 +482,63 @@ const sendBatchCommands = async () => {
   }
 }
 
-// 浏览器存储相关方法
-const STORAGE_KEY = 'saved_commands'
-
-const loadSavedCommands = () => {
+// API相关方法
+const loadSavedCommands = async () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      savedCommands.value = parsed
-    } else {
-      // 首次使用，初始化为空数组，让用户自定义添加
-      savedCommands.value = []
-    }
+    const response = await commandsAPI.getAllCommands()
+    // 转换API返回的数据格式以兼容现有组件
+    savedCommands.value = response.commands.map(cmd => ({
+      id: cmd.id,
+      name: cmd.name,
+      command: cmd.command,
+      description: cmd.description,
+      createdAt: cmd.created_at // API返回毫秒时间戳
+    }))
   } catch (error) {
     console.error('Failed to load saved commands:', error)
+    ElMessage.error('加载常用指令失败')
     // 出错时也初始化为空数组
     savedCommands.value = []
   }
 }
 
-const saveCommandsToStorage = () => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedCommands.value))
-  } catch (error) {
-    console.error('Failed to save commands:', error)
-    ElMessage.error('保存指令失败')
-  }
-}
-
-const addNewCommand = () => {
+const addNewCommand = async () => {
   if (!newCommand.name.trim() || !newCommand.command.trim()) {
     ElMessage.error('请填写指令名称和内容')
     return
   }
   
-  // 检查名称是否重复
-  if (savedCommands.value.some(cmd => cmd.name === newCommand.name.trim())) {
-    ElMessage.error('指令名称已存在')
-    return
+  try {
+    const createRequest: commandsAPI.CreateCommandRequest = {
+      name: newCommand.name.trim(),
+      command: newCommand.command.trim(),
+      description: newCommand.description.trim()
+    }
+    
+    const createdCommand = await commandsAPI.createCommand(createRequest)
+    
+    // 转换为前端格式并添加到列表开头
+    const command: SavedCommand = {
+      id: createdCommand.id,
+      name: createdCommand.name,
+      command: createdCommand.command,
+      description: createdCommand.description,
+      createdAt: createdCommand.created_at
+    }
+    
+    savedCommands.value.unshift(command)
+    
+    // 清空表单并关闭弹窗
+    newCommand.name = ''
+    newCommand.command = ''
+    newCommand.description = ''
+    showAddCommand.value = false
+    
+    ElMessage.success('常用指令添加成功')
+  } catch (error: any) {
+    console.error('Failed to create command:', error)
+    ElMessage.error(error.message || '创建指令失败')
   }
-  
-  const command: SavedCommand = {
-    id: Date.now().toString(),
-    name: newCommand.name.trim(),
-    command: newCommand.command.trim(),
-    description: newCommand.description.trim(),
-    createdAt: Date.now(),
-  }
-  
-  savedCommands.value.unshift(command)
-  saveCommandsToStorage()
-  
-  // 清空表单
-  newCommand.name = ''
-  newCommand.command = ''
-  newCommand.description = ''
-  showAddCommand.value = false
-  
-  ElMessage.success('指令添加成功')
 }
 
 const handleCloseAddCommand = () => {
@@ -538,6 +547,36 @@ const handleCloseAddCommand = () => {
   newCommand.command = ''
   newCommand.description = ''
   showAddCommand.value = false
+}
+
+const deleteCommand = async (cmd: SavedCommand) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除指令 "${cmd.name}" 吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    
+    await commandsAPI.deleteCommand(cmd.id)
+    
+    // 从本地列表中移除
+    const index = savedCommands.value.findIndex(c => c.id === cmd.id)
+    if (index !== -1) {
+      savedCommands.value.splice(index, 1)
+    }
+    
+    ElMessage.success('指令删除成功')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('Failed to delete command:', error)
+      ElMessage.error(error.message || '删除指令失败')
+    }
+  }
+}
+
+const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
+  // 右键点击指令时，显示上下文菜单或执行特定操作
+  console.log('Right clicked command:', cmd.name)
 }
 
 const sendRawData = async () => {
@@ -640,7 +679,7 @@ onMounted(async () => {
   }
   
   // 加载保存的指令
-  loadSavedCommands()
+  await loadSavedCommands()
 })
 </script>
 
@@ -855,5 +894,38 @@ onMounted(async () => {
   background-color: var(--el-bg-color-page);
   border-radius: 4px;
   border: 1px solid var(--el-border-color-light);
+}
+
+/* 删除按钮样式 */
+.quick-commands .el-button {
+  position: relative;
+}
+
+.quick-commands .delete-icon {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #f56c6c;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.quick-commands .el-button:hover .delete-icon {
+  opacity: 1;
+}
+
+.delete-icon:hover {
+  background: #f34040 !important;
+  transform: scale(1.1);
 }
 </style>
