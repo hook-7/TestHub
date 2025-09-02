@@ -1,5 +1,5 @@
 """
-Serial Communication API Endpoints
+Serial Communication API Endpoints for AT Commands
 """
 
 import logging
@@ -9,9 +9,7 @@ from app.core.response import APIResponse
 from app.core.exceptions import HMIException, SerialException, ErrorCode
 from app.services.serial_service import serial_service
 from app.schemas.serial_schemas import (
-    SerialPortInfo, SerialConfig, SerialConnectionStatus,
-    ReadRegistersRequest, WriteRegisterRequest, WriteRegistersRequest,
-    ReadRegistersResponse, WriteResponse, RawDataRequest, RawDataResponse
+    SerialPortInfo, SerialConfig, SerialConnectionStatus, RawDataRequest, RawDataResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -53,25 +51,11 @@ async def get_connection_status():
     return APIResponse.success(data=status, msg="获取状态成功")
 
 
-@router.post("/read-registers", response_model=APIResponse)
-async def read_registers(request: ReadRegistersRequest):
-    """读取寄存器"""
-    result = await serial_service.read_registers(request)
-    return APIResponse.success(data=result, msg="读取寄存器成功")
-
-
-@router.post("/write-register", response_model=APIResponse)
-async def write_register(request: WriteRegisterRequest):
-    """写入单个寄存器"""
-    result = await serial_service.write_register(request)
-    return APIResponse.success(data=result, msg="写入操作完成")
-
-
-@router.post("/write-registers", response_model=APIResponse)
-async def write_registers(request: WriteRegistersRequest):
-    """写入多个寄存器"""
-    result = await serial_service.write_registers(request)
-    return APIResponse.success(data=result, msg="批量写入操作完成")
+@router.post("/send-at", response_model=APIResponse)
+async def send_at_command(request: RawDataRequest):
+    """发送AT指令"""
+    result = await serial_service.send_at_command(request.data)
+    return APIResponse.success(data=result, msg="AT指令发送成功")
 
 
 @router.post("/raw-data", response_model=APIResponse)
