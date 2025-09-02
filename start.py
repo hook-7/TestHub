@@ -26,6 +26,8 @@ class CrossPlatformRunner:
         self.project_root = Path(__file__).parent.absolute()
         self.backend_process: Optional[subprocess.Popen] = None
         self.frontend_process: Optional[subprocess.Popen] = None
+        # 设置 npm 命令
+        self.npm_cmd = "npm.cmd" if self.is_windows else "npm"
         
     def print_header(self):
         """打印启动头信息"""
@@ -39,6 +41,29 @@ class CrossPlatformRunner:
         """检查命令是否存在"""
         return shutil.which(command) is not None
         
+    def find_nodejs(self) -> str:
+        """查找 Node.js 安装路径"""
+        # 常见的 Node.js 安装路径
+        possible_paths = [
+            "C:\\Program Files\\nodejs",
+            "C:\\Program Files (x86)\\nodejs",
+            os.path.expanduser("~\\AppData\\Local\\Programs\\nodejs"),
+            os.path.expanduser("~\\AppData\\Roaming\\npm"),
+        ]
+        
+        # 首先检查 PATH 中是否有
+        npm_path = shutil.which("npm")
+        if npm_path:
+            return os.path.dirname(npm_path)
+            
+        # 检查常见安装路径
+        for path in possible_paths:
+            npm_file = "npm.cmd" if self.is_windows else "npm"
+            if os.path.exists(os.path.join(path, npm_file)):
+                return path
+                
+        return None
+        
     def check_dependencies(self):
         """检查必要的依赖"""
         print("🔍 Checking dependencies...")
@@ -51,13 +76,20 @@ class CrossPlatformRunner:
             sys.exit(1)
         print("✅ uv found")
         
-        # 检查 node (仅开发模式需要)
-        if hasattr(self, '_dev_mode') and self._dev_mode:
-            if not self.check_command("npm"):
-                print("❌ npm not found. Please install Node.js")
-                print("   https://nodejs.org/")
-                sys.exit(1)
-            print("✅ npm found")
+        # 检查 node (前端构建需要)
+        nodejs_path = self.find_nodejs()
+        if not nodejs_path:
+            print("❌ Node.js not found. Please install Node.js")
+            print("   https://nodejs.org/")
+            sys.exit(1)
+        
+        # 将 Node.js 路径添加到环境变量中
+        if nodejs_path not in os.environ.get('PATH', ''):
+            os.environ['PATH'] = nodejs_path + os.pathsep + os.environ.get('PATH', '')
+            print(f"✅ Node.js found at: {nodejs_path}")
+            print("✅ Added Node.js to PATH")
+        else:
+            print("✅ Node.js found in PATH")
             
     def setup_backend(self):
         """设置后端环境"""
@@ -89,7 +121,7 @@ class CrossPlatformRunner:
         if not node_modules.exists():
             print("📦 Installing frontend dependencies...")
             try:
-                subprocess.run(["npm", "install"], check=True)
+                subprocess.run([self.npm_cmd, "install"], check=True)
                 print("✅ Frontend dependencies installed")
             except subprocess.CalledProcessError as e:
                 print(f"❌ Failed to install frontend dependencies: {e}")
@@ -97,7 +129,7 @@ class CrossPlatformRunner:
         
         # 构建前端
         try:
-            subprocess.run(["npm", "run", "build"], check=True)
+            subprocess.run([self.npm_cmd, "run", "build"], check=True)
             print("✅ Frontend built successfully")
         except subprocess.CalledProcessError as e:
             print(f"❌ Failed to build frontend: {e}")
@@ -173,7 +205,7 @@ class CrossPlatformRunner:
         if not (frontend_dir / "node_modules").exists():
             print("📦 Installing frontend dependencies...")
             try:
-                subprocess.run(["npm", "install"], check=True)
+                subprocess.run([self.npm_cmd, "install"], check=True)
             except subprocess.CalledProcessError as e:
                 print(f"❌ Failed to install frontend dependencies: {e}")
                 self.cleanup()
@@ -182,11 +214,11 @@ class CrossPlatformRunner:
         try:
             if self.is_windows:
                 self.frontend_process = subprocess.Popen([
-                    "npm", "run", "dev"
+                    self.npm_cmd, "run", "dev"
                 ], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             else:
                 self.frontend_process = subprocess.Popen([
-                    "npm", "run", "dev"
+                    self.npm_cmd, "run", "dev"
                 ])
         except Exception as e:
             print(f"❌ Failed to start frontend: {e}")
