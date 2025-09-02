@@ -1,21 +1,39 @@
 <template>
   <div class="page-container">
-    <!-- 导航栏 -->
-    <el-card style="margin-bottom: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <el-button @click="$router.push('/serial-config')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回配置
-        </el-button>
-        
-        <div class="status-indicator" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
-          <el-icon>
-            <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
-          </el-icon>
-          {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
-        </div>
-      </div>
+    <!-- 未登录提示 -->
+    <el-card v-if="!sessionStore.isLoggedIn" style="margin-bottom: 20px;">
+      <el-result
+        icon="warning"
+        title="需要登录"
+        sub-title="请先在串口配置页面连接串口并登录系统"
+      >
+        <template #extra>
+          <el-button type="primary" @click="$router.push('/serial-config')">
+            <el-icon><Setting /></el-icon>
+            前往串口配置
+          </el-button>
+        </template>
+      </el-result>
     </el-card>
+
+    <!-- 已登录时显示的内容 -->
+    <template v-else>
+      <!-- 导航栏 -->
+      <el-card style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <el-button @click="$router.push('/serial-config')">
+            <el-icon><ArrowLeft /></el-icon>
+            返回配置
+          </el-button>
+          
+          <div class="status-indicator" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
+            <el-icon>
+              <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
+            </el-icon>
+            {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
+          </div>
+        </div>
+      </el-card>
 
     <el-row :gutter="20">
       <!-- 左侧：AT指令操作面板 -->
@@ -285,6 +303,7 @@
         </div>
       </template>
     </el-dialog>
+    </template>
   </div>
 </template>
 
@@ -292,6 +311,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'

@@ -52,6 +52,39 @@ async def auto_detect_port():
     return APIResponse.success(data={"port": port}, msg="自动检测成功")
 
 
+@router.post("/connect-and-login", response_model=APIResponse)
+async def connect_serial_and_login(
+    config: SerialConfig,
+    request: Request
+):
+    """连接串口并自动登录"""
+    try:
+        # 首先尝试连接串口
+        await serial_service.connect_serial(config)
+        
+        # 串口连接成功后，创建会话（登录）
+        session_response = await session_service.create_session_with_serial_auth(request)
+        
+        logger.info(f"Serial connected and logged in: {session_response.session_id}")
+        
+        return APIResponse.success(
+            data={
+                "session_id": session_response.session_id,
+                "token": session_response.token,
+                "expires_in": session_response.expires_in,
+                "serial_connected": True
+            },
+            msg="串口连接并登录成功"
+        )
+        
+    except Exception as e:
+        # 如果登录失败，断开串口连接
+        try:
+            await serial_service.disconnect_serial()
+        except:
+            pass
+        raise
+
 @router.post("/connect", response_model=APIResponse)
 async def connect_serial(
     config: SerialConfig,

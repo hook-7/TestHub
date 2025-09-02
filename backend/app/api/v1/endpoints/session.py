@@ -75,3 +75,19 @@ async def force_cleanup_sessions():
         data={"cleaned": success},
         msg="会话清理成功" if success else "会话清理失败"
     )
+
+
+@router.post("/heartbeat", response_model=APIResponse)
+async def update_heartbeat(
+    request: Request,
+    session_id: Optional[str] = Depends(get_session_id_from_header)
+):
+    """更新心跳时间"""
+    if not session_id:
+        return APIResponse.error(code=400, msg="缺少会话ID")
+    
+    success = await session_service.update_heartbeat(session_id, request)
+    if not success:
+        return APIResponse.error(code=401, msg="会话无效或已过期")
+    
+    return APIResponse.success(msg="心跳更新成功")

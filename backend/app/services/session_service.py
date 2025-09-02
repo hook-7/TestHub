@@ -25,6 +25,8 @@ class SessionService:
         # 内存存储活跃会话（生产环境建议使用Redis）
         self._active_session: Optional[SessionInfo] = None
         self._session_timeout_minutes = 30  # 会话超时时间（分钟）
+        self._heartbeat_timeout_seconds = 30  # 心跳超时时间（秒）
+        self._last_heartbeat: Optional[datetime] = None
     
     def _generate_session_id(self) -> str:
         """生成唯一会话ID"""
@@ -40,11 +42,19 @@ class SessionService:
         timeout_delta = timedelta(minutes=self._session_timeout_minutes)
         return datetime.now() - session.last_activity > timeout_delta
     
+    def _is_heartbeat_expired(self) -> bool:
+        """检查心跳是否过期"""
+        if not self._last_heartbeat:
+            return True
+        timeout_delta = timedelta(seconds=self._heartbeat_timeout_seconds)
+        return datetime.now() - self._last_heartbeat > timeout_delta
+    
     def _cleanup_expired_session(self) -> None:
         """清理过期会话"""
-        if self._active_session and self._is_session_expired(self._active_session):
-            logger.info(f"Session {self._active_session.session_id} expired, cleaning up")
+        if self._active_session and (self._is_session_expired(self._active_session) or self._is_heartbeat_expired()):
+            logger.info(f"Session {self._active_session.session_id} expired or heartbeat timeout, cleaning up")
             self._active_session = None
+            self._last_heartbeat = None
     
     def get_client_ip(self, request: Request) -> str:
         """获取客户端IP地址"""
@@ -91,6 +101,8 @@ class SessionService:
             
             # 存储会话
             self._active_session = session_info
+            # 初始化心跳
+            self._last_heartbeat = now
             
             # 生成令牌
             token = self._generate_token(session_id, client_ip)
@@ -186,10 +198,91 @@ class SessionService:
             if self._active_session:
                 logger.info(f"Force cleanup session: {self._active_session.session_id}")
                 self._active_session = None
+                self._last_heartbeat = None
             return True
         except Exception as e:
             logger.error(f"Error force cleaning up session: {e}")
             return False
+
+    async def update_heartbeat(self, session_id: str, request: Request) -> bool:
+        """更新心跳时间"""
+        try:
+            # 清理过期会话
+            self._cleanup_expired_session()
+            
+            if not self._active_session:
+                return False
+            
+            # 检查会话ID
+            if self._active_session.session_id != session_id:
+                return False
+            
+            # 检查客户端IP
+            client_ip = self.get_client_ip(request)
+            if self._active_session.client_ip != client_ip:
+                logger.warning(f"IP mismatch for heartbeat {session_id}: expected {self._active_session.client_ip}, got {client_ip}")
+                return False
+            
+            # 更新心跳时间
+            self._last_heartbeat = datetime.now()
+            self._active_session.last_activity = datetime.now()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating heartbeat: {e}")
+            return False
+
+    async def create_session_with_serial_auth(self, request: Request, client_info: Optional[str] = None) -> SessionResponse:
+        """通过串口认证创建会话"""
+        try:
+            # 清理过期会话
+            self._cleanup_expired_session()
+            
+            # 检查是否已有活跃会话
+            if self._active_session:
+                logger.warning(f"Attempt to create session while active session exists: {self._active_session.session_id}")
+                raise SessionException(
+                    ErrorCode.SESSION_ALREADY_EXISTS,
+                    f"已有客户端连接中（IP: {self._active_session.client_ip}），请断开其他连接后重试"
+                )
+            
+            # 创建新会话
+            session_id = self._generate_session_id()
+            client_ip = self.get_client_ip(request)
+            user_agent = request.headers.get("User-Agent")
+            now = datetime.now()
+            
+            session_info = SessionInfo(
+                session_id=session_id,
+                client_ip=client_ip,
+                user_agent=user_agent,
+                created_at=now,
+                last_activity=now,
+                is_active=True
+            )
+            
+            # 存储会话
+            self._active_session = session_info
+            # 初始化心跳
+            self._last_heartbeat = now
+            
+            # 生成令牌
+            token = self._generate_token(session_id, client_ip)
+            
+            logger.info(f"Created new session via serial auth: {session_id} for client: {client_ip}")
+            
+            return SessionResponse(
+                session_id=session_id,
+                token=token,
+                expires_in=self._session_timeout_minutes * 60
+            )
+            
+        except SessionException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating session with serial auth: {e}")
+            raise SessionException(ErrorCode.SYSTEM_ERROR, f"创建会话失败: {str(e)}")
 
 
 # Global service instance
