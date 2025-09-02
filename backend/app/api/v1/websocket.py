@@ -16,7 +16,7 @@ from app.schemas.websocket import (
     WSErrorMessage, 
     WSMessageType
 )
-from app.services.command_service import CommandService
+from app.services.serial_service import serial_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +27,6 @@ class ConnectionManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self.command_service = CommandService()
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """接受WebSocket连接"""
@@ -88,7 +87,7 @@ class ConnectionManager:
                 await self.send_personal_message(error_msg.model_dump(), websocket)
                 return
             
-            command_text = data.get("command", "").strip()
+            command_text = data.get("command", "")
             if not command_text:
                 error_msg = WSErrorMessage(
                     error="命令不能为空",
@@ -98,14 +97,35 @@ class ConnectionManager:
                 await self.send_personal_message(error_msg.model_dump(), websocket)
                 return
             
-            # 解析命令和参数
-            parts = command_text.split()
-            command = parts[0]
-            args = parts[1:] if len(parts) > 1 else []
-            
-            # 执行命令
-            response = await self.command_service.execute_command(command, args)
-            await self.send_personal_message(response.model_dump(), websocket)
+            # 执行AT指令通过串口服务
+            try:
+
+                # 直接发送完整的指令字符串到串口
+                result = await serial_service.send_at_command(command_text)
+                
+                # 构造成功响应
+                response_msg = WSResponseMessage(
+                    type=WSMessageType.RESPONSE,
+                    message=result.received_data,
+                    data={
+                        "sent_data": result.sent_data,
+                        "received_data": result.received_data,
+                        "timestamp": result.timestamp
+                    },
+                    timestamp=datetime.now().isoformat(),
+                    success=True
+                )
+                
+                await self.send_personal_message(response_msg.model_dump(), websocket)
+                
+            except Exception as serial_error:
+                logger.error(f"串口指令执行失败: {str(serial_error)}")
+                error_msg = WSErrorMessage(
+                    error=f"指令执行失败: {str(serial_error)}",
+                    code=500,
+                    timestamp=datetime.now().isoformat()
+                )
+                await self.send_personal_message(error_msg.model_dump(), websocket)
             
         except Exception as e:
             logger.error(f"处理命令失败: {str(e)}")

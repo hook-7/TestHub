@@ -11,6 +11,17 @@
             {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
           </span>
         </div>
+        
+        <!-- WebSocket连接状态 -->
+        <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected, disconnected: !communicationStore.isRealTimeConnected }">
+          <el-icon class="status-icon">
+            <span v-if="communicationStore.isRealTimeConnected" class="connected-icon">●</span>
+            <span v-else class="disconnected-icon">●</span>
+          </el-icon>
+          <span class="status-text">
+            WebSocket {{ communicationStore.isRealTimeConnected ? '已连接' : '连接中' }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -75,9 +86,9 @@
 
           <!-- 常用指令快捷按钮 -->
           <div style="margin-top: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <h4 style="margin: 0;">常用指令</h4>
-              <div>
+            <div class="command-header">
+              <h4 class="command-title">常用指令</h4>
+              <div class="command-actions">
                 <el-button size="small" @click="showAddCommand = true">
                   <el-icon><Plus /></el-icon>
                   添加指令
@@ -93,16 +104,19 @@
               </div>
             </div>
             <div class="quick-commands">
-              <el-button 
+              <div 
                 v-for="cmd in savedCommands" 
                 :key="cmd.id"
-                size="small"
+                class="quick-command-btn"
                 @click="sendQuickCommand(cmd.command)"
                 @contextmenu.prevent="handleCommandRightClick($event, cmd)"
-                :disabled="!connectionStore.isConnected"
+                :class="{ disabled: !connectionStore.isConnected }"
                 :title="cmd.description"
               >
-                {{ cmd.name }}
+                <div>
+                  <div class="quick-command-name">{{ cmd.name }}</div>
+                  <div class="quick-command-text">{{ cmd.command }}</div>
+                </div>
                 <el-icon 
                   class="delete-icon" 
                   @click.stop="deleteCommand(cmd)"
@@ -110,7 +124,7 @@
                 >
                   <Delete />
                 </el-icon>
-              </el-button>
+              </div>
               
               <!-- 当没有常用指令时显示提示 -->
               <div v-if="savedCommands.length === 0" class="no-commands-hint">
@@ -214,7 +228,7 @@
                 通信日志
               </h3>
               <div class="header-actions">
-                <el-button @click="clearLogs" size="small" type="danger" plain>
+                <el-button @click="clearLogs" size="small" type="danger" plain class="clear-logs-btn">
                   <el-icon><Delete /></el-icon>
                   清空日志
                 </el-button>
@@ -364,17 +378,22 @@ const formatCommand = (command: string) => {
   // 前端完全控制指令格式
   let formattedCommand = command.trim()
   
-  // 如果启用自动添加终止符且指令中没有终止符
-  if (commandForm.autoAddCRLF && commandForm.lineEnding && !hasLineEnding(formattedCommand)) {
+  // 首先处理转义字符：将文本形式的 \r\n 转换为真实控制字符
+  formattedCommand = formattedCommand
+    .replace(/\\r\\n/g, '\r\n')  // \r\n -> 真实的CRLF
+    .replace(/\\r/g, '\r')       // \r -> 真实的CR  
+    .replace(/\\n/g, '\n')       // \n -> 真实的LF
+  
+  // 如果启用自动添加终止符且指令中没有真实的控制字符
+  const hasRealLineEnding = formattedCommand.includes('\r') || formattedCommand.includes('\n')
+  if (commandForm.autoAddCRLF && commandForm.lineEnding && !hasRealLineEnding) {
     formattedCommand += commandForm.lineEnding
   }
   
   return formattedCommand
 }
 
-const hasLineEnding = (command: string) => {
-  return command.includes('\r') || command.includes('\n')
-}
+
 
 const addToHistory = (command: string) => {
   const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
@@ -680,30 +699,40 @@ onMounted(async () => {
   
   // 加载保存的指令
   await loadSavedCommands()
+  
+  // 初始化WebSocket连接
+  try {
+    await communicationStore.initializeWebSocket()
+  } catch (error) {
+    console.error('WebSocket初始化失败:', error)
+    ElMessage.error('实时连接初始化失败')
+  }
 })
+
+
 </script>
 
 <style scoped>
 .page-container {
-  padding: 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 20px;
+  background: #ffffff;
   min-height: calc(100vh - 70px);
 }
 
 .status-bar {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
-  backdrop-filter: blur(10px);
+  background: #ffffff;
+  border: 1px solid #e0e6ed;
   border-radius: 16px;
-  padding: 16px 24px;
+  padding: 20px 28px;
   margin-bottom: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .status-info {
   display: flex;
-  justify-content: center;
   align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .connection-badge {
@@ -713,22 +742,65 @@ onMounted(async () => {
   padding: 12px 20px;
   border-radius: 12px;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.connection-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .connection-badge.connected {
-  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-  color: #155724;
-  border: 1px solid #c3e6cb;
-  box-shadow: 0 4px 12px rgba(21, 87, 36, 0.1);
+  background: #f0f9f0;
+  color: #2e7d32;
+  border: 2px solid #4caf50;
 }
 
 .connection-badge.disconnected {
-  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-  box-shadow: 0 4px 12px rgba(114, 28, 36, 0.1);
+  background: #fef7f7;
+  color: #c62828;
+  border: 2px solid #f44336;
+}
+
+.realtime-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.realtime-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.realtime-badge.connected {
+  background: #f3f5ff;
+  color: #1976d2;
+  border: 2px solid #2196f3;
+}
+
+.realtime-badge.disconnected {
+  background: #fffbf0;
+  color: #f57c00;
+  border: 2px solid #ff9800;
+}
+
+.connected-icon {
+  color: #52c41a;
+  font-size: 12px;
+}
+
+.disconnected-icon {
+  color: #faad14;
+  font-size: 12px;
 }
 
 .status-icon {
@@ -739,12 +811,32 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.command-card, .log-card {
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.95);
+.command-card {
+  height: 600px;
+  background: #ffffff;
+  border: 1px solid #e0e6ed;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  transition: all 0.3s ease;
+}
+
+.command-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+}
+
+.logs-card {
+  height: 600px;
+  background: #ffffff;
+  border: 1px solid #e0e6ed;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  transition: all 0.3s ease;
+}
+
+.logs-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
 }
 
 .card-header {
@@ -775,20 +867,31 @@ onMounted(async () => {
 
 .quick-commands {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 16px;
   min-height: 40px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
-.quick-commands .el-button {
-  border-radius: 8px;
-  transition: all 0.3s ease;
+.quick-commands::-webkit-scrollbar {
+  width: 6px;
 }
 
-.quick-commands .el-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+.quick-commands::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.quick-commands::-webkit-scrollbar-thumb {
+  background: #bdbdbd;
+  border-radius: 3px;
+}
+
+.quick-commands::-webkit-scrollbar-thumb:hover {
+  background: #9e9e9e;
 }
 
 .no-commands-hint {
@@ -896,36 +999,461 @@ onMounted(async () => {
   border: 1px solid var(--el-border-color-light);
 }
 
-/* 删除按钮样式 */
-.quick-commands .el-button {
-  position: relative;
+
+/* Element Plus 组件样式覆盖 */
+:deep(.el-card__header) {
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e6ed;
+  font-weight: 600;
+  font-size: 16px;
+  color: #2d3748;
 }
 
-.quick-commands .delete-icon {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  background: #f56c6c;
-  color: white;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+  color: #ffffff !important;
+}
+
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+  color: #ffffff !important;
+}
+
+:deep(.el-button--danger),
+:deep(.clear-logs-btn) {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+  color: #ffffff !important;
+}
+
+:deep(.el-button--danger:hover),
+:deep(.clear-logs-btn:hover) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+  color: #ffffff !important;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid #d0d7de;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: #1976d2;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background: #1976d2;
+  border-color: #1976d2;
+}
+
+/* 确保所有按钮文字颜色清晰 */
+:deep(.el-button) {
+  font-weight: 600;
+}
+
+/* 只对特定按钮应用flex布局 */
+:deep(.el-input-group__append .el-button),
+:deep(.header-actions .el-button),
+:deep(.clear-logs-btn) {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  cursor: pointer;
-  z-index: 1;
+  gap: 4px;
 }
 
-.quick-commands .el-button:hover .delete-icon {
+:deep(.el-button--primary),
+:deep(.el-button--danger),
+:deep(.el-button--success),
+:deep(.el-button--warning),
+:deep(.el-button--info) {
+  color: #ffffff !important;
+}
+
+:deep(.el-button--primary:hover),
+:deep(.el-button--danger:hover),
+:deep(.el-button--success:hover),
+:deep(.el-button--warning:hover),
+:deep(.el-button--info:hover) {
+  color: #ffffff !important;
+}
+
+:deep(.el-button--primary:active),
+:deep(.el-button--danger:active),
+:deep(.el-button--success:active),
+:deep(.el-button--warning:active),
+:deep(.el-button--info:active) {
+  color: #ffffff !important;
+}
+
+/* 输入框追加按钮特殊处理 */
+:deep(.el-input-group__append .el-button) {
+  color: #ffffff !important;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  min-height: 32px;
+}
+
+:deep(.el-input-group__append .el-button:hover) {
+  color: #ffffff !important;
+}
+
+:deep(.el-input-group__append .el-button .el-icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+:deep(.el-dialog__header) {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+}
+
+/* 通信日志区域美化 */
+.logs-container {
+  height: 500px;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 16px;
+  margin-top: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.logs-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+  background: #bdbdbd;
+  border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb:hover {
+  background: #9e9e9e;
+}
+
+.log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e0e6ed;
+  border-left: 4px solid transparent;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.log-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.log-item.sent {
+  border-left-color: #1976d2;
+  background: #f8fbff;
+}
+
+.log-item.received {
+  border-left-color: #2e7d32;
+  background: #f1f8e9;
+}
+
+.log-item.failed {
+  border-left-color: #d32f2f;
+  background: #fef7f7;
+}
+
+.log-direction {
+  font-size: 11px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  min-width: 50px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.log-direction.sent {
+  background: #1976d2;
+  color: white;
+}
+
+.log-direction.received {
+  background: #2e7d32;
+  color: white;
+}
+
+.log-direction.failed {
+  background: #d32f2f;
+  color: white;
+}
+
+.log-data {
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 13px;
+  color: #2d3748;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 12px 16px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  line-height: 1.4;
+}
+
+/* 常用指令区域美化 */
+.quick-commands {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.quick-commands::-webkit-scrollbar {
+  width: 6px;
+}
+
+.quick-commands::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.quick-commands::-webkit-scrollbar-thumb {
+  background: #bdbdbd;
+  border-radius: 3px;
+}
+
+.quick-commands::-webkit-scrollbar-thumb:hover {
+  background: #9e9e9e;
+}
+
+.quick-command-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  text-align: left;
+  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-command-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.quick-command-btn:hover {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #3b82f6;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.25);
+}
+
+.quick-command-btn:hover::before {
+  transform: scaleX(1);
+}
+
+.quick-command-btn:active {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+}
+
+.quick-command-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.quick-command-btn.disabled:hover {
+  transform: none;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border-color: #e5e7eb;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.quick-command-name {
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 6px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.quick-command-text {
+  font-size: 13px;
+  color: #6b7280;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: inline-block;
+  border: 1px solid #d1d5db;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.quick-command-btn:hover .quick-command-text {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.delete-icon {
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #ef4444;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 12px;
+  font-size: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.quick-command-btn:hover .delete-icon {
   opacity: 1;
 }
 
 .delete-icon:hover {
-  background: #f34040 !important;
-  transform: scale(1.1);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
+  transform: scale(1.1) rotate(5deg);
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
 }
+
+.command-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.command-controls .el-button {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.no-logs {
+  text-align: center;
+  color: #a0aec0;
+  padding: 60px 20px;
+  font-size: 16px;
+}
+
+.no-logs .el-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+  opacity: 0.3;
+  background: linear-gradient(45deg, #94a3b8, #64748b);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 常用指令区域布局 */
+.command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.command-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.command-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.command-actions .el-button {
+  font-size: 13px;
+}
+
+/* 修复小按钮的内部对齐 */
+:deep(.el-button--small) {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+:deep(.el-button--small .el-icon) {
+  margin-right: 4px;
+}
+
+/* 修复按钮组间距 */
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+
 </style>
