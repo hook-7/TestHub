@@ -52,9 +52,9 @@ async def get_connection_status():
 
 @router.post("/send-at", response_model=APIResponse)
 async def send_at_command(request: RawDataRequest):
-    """发送AT指令"""
+    """发送指令（支持AT指令和其他自定义指令）"""
     result = await serial_service.send_at_command(request.data)
-    return APIResponse.success(data=result, msg="AT指令发送成功")
+    return APIResponse.success(data=result, msg="指令发送成功")
 
 
 @router.post("/raw-data", response_model=APIResponse)

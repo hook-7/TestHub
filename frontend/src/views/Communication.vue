@@ -25,26 +25,26 @@
             <div class="card-header">
               <h3>
                 <el-icon><Operation /></el-icon>
-                AT指令交互
+                指令交互
               </h3>
             </div>
           </template>
 
-          <!-- AT指令输入区 -->
-          <el-form :model="atForm" label-width="80px">
-            <el-form-item label="AT指令">
+          <!-- 指令输入区 -->
+          <el-form :model="commandForm" label-width="80px">
+            <el-form-item label="指令内容">
               <el-input
-                v-model="atForm.command"
-                placeholder="输入AT指令，例如: AT+GMR"
+                v-model="commandForm.command"
+                placeholder="输入指令内容，例如: AT+GMR 或任何自定义指令"
                 style="font-family: monospace;"
-                @keyup.enter="sendATCommand"
+                @keyup.enter="sendCommand"
               >
                 <template #append>
                   <el-button 
                     type="primary" 
-                    @click="sendATCommand"
+                    @click="sendCommand"
                     :disabled="!connectionStore.isConnected"
-                    :loading="atLoading"
+                    :loading="commandLoading"
                   >
                     <el-icon><Position /></el-icon>
                     发送
@@ -53,13 +53,13 @@
               </el-input>
             </el-form-item>
             
-            <!-- AT指令控制选项 -->
+            <!-- 指令控制选项 -->
             <el-form-item label="控制选项">
-              <div class="at-controls">
-                <el-checkbox v-model="atForm.autoAddCRLF" size="small">
+              <div class="command-controls">
+                <el-checkbox v-model="commandForm.autoAddCRLF" size="small">
                   自动添加\r\n
                 </el-checkbox>
-                <el-select v-model="atForm.lineEnding" size="small" style="width: 120px; margin-left: 12px;">
+                <el-select v-model="commandForm.lineEnding" size="small" style="width: 120px; margin-left: 12px;">
                   <el-option label="\r\n (CRLF)" value="\r\n" />
                   <el-option label="\r (CR)" value="\r" />
                   <el-option label="\n (LF)" value="\n" />
@@ -67,7 +67,7 @@
                 </el-select>
                 <el-button 
                   size="small" 
-                  @click="clearATInput" 
+                  @click="clearCommandInput" 
                   style="margin-left: 12px;"
                 >
                   清空
@@ -76,11 +76,15 @@
             </el-form-item>
           </el-form>
 
-          <!-- 常用AT指令快捷按钮 -->
+          <!-- 常用指令快捷按钮 -->
           <div style="margin-top: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <h4 style="margin: 0;">常用AT指令</h4>
+              <h4 style="margin: 0;">常用指令</h4>
               <div>
+                <el-button size="small" @click="showAddCommand = true">
+                  <el-icon><Plus /></el-icon>
+                  添加指令
+                </el-button>
                 <el-button size="small" @click="showHistory = !showHistory">
                   <el-icon><Clock /></el-icon>
                   历史记录
@@ -93,14 +97,14 @@
             </div>
             <div class="quick-commands">
               <el-button 
-                v-for="cmd in quickCommands" 
-                :key="cmd.command"
+                v-for="cmd in savedCommands" 
+                :key="cmd.id"
                 size="small"
                 @click="sendQuickCommand(cmd.command)"
                 :disabled="!connectionStore.isConnected"
                 :title="cmd.description"
               >
-                {{ cmd.command.replace(/\r\n|\r|\n/g, '') }}
+                {{ cmd.name }}
               </el-button>
             </div>
           </div>
@@ -115,7 +119,7 @@
                   :key="index"
                   size="small"
                   style="margin: 2px; cursor: pointer;"
-                  @click="atForm.command = cmd"
+                  @click="commandForm.command = cmd"
                   :title="`点击填入: ${cmd}`"
                 >
                   {{ cmd }}
@@ -135,7 +139,7 @@
                 v-model="batchCommands"
                 type="textarea"
                 :rows="4"
-                placeholder="每行一个AT指令，例如:&#10;AT&#10;AT+GMR&#10;AT+CSQ"
+                placeholder="每行一个指令，例如:&#10;AT&#10;AT+GMR&#10;AT+CSQ"
                 style="font-family: monospace;"
               />
               <div style="margin-top: 8px;">
@@ -241,6 +245,46 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 添加指令对话框 -->
+    <el-dialog
+      v-model="showAddCommand"
+      title="添加常用指令"
+      width="500px"
+      :before-close="handleCloseAddCommand"
+    >
+      <el-form :model="newCommand" label-width="80px">
+        <el-form-item label="指令名称" required>
+          <el-input
+            v-model="newCommand.name"
+            placeholder="例如: 查询版本"
+            maxlength="20"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="指令内容" required>
+          <el-input
+            v-model="newCommand.command"
+            placeholder="例如: AT+GMR"
+            style="font-family: monospace;"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="newCommand.description"
+            placeholder="指令说明（可选）"
+            maxlength="50"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showAddCommand = false">取消</el-button>
+          <el-button type="primary" @click="addNewCommand">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -257,54 +301,74 @@ const connectionStore = useConnectionStore()
 const communicationStore = useCommunicationStore()
 
 // 状态
-const atLoading = ref(false)
+const commandLoading = ref(false)
 const rawLoading = ref(false)
 const batchLoading = ref(false)
 const showHistory = ref(false)
 const showBatchSend = ref(false)
+const showAddCommand = ref(false)
 const commandHistory = ref<string[]>([])
 const batchCommands = ref('')
 const batchDelay = ref(1000)
 
 // 表单数据
-const atForm = reactive({
+const commandForm = reactive({
   command: '',
   autoAddCRLF: true,
   lineEnding: '\r\n',
+})
+
+// 新指令表单
+const newCommand = reactive({
+  name: '',
+  command: '',
+  description: '',
 })
 
 const rawForm = reactive({
   data: '',
 })
 
-// 常用AT指令 - 包含完整格式
-const quickCommands = [
-  { command: 'AT\r\n', description: '测试连接' },
-  { command: 'AT+GMR\r\n', description: '查询固件版本' },
-  { command: 'AT+CGMI\r\n', description: '查询制造商' },
-  { command: 'AT+CGMM\r\n', description: '查询模块型号' },
-  { command: 'AT+CGMR\r\n', description: '查询软件版本' },
-  { command: 'AT+CGSN\r\n', description: '查询IMEI' },
-  { command: 'AT+CIMI\r\n', description: '查询IMSI' },
-  { command: 'AT+CCID\r\n', description: '查询ICCID' },
-  { command: 'AT+CSQ\r\n', description: '查询信号强度' },
-  { command: 'AT+CREG?\r\n', description: '查询网络注册状态' },
-  { command: 'AT+CGATT?\r\n', description: '查询GPRS附着状态' },
-  { command: 'AT+COPS?\r\n', description: '查询运营商' },
-  { command: 'AT+CFUN?\r\n', description: '查询功能状态' },
-  { command: 'AT+CFUN=1\r\n', description: '启用全功能' },
-  { command: 'AT+CFUN=0\r\n', description: '关闭射频' },
-  { command: 'ATZ\r\n', description: '重置设备' },
+// 保存的指令接口
+interface SavedCommand {
+  id: string
+  name: string
+  command: string
+  description: string
+  createdAt: number
+}
+
+// 保存的指令列表
+const savedCommands = ref<SavedCommand[]>([])
+
+// 默认常用指令
+const defaultCommands: SavedCommand[] = [
+  { id: '1', name: 'AT', command: 'AT\r\n', description: '测试连接', createdAt: Date.now() },
+  { id: '2', name: 'GMR', command: 'AT+GMR\r\n', description: '查询固件版本', createdAt: Date.now() },
+  { id: '3', name: 'CGMI', command: 'AT+CGMI\r\n', description: '查询制造商', createdAt: Date.now() },
+  { id: '4', name: 'CGMM', command: 'AT+CGMM\r\n', description: '查询模块型号', createdAt: Date.now() },
+  { id: '5', name: 'CGMR', command: 'AT+CGMR\r\n', description: '查询软件版本', createdAt: Date.now() },
+  { id: '6', name: 'CGSN', command: 'AT+CGSN\r\n', description: '查询IMEI', createdAt: Date.now() },
+  { id: '7', name: 'CIMI', command: 'AT+CIMI\r\n', description: '查询IMSI', createdAt: Date.now() },
+  { id: '8', name: 'CCID', command: 'AT+CCID\r\n', description: '查询ICCID', createdAt: Date.now() },
+  { id: '9', name: 'CSQ', command: 'AT+CSQ\r\n', description: '查询信号强度', createdAt: Date.now() },
+  { id: '10', name: 'CREG', command: 'AT+CREG?\r\n', description: '查询网络注册状态', createdAt: Date.now() },
+  { id: '11', name: 'CGATT', command: 'AT+CGATT?\r\n', description: '查询GPRS附着状态', createdAt: Date.now() },
+  { id: '12', name: 'COPS', command: 'AT+COPS?\r\n', description: '查询运营商', createdAt: Date.now() },
+  { id: '13', name: 'CFUN?', command: 'AT+CFUN?\r\n', description: '查询功能状态', createdAt: Date.now() },
+  { id: '14', name: 'CFUN=1', command: 'AT+CFUN=1\r\n', description: '启用全功能', createdAt: Date.now() },
+  { id: '15', name: 'CFUN=0', command: 'AT+CFUN=0\r\n', description: '关闭射频', createdAt: Date.now() },
+  { id: '16', name: 'ATZ', command: 'ATZ\r\n', description: '重置设备', createdAt: Date.now() },
 ]
 
 // 方法
-const formatATCommand = (command: string) => {
-  // 前端完全控制AT指令格式
+const formatCommand = (command: string) => {
+  // 前端完全控制指令格式
   let formattedCommand = command.trim()
   
   // 如果启用自动添加终止符且指令中没有终止符
-  if (atForm.autoAddCRLF && atForm.lineEnding && !hasLineEnding(formattedCommand)) {
-    formattedCommand += atForm.lineEnding
+  if (commandForm.autoAddCRLF && commandForm.lineEnding && !hasLineEnding(formattedCommand)) {
+    formattedCommand += commandForm.lineEnding
   }
   
   return formattedCommand
@@ -329,51 +393,51 @@ const clearHistory = () => {
   commandHistory.value = []
 }
 
-const sendATCommand = async () => {
-  if (!atForm.command.trim()) {
-    ElMessage.error('请输入AT指令')
+const sendCommand = async () => {
+  if (!commandForm.command.trim()) {
+    ElMessage.error('请输入指令内容')
     return
   }
   
-  atLoading.value = true
+  commandLoading.value = true
   try {
-    const formattedCommand = formatATCommand(atForm.command)
-    const result = await communicationStore.sendATCommand(formattedCommand)
-    ElMessage.success('AT指令发送成功')
+    const formattedCommand = formatCommand(commandForm.command)
+    await communicationStore.sendATCommand(formattedCommand)
+    ElMessage.success('指令发送成功')
     // 添加到历史记录
-    addToHistory(atForm.command)
+    addToHistory(commandForm.command)
   } catch (error) {
-    console.error('Send AT command error:', error)
+    console.error('Send command error:', error)
   } finally {
-    atLoading.value = false
+    commandLoading.value = false
   }
 }
 
-const clearATInput = () => {
-  atForm.command = ''
+const clearCommandInput = () => {
+  commandForm.command = ''
 }
 
 const sendQuickCommand = async (command: string) => {
-  // 直接发送预设的完整格式指令，不经过formatATCommand处理
-  atLoading.value = true
+  // 直接发送预设的完整格式指令，不经过formatCommand处理
+  commandLoading.value = true
   try {
-    const result = await communicationStore.sendATCommand(command)
-    ElMessage.success('AT指令发送成功')
+    await communicationStore.sendATCommand(command)
+    ElMessage.success('指令发送成功')
     // 同时更新输入框显示（去掉终止符显示）
     const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
-    atForm.command = cleanCommand
+    commandForm.command = cleanCommand
     // 添加到历史记录
     addToHistory(cleanCommand)
   } catch (error) {
-    console.error('Send AT command error:', error)
+    console.error('Send command error:', error)
   } finally {
-    atLoading.value = false
+    commandLoading.value = false
   }
 }
 
 const sendBatchCommands = async () => {
   if (!batchCommands.value.trim()) {
-    ElMessage.error('请输入要批量发送的AT指令')
+    ElMessage.error('请输入要批量发送的指令')
     return
   }
   
@@ -383,7 +447,7 @@ const sendBatchCommands = async () => {
     .filter(cmd => cmd.length > 0)
   
   if (commands.length === 0) {
-    ElMessage.error('没有有效的AT指令')
+    ElMessage.error('没有有效的指令')
     return
   }
   
@@ -392,7 +456,7 @@ const sendBatchCommands = async () => {
   try {
     for (let i = 0; i < commands.length; i++) {
       const command = commands[i]
-      const formattedCommand = formatATCommand(command)
+      const formattedCommand = formatCommand(command)
       
       ElMessage.info(`发送第${i + 1}/${commands.length}个指令: ${command}`)
       
@@ -419,6 +483,75 @@ const sendBatchCommands = async () => {
   }
 }
 
+// 浏览器存储相关方法
+const STORAGE_KEY = 'saved_commands'
+
+const loadSavedCommands = () => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      savedCommands.value = parsed
+    } else {
+      // 首次使用，加载默认指令
+      savedCommands.value = [...defaultCommands]
+      saveCommandsToStorage()
+    }
+  } catch (error) {
+    console.error('Failed to load saved commands:', error)
+    savedCommands.value = [...defaultCommands]
+  }
+}
+
+const saveCommandsToStorage = () => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedCommands.value))
+  } catch (error) {
+    console.error('Failed to save commands:', error)
+    ElMessage.error('保存指令失败')
+  }
+}
+
+const addNewCommand = () => {
+  if (!newCommand.name.trim() || !newCommand.command.trim()) {
+    ElMessage.error('请填写指令名称和内容')
+    return
+  }
+  
+  // 检查名称是否重复
+  if (savedCommands.value.some(cmd => cmd.name === newCommand.name.trim())) {
+    ElMessage.error('指令名称已存在')
+    return
+  }
+  
+  const command: SavedCommand = {
+    id: Date.now().toString(),
+    name: newCommand.name.trim(),
+    command: newCommand.command.trim(),
+    description: newCommand.description.trim(),
+    createdAt: Date.now(),
+  }
+  
+  savedCommands.value.unshift(command)
+  saveCommandsToStorage()
+  
+  // 清空表单
+  newCommand.name = ''
+  newCommand.command = ''
+  newCommand.description = ''
+  showAddCommand.value = false
+  
+  ElMessage.success('指令添加成功')
+}
+
+const handleCloseAddCommand = () => {
+  // 清空表单
+  newCommand.name = ''
+  newCommand.command = ''
+  newCommand.description = ''
+  showAddCommand.value = false
+}
+
 const sendRawData = async () => {
   if (!rawForm.data.trim()) {
     ElMessage.error('请输入十六进制数据')
@@ -427,7 +560,7 @@ const sendRawData = async () => {
   
   rawLoading.value = true
   try {
-    const result = await communicationStore.sendRawData(rawForm.data)
+    await communicationStore.sendRawData(rawForm.data)
     ElMessage.success('原始数据发送成功')
   } catch (error) {
     console.error('Send raw data error:', error)
@@ -506,6 +639,8 @@ onMounted(() => {
     ElMessage.warning('请先连接串口')
     router.push('/serial-config')
   }
+  // 加载保存的指令
+  loadSavedCommands()
 })
 </script>
 
@@ -609,7 +744,7 @@ onMounted(() => {
   margin: 24px 0 16px 0;
 }
 
-.at-controls {
+.command-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;

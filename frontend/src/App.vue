@@ -38,10 +38,6 @@
             <el-icon><ChatLineRound /></el-icon>
             <span>AT指令交互</span>
           </el-menu-item>
-          <el-menu-item index="/terminal">
-            <el-icon><Monitor /></el-icon>
-            <span>命令行终端</span>
-          </el-menu-item>
         </el-menu>
       </div>
 
@@ -58,8 +54,7 @@ import { onMounted } from 'vue'
 import { 
   Connection, 
   Setting, 
-  ChatLineRound, 
-  Monitor 
+  ChatLineRound
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 

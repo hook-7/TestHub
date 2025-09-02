@@ -43,7 +43,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'sent',
         data: command,
-        description: 'AT指令',
+        description: '发送指令',
       })
       
       const result = await serialAPI.sendATCommand(command)
@@ -52,7 +52,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'received',
         data: result.received_data,
-        description: 'AT响应',
+        description: '指令响应',
         success: true,
       })
       
@@ -62,7 +62,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'received',
         data: error instanceof Error ? error.message : '未知错误',
-        description: 'AT指令失败',
+        description: '指令发送失败',
         success: false,
       })
       throw error
