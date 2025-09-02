@@ -37,7 +37,7 @@ export interface RawDataResponse {
   timestamp: number
 }
 
-// API接口 - 专注于AT指令交互
+// API接口 - 支持通用指令交互
 export const serialAPI = {
   // 获取可用串口列表
   async getAvailablePorts(): Promise<SerialPortInfo[]> {
@@ -67,7 +67,7 @@ export const serialAPI = {
     return response.data
   },
 
-  // 发送AT指令
+  // 发送指令（支持AT指令和其他自定义指令）
   async sendATCommand(command: string): Promise<RawDataResponse> {
     const response = await api.post('/serial/send-at', { data: command })
     return response.data

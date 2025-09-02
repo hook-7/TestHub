@@ -183,7 +183,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 
@@ -276,13 +276,8 @@ const disconnect = async () => {
 
 const testConnection = async () => {
   try {
-    // 简单的连接测试 - 读取从站1的第一个寄存器
-    await communicationStore.readRegisters({
-      slave_id: 1,
-      start_addr: 0,
-      count: 1,
-      function_code: 3
-    })
+    // 简单的指令测试
+    await communicationStore.sendATCommand('AT\r\n')
     ElMessage.success('连接测试成功')
   } catch (error) {
     ElMessage.warning('连接测试失败，请检查设备连接')

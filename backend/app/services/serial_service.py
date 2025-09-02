@@ -87,7 +87,7 @@ class SerialService:
             raise SerialException(ErrorCode.SYSTEM_ERROR, "获取连接状态失败")
     
     async def send_at_command(self, command: str) -> RawDataResponse:
-        """发送AT指令 - 由前端完全控制格式"""
+        """发送指令（支持AT指令和其他自定义指令）- 由前端完全控制格式"""
         try:
             if not serial_driver.is_connected:
                 raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
@@ -96,7 +96,7 @@ class SerialService:
             
             # 直接发送前端传来的指令，不做任何修改
             data = command.encode('utf-8')
-            response = await serial_driver.write_read(data, timeout=5.0)
+            response = await serial_driver.write_read(data, read_timeout=5.0)
             
             # 解析响应
             response_text = response.decode('utf-8', errors='ignore')
@@ -110,8 +110,8 @@ class SerialService:
         except SerialException:
             raise
         except Exception as e:
-            logger.error(f"Error sending AT command: {e}")
-            raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"发送AT指令失败: {str(e)}")
+            logger.error(f"Error sending command: {e}")
+            raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"发送指令失败: {str(e)}")
     
     async def send_raw_data(self, hex_data: str) -> RawDataResponse:
         """发送原始数据"""
