@@ -1,6 +1,6 @@
 """
-Custom Exceptions and Error Handling
-统一异常定义和错误处理
+Custom Exceptions and Error Handling for AT Command Communication
+AT指令通信异常定义和错误处理
 """
 
 from enum import Enum
@@ -27,12 +27,6 @@ class ErrorCode(Enum):
     SERIAL_TIMEOUT = 1008
     SERIAL_DEVICE_ERROR = 1009
     
-    # 通信协议错误 (1100-1199)
-    PROTOCOL_CRC_ERROR = 1101
-    PROTOCOL_INVALID_RESPONSE = 1102
-    PROTOCOL_SLAVE_ERROR = 1103
-    PROTOCOL_FUNCTION_ERROR = 1104
-    
     # 配置错误 (1200-1299)
     CONFIG_INVALID_PORT = 1201
     CONFIG_INVALID_BAUDRATE = 1202
@@ -51,11 +45,6 @@ class HMIException(Exception):
 
 class SerialException(HMIException):
     """串口相关异常"""
-    pass
-
-
-class ProtocolException(HMIException):
-    """协议相关异常"""
     pass
 
 
@@ -82,12 +71,6 @@ ERROR_MESSAGES = {
     ErrorCode.SERIAL_INVALID_DATA: "无效的串口数据格式",
     ErrorCode.SERIAL_TIMEOUT: "串口通信超时",
     ErrorCode.SERIAL_DEVICE_ERROR: "串口设备错误",
-    
-    # 协议错误
-    ErrorCode.PROTOCOL_CRC_ERROR: "协议校验错误",
-    ErrorCode.PROTOCOL_INVALID_RESPONSE: "协议响应无效",
-    ErrorCode.PROTOCOL_SLAVE_ERROR: "从站设备错误",
-    ErrorCode.PROTOCOL_FUNCTION_ERROR: "协议功能码错误",
     
     # 配置错误
     ErrorCode.CONFIG_INVALID_PORT: "无效的串口配置",
