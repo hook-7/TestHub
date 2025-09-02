@@ -2,15 +2,17 @@
 Standard API Response Format
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar, Generic
 from pydantic import BaseModel
 
+T = TypeVar('T')
 
-class APIResponse(BaseModel):
+
+class APIResponse(BaseModel, Generic[T]):
     """Standard API response format"""
     code: int = 0
     msg: str = "success"
-    data: Optional[Any] = None
+    data: Optional[T] = None
 
     @classmethod
     def success(cls, data: Any = None, msg: str = "success") -> "APIResponse":

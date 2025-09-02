@@ -30,6 +30,10 @@
           router
           class="nav-menu"
         >
+          <el-menu-item index="/serial-login-config">
+            <el-icon><Key /></el-icon>
+            <span>串口登录配置</span>
+          </el-menu-item>
           <el-menu-item index="/serial-config">
             <el-icon><Setting /></el-icon>
             <span>串口配置</span>
@@ -54,7 +58,8 @@ import { onMounted } from 'vue'
 import { 
   Connection, 
   Setting, 
-  ChatLineRound
+  ChatLineRound,
+  Key
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 

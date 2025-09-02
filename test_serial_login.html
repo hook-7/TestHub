@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>串口登录配置测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .button {
+            background: #409EFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .button:hover {
+            background: #337ecc;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .result {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #f0f9ff;
+            border-left: 4px solid #67C23A;
+        }
+        .error {
+            background: #fef0f0;
+            border-left: 4px solid #F56C6C;
+        }
+    </style>
+</head>
+<body>
+    <h1>串口登录配置测试页面</h1>
+    
+    <!-- 获取配置列表 -->
+    <div class="section">
+        <h3>1. 获取配置列表</h3>
+        <button class="button" onclick="getConfigs()">获取配置列表</button>
+        <div id="configsResult" class="result"></div>
+    </div>
+    
+    <!-- 创建配置 -->
+    <div class="section">
+        <h3>2. 创建新配置</h3>
+        <div class="form-group">
+            <label>配置名称:</label>
+            <input type="text" id="configName" value="测试配置1" />
+        </div>
+        <div class="form-group">
+            <label>串口设备:</label>
+            <input type="text" id="configPort" value="/dev/ttyUSB0" />
+        </div>
+        <div class="form-group">
+            <label>波特率:</label>
+            <select id="configBaudrate">
+                <option value="9600">9600</option>
+                <option value="19200">19200</option>
+                <option value="115200">115200</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>登录命令:</label>
+            <textarea id="configLoginCommand" placeholder="例如: AT">AT</textarea>
+        </div>
+        <div class="form-group">
+            <label>期望响应:</label>
+            <textarea id="configExpectedResponse" placeholder="例如: OK">OK</textarea>
+        </div>
+        <button class="button" onclick="createConfig()">创建配置</button>
+        <div id="createResult" class="result"></div>
+    </div>
+    
+    <!-- 测试配置 -->
+    <div class="section">
+        <h3>3. 测试配置</h3>
+        <div class="form-group">
+            <label>配置ID (留空则使用上面的临时配置):</label>
+            <input type="number" id="testConfigId" placeholder="配置ID" />
+        </div>
+        <button class="button" onclick="testConfig()">测试配置</button>
+        <div id="testResult" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        async function apiCall(url, options = {}) {
+            try {
+                const response = await fetch(API_BASE + url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                return { code: 500, msg: '网络错误: ' + error.message };
+            }
+        }
+        
+        async function getConfigs() {
+            const result = await apiCall('/serial-login/configs');
+            const resultDiv = document.getElementById('configsResult');
+            resultDiv.textContent = JSON.stringify(result, null, 2);
+            resultDiv.className = result.code === 0 ? 'result success' : 'result error';
+        }
+        
+        async function createConfig() {
+            const config = {
+                name: document.getElementById('configName').value,
+                port: document.getElementById('configPort').value,
+                baudrate: parseInt(document.getElementById('configBaudrate').value),
+                login_command: document.getElementById('configLoginCommand').value || undefined,
+                expected_response: document.getElementById('configExpectedResponse').value || undefined
+            };
+            
+            const result = await apiCall('/serial-login/configs', {
+                method: 'POST',
+                body: JSON.stringify(config)
+            });
+            
+            const resultDiv = document.getElementById('createResult');
+            resultDiv.textContent = JSON.stringify(result, null, 2);
+            resultDiv.className = result.code === 0 ? 'result success' : 'result error';
+            
+            if (result.code === 0) {
+                // 刷新配置列表
+                getConfigs();
+            }
+        }
+        
+        async function testConfig() {
+            const configId = document.getElementById('testConfigId').value;
+            
+            let testRequest;
+            if (configId) {
+                testRequest = { config_id: parseInt(configId) };
+            } else {
+                // 使用临时配置
+                testRequest = {
+                    temp_config: {
+                        name: document.getElementById('configName').value,
+                        port: document.getElementById('configPort').value,
+                        baudrate: parseInt(document.getElementById('configBaudrate').value),
+                        bytesize: 8,
+                        parity: 'N',
+                        stopbits: 1,
+                        timeout: 1.0,
+                        auto_connect: false,
+                        login_command: document.getElementById('configLoginCommand').value || undefined,
+                        expected_response: document.getElementById('configExpectedResponse').value || undefined,
+                        retry_count: 3,
+                        retry_delay: 1.0
+                    }
+                };
+            }
+            
+            const result = await apiCall('/serial-login/test', {
+                method: 'POST',
+                body: JSON.stringify(testRequest)
+            });
+            
+            const resultDiv = document.getElementById('testResult');
+            resultDiv.textContent = JSON.stringify(result, null, 2);
+            resultDiv.className = result.code === 0 ? 'result success' : 'result error';
+        }
+        
+        // 页面加载时获取配置列表
+        window.onload = function() {
+            getConfigs();
+        };
+    </script>
+</body>
+</html>

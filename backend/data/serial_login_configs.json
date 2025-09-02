@@ -1,0 +1,22 @@
+{
+  "configs": {
+    "1": {
+      "name": "测试配置",
+      "port": "/dev/ttyUSB0",
+      "baudrate": 9600,
+      "bytesize": 8,
+      "parity": "N",
+      "stopbits": 1,
+      "timeout": 1.0,
+      "auto_connect": false,
+      "login_command": null,
+      "expected_response": null,
+      "retry_count": 3,
+      "retry_delay": 1.0,
+      "created_at": "2025-09-02T05:43:52.412993",
+      "updated_at": "2025-09-02T05:43:52.412993"
+    }
+  },
+  "next_id": 2,
+  "active_config_id": null
+}
