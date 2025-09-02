@@ -1,6 +1,6 @@
 """
 Industrial HMI Main Application
-FastAPI application with RS485 communication support
+FastAPI application with AT command communication support
 """
 
 import logging
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Industrial HMI with RS485 communication",
+    description="Industrial HMI with AT command communication",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 

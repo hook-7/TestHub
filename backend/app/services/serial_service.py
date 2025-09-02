@@ -1,27 +1,25 @@
 """
-Serial Communication Service
+Serial Communication Service for AT Commands
 """
 
 import logging
 import time
+import re
 from typing import List, Optional, Dict, Any
 from app.drivers.serial_driver import serial_driver
-from app.drivers.rs485_protocol import RS485Manager, RS485Command
 from app.core.exceptions import SerialException, ErrorCode
 from app.schemas.serial_schemas import (
-    SerialPortInfo, SerialConfig, SerialConnectionStatus,
-    ReadRegistersRequest, WriteRegisterRequest, WriteRegistersRequest,
-    ReadRegistersResponse, WriteResponse, RegisterData, RawDataResponse
+    SerialPortInfo, SerialConfig, SerialConnectionStatus, RawDataResponse
 )
 
 logger = logging.getLogger(__name__)
 
 
 class SerialService:
-    """串口通信服务"""
+    """串口通信服务 - 专注于AT指令交互"""
     
     def __init__(self):
-        self.rs485_manager = RS485Manager(serial_driver)
+        pass
     
     async def get_available_ports(self) -> List[SerialPortInfo]:
         """获取可用串口列表"""
@@ -88,102 +86,32 @@ class SerialService:
             logger.error(f"Error getting connection status: {e}")
             raise SerialException(ErrorCode.SYSTEM_ERROR, "获取连接状态失败")
     
-    async def read_registers(self, request: ReadRegistersRequest) -> ReadRegistersResponse:
-        """读取寄存器"""
+    async def send_at_command(self, command: str) -> RawDataResponse:
+        """发送AT指令 - 由前端完全控制格式"""
         try:
             if not serial_driver.is_connected:
                 raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
             
-            # 确定功能码
-            function_code = (RS485Command.READ_HOLDING_REGISTERS 
-                           if request.function_code == 3 
-                           else RS485Command.READ_INPUT_REGISTERS)
+            timestamp = time.time()
             
-            # 读取数据
-            values = await self.rs485_manager.read_registers(
-                request.slave_id, 
-                request.start_addr, 
-                request.count,
-                function_code
-            )
+            # 直接发送前端传来的指令，不做任何修改
+            data = command.encode('utf-8')
+            response = await serial_driver.write_read(data, timeout=5.0)
             
-            if values is None:
-                raise SerialException(ErrorCode.SERIAL_READ_FAILED, "读取寄存器无响应")
+            # 解析响应
+            response_text = response.decode('utf-8', errors='ignore')
             
-            # 构建响应
-            registers = []
-            for i, value in enumerate(values):
-                registers.append(RegisterData(
-                    address=request.start_addr + i,
-                    value=value
-                ))
-            
-            return ReadRegistersResponse(
-                slave_id=request.slave_id,
-                start_addr=request.start_addr,
-                count=request.count,
-                registers=registers
+            return RawDataResponse(
+                sent_data=command,
+                received_data=response_text,
+                timestamp=timestamp
             )
             
         except SerialException:
             raise
         except Exception as e:
-            logger.error(f"Error reading registers: {e}")
-            raise SerialException(ErrorCode.SERIAL_READ_FAILED, f"读取寄存器异常: {str(e)}")
-    
-    async def write_register(self, request: WriteRegisterRequest) -> WriteResponse:
-        """写入单个寄存器"""
-        try:
-            if not serial_driver.is_connected:
-                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
-            
-            success = await self.rs485_manager.write_register(
-                request.slave_id,
-                request.addr,
-                request.value
-            )
-            
-            if not success:
-                raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, "寄存器写入失败")
-            
-            return WriteResponse(
-                slave_id=request.slave_id,
-                success=True,
-                message="写入成功"
-            )
-            
-        except SerialException:
-            raise
-        except Exception as e:
-            logger.error(f"Error writing register: {e}")
-            raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"写入寄存器异常: {str(e)}")
-    
-    async def write_registers(self, request: WriteRegistersRequest) -> WriteResponse:
-        """写入多个寄存器"""
-        try:
-            if not serial_driver.is_connected:
-                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
-            
-            success = await self.rs485_manager.write_registers(
-                request.slave_id,
-                request.start_addr,
-                request.values
-            )
-            
-            if not success:
-                raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, "批量写入寄存器失败")
-            
-            return WriteResponse(
-                slave_id=request.slave_id,
-                success=True,
-                message=f"成功写入{len(request.values)}个寄存器"
-            )
-            
-        except SerialException:
-            raise
-        except Exception as e:
-            logger.error(f"Error writing registers: {e}")
-            raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"批量写入寄存器异常: {str(e)}")
+            logger.error(f"Error sending AT command: {e}")
+            raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"发送AT指令失败: {str(e)}")
     
     async def send_raw_data(self, hex_data: str) -> RawDataResponse:
         """发送原始数据"""

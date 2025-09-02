@@ -1,5 +1,5 @@
 """
-RS485 Serial Communication Driver
+Serial Communication Driver for AT Commands
 """
 
 import asyncio
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class SerialDriver:
-    """RS485 Serial Communication Driver"""
+    """Serial Communication Driver for AT Commands"""
     
     def __init__(self):
         self.connection: Optional[serial.Serial] = None

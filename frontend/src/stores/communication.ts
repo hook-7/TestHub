@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { serialAPI, type ReadRegistersResponse, type WriteResponse, type RawDataResponse } from '@/api/serial'
+import { serialAPI, type RawDataResponse } from '@/api/serial'
 
 export interface CommunicationLog {
   id: string
   timestamp: number
-  type: 'read' | 'write' | 'raw'
+  type: 'at' | 'raw'
   direction: 'sent' | 'received'
   data: string
   description: string
@@ -37,96 +37,32 @@ export const useCommunicationStore = defineStore('communication', () => {
     logs.value = []
   }
   
-  const readRegisters = async (request: any): Promise<ReadRegistersResponse | null> => {
+  const sendATCommand = async (command: string): Promise<RawDataResponse> => {
     try {
       addLog({
-        type: 'read',
+        type: 'at',
         direction: 'sent',
-        data: JSON.stringify(request),
-        description: `读取从站${request.slave_id}地址${request.start_addr}开始${request.count}个寄存器`,
+        data: command,
+        description: 'AT指令',
       })
       
-      const result = await serialAPI.readRegisters(request)
+      const result = await serialAPI.sendATCommand(command)
       
       addLog({
-        type: 'read',
+        type: 'at',
         direction: 'received',
-        data: JSON.stringify(result),
-        description: `读取成功，获得${result.registers.length}个寄存器值`,
+        data: result.received_data,
+        description: 'AT响应',
         success: true,
       })
       
       return result
     } catch (error) {
       addLog({
-        type: 'read',
+        type: 'at',
         direction: 'received',
         data: error instanceof Error ? error.message : '未知错误',
-        description: '读取失败',
-        success: false,
-      })
-      throw error
-    }
-  }
-  
-  const writeRegister = async (request: any): Promise<WriteResponse> => {
-    try {
-      addLog({
-        type: 'write',
-        direction: 'sent',
-        data: JSON.stringify(request),
-        description: `写入从站${request.slave_id}地址${request.addr}值${request.value}`,
-      })
-      
-      const result = await serialAPI.writeRegister(request)
-      
-      addLog({
-        type: 'write',
-        direction: 'received',
-        data: JSON.stringify(result),
-        description: result.success ? '写入成功' : '写入失败',
-        success: result.success,
-      })
-      
-      return result
-    } catch (error) {
-      addLog({
-        type: 'write',
-        direction: 'received',
-        data: error instanceof Error ? error.message : '未知错误',
-        description: '写入失败',
-        success: false,
-      })
-      throw error
-    }
-  }
-  
-  const writeRegisters = async (request: any): Promise<WriteResponse> => {
-    try {
-      addLog({
-        type: 'write',
-        direction: 'sent',
-        data: JSON.stringify(request),
-        description: `批量写入从站${request.slave_id}地址${request.start_addr}开始${request.values.length}个寄存器`,
-      })
-      
-      const result = await serialAPI.writeRegisters(request)
-      
-      addLog({
-        type: 'write',
-        direction: 'received',
-        data: JSON.stringify(result),
-        description: result.success ? '批量写入成功' : '批量写入失败',
-        success: result.success,
-      })
-      
-      return result
-    } catch (error) {
-      addLog({
-        type: 'write',
-        direction: 'received',
-        data: error instanceof Error ? error.message : '未知错误',
-        description: '批量写入失败',
+        description: 'AT指令失败',
         success: false,
       })
       throw error
@@ -142,7 +78,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         description: '发送原始数据',
       })
       
-      const result = await serialAPI.sendRawData({ data })
+      const result = await serialAPI.sendRawData(data)
       
       addLog({
         type: 'raw',
@@ -173,9 +109,7 @@ export const useCommunicationStore = defineStore('communication', () => {
     // 操作
     addLog,
     clearLogs,
-    readRegisters,
-    writeRegister,
-    writeRegisters,
+    sendATCommand,
     sendRawData,
   }
 })

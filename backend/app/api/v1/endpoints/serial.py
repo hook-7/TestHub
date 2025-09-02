@@ -3,13 +3,12 @@ Serial Communication API Endpoints for AT Commands
 """
 
 import logging
-from typing import List
 from fastapi import APIRouter
 from app.core.response import APIResponse
-from app.core.exceptions import HMIException, SerialException, ErrorCode
+from app.core.exceptions import SerialException, ErrorCode
 from app.services.serial_service import serial_service
 from app.schemas.serial_schemas import (
-    SerialPortInfo, SerialConfig, SerialConnectionStatus, RawDataRequest, RawDataResponse
+    SerialConfig, RawDataRequest
 )
 
 logger = logging.getLogger(__name__)
