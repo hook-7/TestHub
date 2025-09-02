@@ -72,6 +72,10 @@ class SerialService:
         try:
             await serial_driver.disconnect()
             logger.info("Serial port disconnected")
+            
+            # 串口断开时，清理会话（可选：也可以保留会话让用户重连）
+            # 这里我们选择保留会话，让用户可以重新连接串口
+            
             return True
         except Exception as e:
             logger.error(f"Error disconnecting serial port: {e}")
