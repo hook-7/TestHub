@@ -4,65 +4,156 @@
       <!-- Header -->
       <el-header class="header">
         <div class="header-content">
-          <h1 class="title">
-            <el-icon><Connection /></el-icon>
-            Industrial HMI
-          </h1>
-          <div class="connection-status">
-            <el-tag 
-              :type="connectionStore.isConnected ? 'success' : 'danger'"
-              size="large"
-            >
-              <el-icon>
-                <Connection />
-              </el-icon>
-              {{ connectionStore.isConnected ? '已连接' : '未连接' }}
-            </el-tag>
+          <div class="header-left">
+            <div class="logo-section">
+              <div class="logo-icon">
+                <el-icon><Connection /></el-icon>
+              </div>
+              <div class="logo-text">
+                <h1 class="app-title">Industrial HMI</h1>
+                <p class="app-subtitle">工业串口通信管理系统</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="header-right">
+            <!-- 连接状态 -->
+            <div class="status-section" v-if="sessionStore.isLoggedIn">
+              <div class="status-item">
+                <span class="status-label">连接状态</span>
+                <el-tag 
+                  :type="connectionStore.isConnected ? 'success' : 'danger'"
+                  size="default"
+                  class="status-tag"
+                >
+                  <el-icon>
+                    <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
+                  </el-icon>
+                  {{ connectionStore.isConnected ? '已连接' : '未连接' }}
+                </el-tag>
+              </div>
+              
+              <div class="status-item">
+                <span class="status-label">会话状态</span>
+                <el-tag 
+                  type="success" 
+                  size="default"
+                  class="status-tag"
+                >
+                  <el-icon><User /></el-icon>
+                  已登录
+                  <span v-if="sessionStore.isHeartbeatActive" class="heartbeat-indicator">
+                    ♥
+                  </span>
+                </el-tag>
+              </div>
+            </div>
+            
+            <!-- 用户操作 -->
+            <div class="user-section">
+              <template v-if="sessionStore.isLoggedIn">
+                <el-button 
+                  type="danger" 
+                  @click="handleLogout"
+                  :loading="sessionStore.isLoading"
+                  size="default"
+                  class="logout-btn"
+                >
+                  <el-icon><SwitchButton /></el-icon>
+                  登出
+                </el-button>
+              </template>
+              <template v-else>
+                <el-tag type="info" size="default" class="status-tag">
+                  <el-icon><User /></el-icon>
+                  未登录
+                </el-tag>
+              </template>
+            </div>
           </div>
         </div>
       </el-header>
 
-      <!-- Navigation -->
-      <div class="navigation">
-        <el-menu 
-          :default-active="$route.path" 
-          mode="horizontal" 
-          router
-          class="nav-menu"
-        >
-          <el-menu-item index="/serial-config">
-            <el-icon><Setting /></el-icon>
-            <span>串口配置</span>
-          </el-menu-item>
-          <el-menu-item index="/communication">
-            <el-icon><ChatLineRound /></el-icon>
-            <span>AT指令交互</span>
-          </el-menu-item>
-        </el-menu>
-      </div>
+      <!-- Content Container -->
+      <el-container class="content-container">
+        <!-- Sidebar -->
+        <el-aside class="sidebar" width="200px" v-if="sessionStore.isLoggedIn">
+          <el-menu 
+            :default-active="$route.path" 
+            mode="vertical" 
+            router
+            class="sidebar-menu"
+          >
+            <el-menu-item index="/serial-config">
+              <el-icon><Setting /></el-icon>
+              <span>串口配置</span>
+            </el-menu-item>
+            <el-menu-item index="/communication">
+              <el-icon><ChatLineRound /></el-icon>
+              <span>AT指令交互</span>
+            </el-menu-item>
+          </el-menu>
+        </el-aside>
 
-      <!-- Main Content -->
-      <el-main class="main-content">
-        <router-view />
-      </el-main>
+        <!-- Main Content -->
+        <el-main class="main-content">
+          <router-view />
+        </el-main>
+      </el-container>
     </el-container>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Connection, 
   Setting, 
-  ChatLineRound
+  ChatLineRound,
+  User,
+  SwitchButton
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
+import { useSessionStore } from '@/stores/session'
 
+const router = useRouter()
 const connectionStore = useConnectionStore()
+const sessionStore = useSessionStore()
 
-onMounted(() => {
-  // 初始化时检查连接状态
+// 处理登出
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要登出吗？登出后将无法进行串口操作。',
+      '确认登出',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    await sessionStore.logout()
+    ElMessage.success('登出成功')
+    await router.push('/login')
+  } catch (error) {
+    // 用户取消操作
+    if (error !== 'cancel') {
+      console.error('Logout failed:', error)
+    }
+  }
+}
+
+onMounted(async () => {
+  // 初始化时检查连接状态（异步执行，不阻塞界面）
   connectionStore.checkStatus()
+  
+  // 只在必要时初始化会话状态
+  if (!sessionStore.sessionStatus) {
+    sessionStore.init() // 不等待，让它在后台执行
+  }
 })
 </script>
 
@@ -74,7 +165,10 @@ onMounted(() => {
 .header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  height: 70px;
 }
 
 .header-content {
@@ -82,82 +176,292 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
-.title {
-  margin: 0;
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+}
+
+.logo-icon .el-icon {
   font-size: 24px;
-  font-weight: 600;
+  color: white;
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: white;
+  line-height: 1;
+}
+
+.app-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 20px;
 }
 
-.connection-status {
+.status-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
 }
 
-.navigation {
-  background: white;
-  border-bottom: 1px solid #e4e7ed;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+.status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
-.nav-menu {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-  border-bottom: none;
+.status-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.nav-menu .el-menu-item {
+.status-tag {
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.user-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.heartbeat-indicator {
+  color: #f56c6c;
+  animation: heartbeat 2s ease-in-out infinite;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+@keyframes heartbeat {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.content-container {
+  flex: 1;
+  height: calc(100vh - 70px); /* 减去header高度 */
+  overflow: hidden; /* 防止整体滚动 */
+}
+
+.sidebar {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
+  overflow: hidden; /* 确保侧边栏不会滚动 */
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-menu {
+  flex: 1;
+  border-right: none;
+  background: transparent;
+  overflow: hidden;
+  height: auto !important; /* 覆盖默认高度 */
+  --el-menu-item-height: auto; /* 允许自定义高度 */
+}
+
+.sidebar-menu .el-menu-item {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
   font-size: 15px;
   font-weight: 500;
+  padding: 18px 20px !important;
+  margin: 10px 16px;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  position: relative;
+  overflow: hidden;
+  height: auto !important;
 }
 
-.nav-menu .el-menu-item:hover {
-  background-color: #f5f7fa;
+.sidebar-menu .el-menu-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(103, 58, 183, 0.1) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 12px;
 }
 
-.nav-menu .el-menu-item.is-active {
-  background-color: #ecf5ff;
-  color: #409eff;
+.sidebar-menu .el-menu-item:hover {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+  color: #1976d2;
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+}
+
+.sidebar-menu .el-menu-item:hover::before {
+  opacity: 1;
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background: linear-gradient(135deg, #409eff 0%, #667eea 100%);
+  color: white;
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.4);
+  transform: translateX(6px);
+}
+
+.sidebar-menu .el-menu-item.is-active .el-icon {
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.sidebar-menu .el-menu-item .el-icon {
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+.sidebar-menu .el-menu-item:hover .el-icon {
+  transform: scale(1.1);
 }
 
 .main-content {
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #f8fafc 100%);
   padding: 0;
   overflow: auto;
+  height: 100%;
+  position: relative;
 }
 
 /* 响应式设计 */
+@media (max-width: 1200px) {
+  .header-content {
+    max-width: 100%;
+    padding: 0 16px;
+  }
+  
+  .status-section {
+    gap: 12px;
+  }
+  
+  .header-right {
+    gap: 16px;
+  }
+}
+
 @media (max-width: 768px) {
   .header-content {
     padding: 0 12px;
   }
   
-  .title {
+  .logo-section {
+    gap: 8px;
+  }
+  
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .logo-icon .el-icon {
     font-size: 20px;
   }
   
-  .nav-menu {
-    padding: 0 12px;
+  .app-title {
+    font-size: 18px;
   }
   
-  .nav-menu .el-menu-item {
-    font-size: 14px;
-  }
-  
-  .nav-menu .el-menu-item span {
+  .app-subtitle {
     display: none;
+  }
+  
+  .status-section {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .status-item {
+    align-items: center;
+  }
+  
+  .header-right {
+    gap: 12px;
+  }
+  
+  .sidebar {
+    width: 60px !important;
+    min-width: 60px !important;
+  }
+  
+  .sidebar-menu .el-menu-item {
+    padding: 16px 8px;
+    justify-content: center;
+    margin: 8px 4px;
+  }
+  
+  .sidebar-menu .el-menu-item span {
+    display: none;
+  }
+  
+  .sidebar-menu .el-menu-item .el-icon {
+    margin-right: 0;
   }
 }
 </style>

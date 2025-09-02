@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     SERIAL_PARITY: str = "N"  # None
     SERIAL_STOPBITS: int = 1
     
+    # Session settings - 基于心跳的会话管理
+    HEARTBEAT_TIMEOUT_SECONDS: int = 60  # 心跳超时时间（秒）- 1分钟无心跳则清理会话
+    HEARTBEAT_INTERVAL_SECONDS: int = 25  # 建议心跳间隔（秒）
+    
     # Logging settings
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

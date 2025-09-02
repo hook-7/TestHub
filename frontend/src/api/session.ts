@@ -49,6 +49,12 @@ export const sessionAPI = {
     return response.data
   },
 
+  // 会话心跳
+  async sendHeartbeat(): Promise<{ active: boolean; last_activity: string }> {
+    const response = await api.post('/session/heartbeat')
+    return response.data
+  },
+
   // 强制清理会话
   async forceCleanupSessions(): Promise<{ cleaned: boolean }> {
     const response = await api.post('/session/cleanup')

@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any
 from fastapi import Request
 
 from app.core.exceptions import SessionException, ErrorCode
+from app.core.config import settings
 from app.schemas.session_schemas import (
     SessionInfo, SessionStatus, SessionResponse
 )
@@ -24,7 +25,7 @@ class SessionService:
     def __init__(self):
         # 内存存储活跃会话（生产环境建议使用Redis）
         self._active_session: Optional[SessionInfo] = None
-        self._session_timeout_minutes = 30  # 会话超时时间（分钟）
+        self._heartbeat_timeout_seconds = settings.HEARTBEAT_TIMEOUT_SECONDS  # 心跳超时时间（秒）
     
     def _generate_session_id(self) -> str:
         """生成唯一会话ID"""
@@ -36,14 +37,14 @@ class SessionService:
         return hashlib.sha256(data.encode()).hexdigest()
     
     def _is_session_expired(self, session: SessionInfo) -> bool:
-        """检查会话是否过期"""
-        timeout_delta = timedelta(minutes=self._session_timeout_minutes)
+        """检查会话是否过期（基于心跳超时）"""
+        timeout_delta = timedelta(seconds=self._heartbeat_timeout_seconds)
         return datetime.now() - session.last_activity > timeout_delta
     
     def _cleanup_expired_session(self) -> None:
-        """清理过期会话"""
+        """清理过期会话（基于心跳超时）"""
         if self._active_session and self._is_session_expired(self._active_session):
-            logger.info(f"Session {self._active_session.session_id} expired, cleaning up")
+            logger.info(f"Session {self._active_session.session_id} expired due to heartbeat timeout, cleaning up")
             self._active_session = None
     
     def get_client_ip(self, request: Request) -> str:
@@ -71,7 +72,7 @@ class SessionService:
                 logger.warning(f"Attempt to create session while active session exists: {self._active_session.session_id}")
                 raise SessionException(
                     ErrorCode.SESSION_ALREADY_EXISTS,
-                    f"已有客户端连接中（IP: {self._active_session.client_ip}），请稍后再试"
+                    f"已有客户端连接中（IP: {self._active_session.client_ip}），为保证系统安全，请等待其主动退出或会话超时后再试"
                 )
             
             # 创建新会话
@@ -100,7 +101,7 @@ class SessionService:
             return SessionResponse(
                 session_id=session_id,
                 token=token,
-                expires_in=self._session_timeout_minutes * 60
+                expires_in=self._heartbeat_timeout_seconds
             )
             
         except SessionException:
@@ -110,7 +111,7 @@ class SessionService:
             raise SessionException(ErrorCode.SYSTEM_ERROR, f"创建会话失败: {str(e)}")
     
     async def validate_session(self, session_id: str, request: Request) -> bool:
-        """验证会话有效性"""
+        """验证会话有效性（不更新活动时间，只有心跳才更新）"""
         try:
             # 清理过期会话
             self._cleanup_expired_session()
@@ -128,9 +129,7 @@ class SessionService:
                 logger.warning(f"IP mismatch for session {session_id}: expected {self._active_session.client_ip}, got {client_ip}")
                 return False
             
-            # 更新最后活动时间
-            self._active_session.last_activity = datetime.now()
-            
+            # 注意：这里不更新 last_activity 时间，只有心跳接口才能更新
             return True
             
         except Exception as e:
@@ -180,16 +179,53 @@ class SessionService:
             logger.error(f"Error getting session status: {e}")
             raise SessionException(ErrorCode.SYSTEM_ERROR, f"获取会话状态失败: {str(e)}")
     
-    async def force_cleanup_session(self) -> bool:
-        """强制清理所有会话（管理员功能）"""
+    async def update_session_activity(self, session_id: str, request: Request) -> bool:
+        """更新会话活动时间（心跳）"""
         try:
-            if self._active_session:
-                logger.info(f"Force cleanup session: {self._active_session.session_id}")
-                self._active_session = None
+            # 清理过期会话
+            self._cleanup_expired_session()
+            
+            if not self._active_session:
+                return False
+            
+            # 检查会话ID
+            if self._active_session.session_id != session_id:
+                return False
+            
+            # 检查客户端IP（增强安全性）
+            client_ip = self.get_client_ip(request)
+            if self._active_session.client_ip != client_ip:
+                logger.warning(f"IP mismatch for heartbeat {session_id}: expected {self._active_session.client_ip}, got {client_ip}")
+                return False
+            
+            # 更新最后活动时间
+            self._active_session.last_activity = datetime.now()
+            logger.debug(f"Session heartbeat updated: {session_id}")
+            
             return True
+            
         except Exception as e:
-            logger.error(f"Error force cleaning up session: {e}")
+            logger.error(f"Error updating session activity: {e}")
             return False
+    
+    def get_session_last_activity(self, session_id: str) -> Optional[str]:
+        """获取会话最后活动时间"""
+        if self._active_session and self._active_session.session_id == session_id:
+            return self._active_session.last_activity.isoformat()
+        return None
+    
+    def get_session_timeout_remaining(self, session_id: str) -> Optional[int]:
+        """获取会话剩余心跳超时时间（秒）"""
+        if self._active_session and self._active_session.session_id == session_id:
+            timeout_delta = timedelta(seconds=self._heartbeat_timeout_seconds)
+            remaining = timeout_delta - (datetime.now() - self._active_session.last_activity)
+            return max(0, int(remaining.total_seconds()))
+        return None
+
+    async def force_cleanup_session(self) -> bool:
+        """强制清理所有会话（已禁用功能）"""
+        logger.warning("Force cleanup session attempted but is disabled for security reasons")
+        return False
 
 
 # Global service instance

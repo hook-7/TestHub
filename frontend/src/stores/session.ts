@@ -10,6 +10,12 @@ export const useSessionStore = defineStore('session', () => {
   const isLoggedIn = ref(false)
   const sessionStatus = ref<SessionStatus | null>(null)
   const isLoading = ref(false)
+  
+  // 心跳相关状态
+  const heartbeatInterval = ref<number | null>(null)
+  const heartbeatIntervalMs = 25 * 1000 // 25秒
+  const lastHeartbeat = ref<Date | null>(null)
+  const isHeartbeatActive = ref(false)
 
   // 计算属性
   const hasActiveSession = computed(() => {
@@ -78,7 +84,10 @@ export const useSessionStore = defineStore('session', () => {
       // 设置请求头
       setAuthHeader(response.session_id)
 
-      ElMessage.success('登录成功')
+      // 启动心跳
+      startHeartbeat()
+
+      // 移除重复提示，由调用方处理
       return true
 
     } catch (error: any) {
@@ -92,6 +101,9 @@ export const useSessionStore = defineStore('session', () => {
 
   // 登出
   const logout = async (): Promise<void> => {
+    // 停止心跳
+    stopHeartbeat()
+    
     try {
       if (sessionId.value) {
         await sessionAPI.destroySession()
@@ -112,7 +124,7 @@ export const useSessionStore = defineStore('session', () => {
       // 清除请求头
       clearAuthHeader()
 
-      ElMessage.success('已登出')
+      // 移除重复提示，由调用方处理
     }
   }
 
@@ -163,17 +175,68 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // 开始心跳
+  const startHeartbeat = () => {
+    if (heartbeatInterval.value || !isLoggedIn.value) {
+      return
+    }
+    
+    console.log('Starting heartbeat...')
+    isHeartbeatActive.value = true
+    
+    heartbeatInterval.value = window.setInterval(async () => {
+      if (!isLoggedIn.value || !sessionId.value) {
+        stopHeartbeat()
+        return
+      }
+      
+      try {
+        const result = await sessionAPI.sendHeartbeat()
+        lastHeartbeat.value = new Date()
+        console.log('Heartbeat sent successfully', result.last_activity)
+      } catch (error: any) {
+        console.error('Heartbeat failed:', error)
+        
+        // 如果心跳失败且返回401，说明会话已过期
+        if (error.response?.status === 401) {
+          ElMessage.warning('会话已过期，请重新登录')
+          await logout()
+        }
+      }
+    }, heartbeatIntervalMs)
+    
+    // 立即发送一次心跳
+    setTimeout(async () => {
+      if (isLoggedIn.value) {
+        try {
+          await sessionAPI.sendHeartbeat()
+          lastHeartbeat.value = new Date()
+        } catch (error) {
+          console.error('Initial heartbeat failed:', error)
+        }
+      }
+    }, 1000)
+  }
+  
+  // 停止心跳
+  const stopHeartbeat = () => {
+    if (heartbeatInterval.value) {
+      console.log('Stopping heartbeat...')
+      clearInterval(heartbeatInterval.value)
+      heartbeatInterval.value = null
+      isHeartbeatActive.value = false
+      lastHeartbeat.value = null
+    }
+  }
+
   // 初始化
   const init = async () => {
     restoreSession()
     await refreshSessionStatus()
     
     if (isLoggedIn.value) {
-      // 验证已存储的会话
-      const isValid = await validateSession()
-      if (!isValid) {
-        ElMessage.warning('会话已过期，请重新登录')
-      }
+      // 快速启动心跳，不额外验证（心跳本身就是验证）
+      startHeartbeat()
     }
   }
 
@@ -185,6 +248,10 @@ export const useSessionStore = defineStore('session', () => {
     sessionStatus,
     isLoading,
     
+    // 心跳状态
+    lastHeartbeat,
+    isHeartbeatActive,
+    
     // 计算属性
     hasActiveSession,
     currentSession,
@@ -195,7 +262,11 @@ export const useSessionStore = defineStore('session', () => {
     validateSession,
     refreshSessionStatus,
     forceCleanup,
-    init
+    init,
+    
+    // 心跳方法
+    startHeartbeat,
+    stopHeartbeat
   }
 })
 

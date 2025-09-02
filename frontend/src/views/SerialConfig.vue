@@ -1,81 +1,5 @@
 <template>
   <div class="page-container">
-    <!-- 会话状态卡片 -->
-    <el-card class="session-card">
-      <template #header>
-        <div class="card-header">
-          <h4>
-            <el-icon><User /></el-icon>
-            连接状态
-          </h4>
-          <el-button 
-            v-if="sessionStore.isLoggedIn"
-            type="danger" 
-            @click="logout"
-            :loading="sessionStore.isLoading"
-            size="small"
-          >
-            <el-icon><SwitchButton /></el-icon>
-            登出
-          </el-button>
-          <el-button 
-            v-else
-            type="primary" 
-            @click="login"
-            :loading="sessionStore.isLoading"
-            size="small"
-          >
-            <el-icon><Connection /></el-icon>
-            登录
-          </el-button>
-        </div>
-      </template>
-
-      <div class="session-status">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <div class="status-item">
-              <span class="label">登录状态:</span>
-              <el-tag 
-                :type="sessionStore.isLoggedIn ? 'success' : 'info'"
-                size="small"
-              >
-                {{ sessionStore.isLoggedIn ? '已登录' : '未登录' }}
-              </el-tag>
-            </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="status-item">
-              <span class="label">会话状态:</span>
-              <el-tag 
-                :type="sessionStore.hasActiveSession ? 'success' : 'warning'"
-                size="small"
-              >
-                {{ sessionStore.hasActiveSession ? '有活跃会话' : '无活跃会话' }}
-              </el-tag>
-            </div>
-          </el-col>
-        </el-row>
-        
-        <div v-if="sessionStore.currentSession" class="session-info">
-          <el-descriptions :column="2" size="small" border>
-            <el-descriptions-item label="会话ID">
-              {{ sessionStore.currentSession.session_id.substring(0, 8) }}...
-            </el-descriptions-item>
-            <el-descriptions-item label="客户端IP">
-              {{ sessionStore.currentSession.client_ip }}
-            </el-descriptions-item>
-            <el-descriptions-item label="创建时间">
-              {{ formatTime(sessionStore.currentSession.created_at) }}
-            </el-descriptions-item>
-            <el-descriptions-item label="最后活动">
-              {{ formatTime(sessionStore.currentSession.last_activity) }}
-            </el-descriptions-item>
-          </el-descriptions>
-        </div>
-      </div>
-    </el-card>
-
     <!-- 串口配置卡片 -->
     <el-card>
       <template #header>
@@ -94,15 +18,7 @@
               <el-icon><Refresh /></el-icon>
               刷新端口
             </el-button>
-            <el-button 
-              v-if="sessionStore.hasActiveSession && !sessionStore.isLoggedIn"
-              type="warning" 
-              @click="forceCleanup"
-              size="small"
-            >
-              <el-icon><Delete /></el-icon>
-              强制清理
-            </el-button>
+
           </div>
         </div>
       </template>
@@ -207,7 +123,7 @@
               type="primary" 
               @click="connect"
               :loading="connecting"
-              :disabled="connectionStore.isConnected || !sessionStore.isLoggedIn"
+              :disabled="connectionStore.isConnected"
               size="large"
             >
               <el-icon><Connection /></el-icon>
@@ -218,7 +134,7 @@
               type="danger" 
               @click="disconnect"
               :loading="disconnecting"
-              :disabled="!connectionStore.isConnected || !sessionStore.isLoggedIn"
+              :disabled="!connectionStore.isConnected"
               size="large"
             >
               <el-icon><Close /></el-icon>
@@ -227,7 +143,7 @@
             
             <el-button 
               @click="testConnection"
-              :disabled="!connectionStore.isConnected || !sessionStore.isLoggedIn"
+              :disabled="!connectionStore.isConnected"
               size="large"
             >
               <el-icon><CircleCheck /></el-icon>
@@ -237,7 +153,7 @@
             <el-button 
               @click="goToCommunication"
               type="success"
-              :disabled="!connectionStore.isConnected || !sessionStore.isLoggedIn"
+              :disabled="!connectionStore.isConnected"
               size="large"
             >
               <el-icon><Message /></el-icon>
@@ -245,15 +161,7 @@
             </el-button>
           </div>
           
-          <!-- 未登录提示 -->
-          <div v-if="!sessionStore.isLoggedIn" class="login-hint">
-            <el-alert
-              title="请先登录后再进行串口操作"
-              type="warning"
-              :closable="false"
-              show-icon
-            />
-          </div>
+
         </el-form-item>
       </el-form>
     </el-card>
@@ -282,15 +190,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
-import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
 const communicationStore = useCommunicationStore()
-const sessionStore = useSessionStore()
 
 // 表单引用
 const formRef = ref<FormInstance>()
@@ -389,76 +295,12 @@ const goToCommunication = () => {
   router.push('/communication')
 }
 
-// 会话管理方法
-const login = async () => {
-  try {
-    const success = await sessionStore.login()
-    if (success) {
-      // 登录成功后刷新会话状态
-      await sessionStore.refreshSessionStatus()
-    }
-  } catch (error) {
-    console.error('Login failed:', error)
-  }
-}
 
-const logout = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要登出吗？登出后将无法进行串口操作。',
-      '确认登出',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-    
-    await sessionStore.logout()
-    // 登出后刷新会话状态
-    await sessionStore.refreshSessionStatus()
-  } catch (error) {
-    // 用户取消操作
-    if (error !== 'cancel') {
-      console.error('Logout failed:', error)
-    }
-  }
-}
 
-const forceCleanup = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要强制清理所有会话吗？这将断开其他客户端的连接。',
-      '强制清理会话',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-    
-    const success = await sessionStore.forceCleanup()
-    if (success) {
-      // 清理成功后可以尝试登录
-      await login()
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('Force cleanup failed:', error)
-    }
-  }
-}
 
-// 格式化时间
-const formatTime = (timeStr: string) => {
-  return new Date(timeStr).toLocaleString()
-}
 
 // 生命周期
-onMounted(async () => {
-  // 初始化会话管理
-  await sessionStore.init()
-  
+onMounted(() => {
   loadPorts()
   connectionStore.checkStatus()
 })
@@ -467,10 +309,6 @@ onMounted(async () => {
 <style scoped>
 .page-container {
   max-width: 800px;
-}
-
-.session-card {
-  margin-bottom: 20px;
 }
 
 .card-header {
@@ -482,30 +320,6 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   gap: 8px;
-}
-
-.session-status {
-  margin-top: 16px;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.status-item .label {
-  font-weight: 500;
-  color: var(--el-text-color-regular);
-}
-
-.session-info {
-  margin-top: 16px;
-}
-
-.login-hint {
-  margin-top: 16px;
 }
 
 .form-row {

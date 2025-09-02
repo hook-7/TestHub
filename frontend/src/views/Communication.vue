@@ -1,30 +1,27 @@
 <template>
   <div class="page-container">
-    <!-- 导航栏 -->
-    <el-card style="margin-bottom: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <el-button @click="$router.push('/serial-config')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回配置
-        </el-button>
-        
-        <div class="status-indicator" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
-          <el-icon>
+    <!-- 状态栏 -->
+    <div class="status-bar">
+      <div class="status-info">
+        <div class="connection-badge" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
+          <el-icon class="status-icon">
             <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
           </el-icon>
-          {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
+          <span class="status-text">
+            {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
+          </span>
         </div>
       </div>
-    </el-card>
+    </div>
 
     <el-row :gutter="20">
       <!-- 左侧：AT指令操作面板 -->
       <el-col :span="12">
-        <el-card>
+        <el-card class="command-card">
           <template #header>
             <div class="card-header">
-              <h3>
-                <el-icon><Operation /></el-icon>
+              <h3 class="card-title">
+                <el-icon class="title-icon"><Operation /></el-icon>
                 指令交互
               </h3>
             </div>
@@ -106,6 +103,13 @@
               >
                 {{ cmd.name }}
               </el-button>
+              
+              <!-- 当没有常用指令时显示提示 -->
+              <div v-if="savedCommands.length === 0" class="no-commands-hint">
+                <el-text type="info" size="small">
+                  暂无常用指令，点击"添加指令"来创建您的第一个常用指令
+                </el-text>
+              </div>
             </div>
           </div>
 
@@ -194,19 +198,19 @@
 
       <!-- 右侧：通信日志 -->
       <el-col :span="12">
-        <el-card>
+        <el-card class="log-card">
           <template #header>
             <div class="card-header">
-              <h3>
-                <el-icon><ChatDotSquare /></el-icon>
+              <h3 class="card-title">
+                <el-icon class="title-icon"><ChatDotSquare /></el-icon>
                 通信日志
               </h3>
-              <div>
-                <el-button @click="clearLogs" size="small">
+              <div class="header-actions">
+                <el-button @click="clearLogs" size="small" type="danger" plain>
                   <el-icon><Delete /></el-icon>
                   清空日志
                 </el-button>
-                <el-button @click="exportLogs" size="small" style="margin-left: 8px;">
+                <el-button @click="exportLogs" size="small" type="primary" plain>
                   <el-icon><Download /></el-icon>
                   导出日志
                 </el-button>
@@ -343,25 +347,7 @@ interface SavedCommand {
 // 保存的指令列表
 const savedCommands = ref<SavedCommand[]>([])
 
-// 默认常用指令
-const defaultCommands: SavedCommand[] = [
-  { id: '1', name: 'AT', command: 'AT\r\n', description: '测试连接', createdAt: Date.now() },
-  { id: '2', name: 'GMR', command: 'AT+GMR\r\n', description: '查询固件版本', createdAt: Date.now() },
-  { id: '3', name: 'CGMI', command: 'AT+CGMI\r\n', description: '查询制造商', createdAt: Date.now() },
-  { id: '4', name: 'CGMM', command: 'AT+CGMM\r\n', description: '查询模块型号', createdAt: Date.now() },
-  { id: '5', name: 'CGMR', command: 'AT+CGMR\r\n', description: '查询软件版本', createdAt: Date.now() },
-  { id: '6', name: 'CGSN', command: 'AT+CGSN\r\n', description: '查询IMEI', createdAt: Date.now() },
-  { id: '7', name: 'CIMI', command: 'AT+CIMI\r\n', description: '查询IMSI', createdAt: Date.now() },
-  { id: '8', name: 'CCID', command: 'AT+CCID\r\n', description: '查询ICCID', createdAt: Date.now() },
-  { id: '9', name: 'CSQ', command: 'AT+CSQ\r\n', description: '查询信号强度', createdAt: Date.now() },
-  { id: '10', name: 'CREG', command: 'AT+CREG?\r\n', description: '查询网络注册状态', createdAt: Date.now() },
-  { id: '11', name: 'CGATT', command: 'AT+CGATT?\r\n', description: '查询GPRS附着状态', createdAt: Date.now() },
-  { id: '12', name: 'COPS', command: 'AT+COPS?\r\n', description: '查询运营商', createdAt: Date.now() },
-  { id: '13', name: 'CFUN?', command: 'AT+CFUN?\r\n', description: '查询功能状态', createdAt: Date.now() },
-  { id: '14', name: 'CFUN=1', command: 'AT+CFUN=1\r\n', description: '启用全功能', createdAt: Date.now() },
-  { id: '15', name: 'CFUN=0', command: 'AT+CFUN=0\r\n', description: '关闭射频', createdAt: Date.now() },
-  { id: '16', name: 'ATZ', command: 'ATZ\r\n', description: '重置设备', createdAt: Date.now() },
-]
+// 常用指令现在完全由用户自定义
 
 // 方法
 const formatCommand = (command: string) => {
@@ -495,13 +481,13 @@ const loadSavedCommands = () => {
       const parsed = JSON.parse(stored)
       savedCommands.value = parsed
     } else {
-      // 首次使用，加载默认指令
-      savedCommands.value = [...defaultCommands]
-      saveCommandsToStorage()
+      // 首次使用，初始化为空数组，让用户自定义添加
+      savedCommands.value = []
     }
   } catch (error) {
     console.error('Failed to load saved commands:', error)
-    savedCommands.value = [...defaultCommands]
+    // 出错时也初始化为空数组
+    savedCommands.value = []
   }
 }
 
@@ -660,7 +646,66 @@ onMounted(async () => {
 
 <style scoped>
 .page-container {
-  padding: 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: calc(100vh - 70px);
+}
+
+.status-bar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.status-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.connection-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.connection-badge.connected {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  box-shadow: 0 4px 12px rgba(21, 87, 36, 0.1);
+}
+
+.connection-badge.disconnected {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  box-shadow: 0 4px 12px rgba(114, 28, 36, 0.1);
+}
+
+.status-icon {
+  font-size: 18px;
+}
+
+.status-text {
+  font-weight: 600;
+}
+
+.command-card, .log-card {
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .card-header {
@@ -669,60 +714,96 @@ onMounted(async () => {
   align-items: center;
 }
 
-.status-indicator {
+.card-title {
   display: flex;
   align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.title-icon {
+  font-size: 20px;
+  color: #667eea;
+}
+
+.header-actions {
+  display: flex;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.status-indicator.connected {
-  background-color: var(--el-color-success-light-9);
-  color: var(--el-color-success);
-}
-
-.status-indicator.disconnected {
-  background-color: var(--el-color-error-light-9);
-  color: var(--el-color-error);
 }
 
 .quick-commands {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 16px;
+  min-height: 40px;
+}
+
+.quick-commands .el-button {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.quick-commands .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+.no-commands-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 8px;
+  border: 2px dashed #e2e8f0;
 }
 
 .log-container {
   height: 500px;
   overflow-y: auto;
-  padding: 10px;
-  background-color: var(--el-bg-color-page);
-  border-radius: 8px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .log-item {
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 12px;
   border-left: 4px solid;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+}
+
+.log-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .log-item.sent {
-  background-color: var(--el-color-primary-light-9);
-  border-left-color: var(--el-color-primary);
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(64, 158, 255, 0.05) 100%);
+  border-left-color: #409eff;
+  border-left-width: 4px;
 }
 
 .log-item.received.success {
-  background-color: var(--el-color-success-light-9);
-  border-left-color: var(--el-color-success);
+  background: linear-gradient(135deg, rgba(103, 194, 58, 0.1) 0%, rgba(103, 194, 58, 0.05) 100%);
+  border-left-color: #67c23a;
+  border-left-width: 4px;
 }
 
 .log-item.received.error {
-  background-color: var(--el-color-error-light-9);
-  border-left-color: var(--el-color-error);
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.1) 0%, rgba(245, 108, 108, 0.05) 100%);
+  border-left-color: #f56c6c;
+  border-left-width: 4px;
 }
 
 .log-header {
@@ -739,12 +820,14 @@ onMounted(async () => {
 }
 
 .log-data {
-  font-family: monospace;
-  font-size: 14px;
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 8px;
-  border-radius: 4px;
+  font-family: 'Fira Code', 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.06) 100%);
+  padding: 12px;
+  border-radius: 8px;
   word-break: break-all;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  line-height: 1.5;
 }
 
 .empty-logs {
