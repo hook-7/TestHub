@@ -294,11 +294,13 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
+import { useSessionStore } from '@/stores/session'
 import type { CommunicationLog } from '@/stores/communication'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
 const communicationStore = useCommunicationStore()
+const sessionStore = useSessionStore()
 
 // 状态
 const commandLoading = ref(false)
@@ -634,11 +636,23 @@ const formatTime = (timestamp: number) => {
 }
 
 // 生命周期
-onMounted(() => {
+onMounted(async () => {
+  // 初始化会话管理
+  await sessionStore.init()
+  
+  // 检查登录状态
+  if (!sessionStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push('/serial-config')
+    return
+  }
+  
   if (!connectionStore.isConnected) {
     ElMessage.warning('请先连接串口')
     router.push('/serial-config')
+    return
   }
+  
   // 加载保存的指令
   loadSavedCommands()
 })

@@ -31,6 +31,12 @@ class ErrorCode(Enum):
     CONFIG_INVALID_PORT = 1201
     CONFIG_INVALID_BAUDRATE = 1202
     CONFIG_INVALID_PARAMS = 1203
+    
+    # 会话相关错误 (1300-1399)
+    SESSION_ALREADY_EXISTS = 1301
+    SESSION_NOT_FOUND = 1302
+    SESSION_EXPIRED = 1303
+    SESSION_ACCESS_DENIED = 1304
 
 
 class HMIException(Exception):
@@ -50,6 +56,11 @@ class SerialException(HMIException):
 
 class ConfigException(HMIException):
     """配置相关异常"""
+    pass
+
+
+class SessionException(HMIException):
+    """会话相关异常"""
     pass
 
 
@@ -76,6 +87,12 @@ ERROR_MESSAGES = {
     ErrorCode.CONFIG_INVALID_PORT: "无效的串口配置",
     ErrorCode.CONFIG_INVALID_BAUDRATE: "无效的波特率配置",
     ErrorCode.CONFIG_INVALID_PARAMS: "无效的配置参数",
+    
+    # 会话错误
+    ErrorCode.SESSION_ALREADY_EXISTS: "已有客户端连接，请稍后再试",
+    ErrorCode.SESSION_NOT_FOUND: "会话不存在",
+    ErrorCode.SESSION_EXPIRED: "会话已过期",
+    ErrorCode.SESSION_ACCESS_DENIED: "会话访问被拒绝",
 }
 
 
