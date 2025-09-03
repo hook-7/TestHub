@@ -49,3 +49,17 @@ class WSErrorMessage(BaseModel):
     error: str
     code: int = 500
     timestamp: str
+
+
+class SendMessageRequest(BaseModel):
+    """发送WebSocket消息请求"""
+    message: str
+    message_type: WSMessageType = WSMessageType.INFO
+    data: Optional[Dict[str, Any]] = None
+
+
+class SendMessageResponse(BaseModel):
+    """发送WebSocket消息响应"""
+    success: bool
+    message: str
+    sent_to_session: Optional[str] = None
