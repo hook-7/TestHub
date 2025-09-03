@@ -3,7 +3,7 @@ Serial Communication API Endpoints for AT Commands
 """
 
 import logging
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 
 from app.core.response import APIResponse
@@ -17,7 +17,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/ports", response_model=APIResponse)
+@router.get(
+    "/ports", 
+    response_model=APIResponse, 
+    status_code=status.HTTP_200_OK,
+    summary="获取可用串口列表",
+    description="扫描系统中所有可用的串口设备，返回详细的设备信息",
+    tags=["串口管理"]
+)
 async def get_available_ports():
     """获取可用串口列表"""
     ports = await serial_service.get_available_ports()
@@ -31,7 +38,7 @@ async def auto_detect_port():
     return APIResponse.success(data={"port": port}, msg="自动检测成功")
 
 
-@router.post("/connect", response_model=APIResponse)
+@router.post("/connect", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def connect_serial(
     config: SerialConfig,
     request: Request,

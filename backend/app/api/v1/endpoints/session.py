@@ -4,7 +4,7 @@ Session Management API Endpoints
 """
 
 import logging
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 
 from app.core.response import APIResponse
@@ -16,7 +16,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/create", response_model=APIResponse)
+@router.post(
+    "/create", 
+    response_model=APIResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建会话",
+    description="创建新的用户会话，用于后续的API认证",
+    responses={
+        201: {"description": "会话创建成功"},
+        400: {"description": "参数错误"},
+        500: {"description": "系统错误"}
+    }
+)
 async def create_session(request: Request, session_request: CreateSessionRequest):
     """创建新会话（登录）"""
     session_response = await session_service.create_session(
