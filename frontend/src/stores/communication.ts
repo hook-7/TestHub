@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { RawDataResponse } from '@/api/serial'
+import { serialAPI } from '@/api/serial'
 import { ElMessage } from 'element-plus'
 import { WebSocketClient, WSMessageType } from '@/services/websocket'
 import type { WSResponseMessage, WSErrorMessage } from '@/services/websocket'
@@ -160,26 +161,19 @@ export const useCommunicationStore = defineStore('communication', () => {
         description: '发送原始数据',
       })
       
-      // 确保WebSocket连接
-      if (!wsClient.value || !wsClient.value.isConnected()) {
-        await initializeWebSocket()
-      }
-
-      // 使用WebSocket发送原始数据
-      if (wsClient.value && wsClient.value.isConnected()) {
-        const success = await wsClient.value.sendCommand(data)
-        if (!success) {
-          throw new Error('WebSocket发送失败')
-        }
-        
-        return { 
-          sent_data: data,
-          received_data: '已通过WebSocket发送原始数据，等待响应...',
-          timestamp: Date.now()
-        }
-      } else {
-        throw new Error('WebSocket连接失败')
-      }
+      // 使用REST API发送原始16进制数据，确保与后端处理逻辑一致
+      const result = await serialAPI.sendRawData(data)
+      
+      // 记录接收到的数据
+      addLog({
+        type: 'raw',
+        direction: 'received',
+        data: result.received_data,
+        description: '接收原始数据响应',
+        success: true,
+      })
+      
+      return result
     } catch (error) {
       addLog({
         type: 'raw',
