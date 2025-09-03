@@ -87,7 +87,7 @@ export class WebSocketClient {
       wsUrl += `/api/v1/ws/terminal/${this.clientId}`
     }
     
-    console.log(`构建WebSocket URL: ${wsUrl} (开发环境: ${isDevelopment})`)
+
     return wsUrl
   }
 
@@ -110,7 +110,7 @@ export class WebSocketClient {
       this.ws = new WebSocket(this.url)
 
       this.ws.onopen = () => {
-        console.log('WebSocket连接成功')
+
         this.isConnecting = false
         this.reconnectAttempts = 0
         this.onConnectionChangeCallback?.(true)
@@ -120,7 +120,7 @@ export class WebSocketClient {
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
-          console.log('收到WebSocket消息:', message)
+
           this.handleMessage(message)
         } catch (error) {
           console.error('解析WebSocket消息失败:', error)
@@ -128,7 +128,7 @@ export class WebSocketClient {
       }
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket连接关闭:', event.code, event.reason)
+
         this.isConnecting = false
         this.onConnectionChangeCallback?.(false)
         
@@ -176,7 +176,7 @@ export class WebSocketClient {
     }
 
     this.reconnectAttempts++
-    console.log(`尝试重连 WebSocket (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+
 
     setTimeout(() => {
       this.connect()
@@ -204,7 +204,7 @@ export class WebSocketClient {
       }
 
       this.ws!.send(JSON.stringify(message))
-      console.log('发送WebSocket命令:', message)
+
       return true
     } catch (error) {
       console.error('发送WebSocket命令失败:', error)

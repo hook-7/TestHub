@@ -4,21 +4,16 @@ Session Management API Endpoints
 """
 
 import logging
-from fastapi import APIRouter, Request, Header, Depends
+from fastapi import APIRouter, Request, Depends
 from typing import Optional
 
 from app.core.response import APIResponse
-from app.core.exceptions import SessionException
+from app.core.dependencies import get_session_id_from_header
 from app.services.session_service import session_service
 from app.schemas.session_schemas import CreateSessionRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-async def get_session_id_from_header(x_session_id: Optional[str] = Header(None)) -> Optional[str]:
-    """从请求头获取会话ID"""
-    return x_session_id
 
 
 @router.post("/create", response_model=APIResponse)

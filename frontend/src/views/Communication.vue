@@ -595,7 +595,7 @@ const deleteCommand = async (cmd: SavedCommand) => {
 
 const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
   // 右键点击指令时，显示上下文菜单或执行特定操作
-  console.log('Right clicked command:', cmd.name)
+
 }
 
 const sendRawData = async () => {

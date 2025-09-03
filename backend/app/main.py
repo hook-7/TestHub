@@ -58,12 +58,3 @@ async def startup_event():
 async def shutdown_event():
     logger.info("Shutting down Industrial HMI")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.DEBUG,
-        log_level="info" if not settings.DEBUG else "debug",
-    )

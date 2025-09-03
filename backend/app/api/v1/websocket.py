@@ -21,7 +21,7 @@ from app.schemas.websocket import (
 )
 from app.services.serial_service import serial_service
 from app.services.session_service import session_service
-from app.api.v1.endpoints.session import get_session_id_from_header
+from app.core.dependencies import get_session_id_from_header
 from app.core.response import APIResponse
 
 logger = logging.getLogger(__name__)
@@ -213,9 +213,7 @@ async def websocket_status():
     }
 
 
-async def get_session_id_from_header(x_session_id: Optional[str] = Header(None)) -> Optional[str]:
-    """从请求头获取会话ID"""
-    return x_session_id
+
 
 
 @router.post("/send-message", response_model=APIResponse)
