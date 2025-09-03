@@ -13,9 +13,16 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     proxy: {
+      // HTTP API 代理
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+      },
+      // WebSocket 代理
+      '/api/v1/ws': {
+        target: 'ws://localhost:8000',
+        ws: true,
+        changeOrigin: true
       },
     },
   },

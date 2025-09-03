@@ -1,5 +1,12 @@
 [
   {
+    "id": "018fc7d3-74d5-4fd6-a463-ee56a7122314",
+    "name": "设置MAC",
+    "command": "AT+MAC=026501123456",
+    "description": "",
+    "created_at": 1756862130200
+  },
+  {
     "id": "408ddafa-369b-4e06-a4c1-8e37ec8e4bbf",
     "name": "获取MAC",
     "command": "AT+MAC?",

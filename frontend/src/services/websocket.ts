@@ -55,7 +55,40 @@ export class WebSocketClient {
 
   constructor(clientId?: string) {
     this.clientId = clientId || this.generateClientId()
-    this.url = `ws://localhost:8000/api/v1/terminal/ws/terminal/${this.clientId}`
+    this.url = this.buildWebSocketUrl()
+  }
+
+  /**
+   * 构建WebSocket URL
+   */
+  private buildWebSocketUrl(): string {
+    const { hostname, port, protocol } = window.location
+    
+    // 判断是否为HTTPS环境
+    const isHttps = protocol === 'https:'
+    const wsProtocol = isHttps ? 'wss' : 'ws'
+    
+    // 构建完整URL
+    let wsUrl = `${wsProtocol}://${hostname}`
+    
+    // 端口处理
+    const isDevelopment = process.env.NODE_ENV === 'development' || hostname === 'localhost' || hostname === '127.0.0.1'
+    
+    if (isDevelopment) {
+      // 开发环境：使用当前前端端口，通过 Vite 代理转发到后端
+      wsUrl += port ? `:${port}` : ''
+      wsUrl += `/api/v1/ws/terminal/${this.clientId}`
+    } else {
+      // 生产环境：根据部署方式决定
+      // 如果前后端同域部署或通过反向代理，使用相对路径
+      if (port && !['80', '443'].includes(port)) {
+        wsUrl += `:${port}`
+      }
+      wsUrl += `/api/v1/ws/terminal/${this.clientId}`
+    }
+    
+    console.log(`构建WebSocket URL: ${wsUrl} (开发环境: ${isDevelopment})`)
+    return wsUrl
   }
 
   private generateClientId(): string {
