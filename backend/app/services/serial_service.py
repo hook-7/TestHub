@@ -46,6 +46,11 @@ class SerialService:
     async def connect_serial(self, config: SerialConfig) -> bool:
         """连接串口"""
         try:
+            # 记录前端传来的配置信息以便调试
+            logger.info(f"Received serial config from frontend: port={config.port}, "
+                       f"baudrate={config.baudrate}, bytesize={config.bytesize}, "
+                       f"parity={config.parity}, stopbits={config.stopbits}, timeout={config.timeout}")
+            
             success = await serial_driver.connect(
                 port=config.port,
                 baudrate=config.baudrate,
@@ -58,7 +63,7 @@ class SerialService:
             if not success:
                 raise SerialException(ErrorCode.SERIAL_CONNECT_FAILED, f"无法连接到串口 {config.port}")
             
-            logger.info(f"Connected to serial port: {config.port}")
+            logger.info(f"Successfully connected to serial port: {config.port} at {config.baudrate} baud")
             return True
             
         except SerialException:
@@ -100,7 +105,24 @@ class SerialService:
             
             # 直接发送前端传来的指令，不做任何修改
             data = command.encode('utf-8')
-            response = await serial_driver.write_read(data, read_timeout=5.0)
+            
+            # 使用智能读取方法，支持多种AT指令终止符
+            terminators = [b'\r\nOK\r\n', b'\r\nERROR\r\n', b'\r\n', b'OK\r\n', b'ERROR\r\n']
+            response = None
+            
+            for terminator in terminators:
+                try:
+                    response = await serial_driver.write_read_until(
+                        data, terminator=terminator, read_timeout=2.0, write_delay=0.02
+                    )
+                    if response:
+                        break
+                except Exception:
+                    continue
+            
+            # 如果所有终止符都失败，使用默认方法
+            if not response:
+                response = await serial_driver.write_read(data, read_timeout=3.0, write_delay=0.02)
             
             # 解析响应
             response_text = response.decode('utf-8', errors='ignore')
@@ -131,8 +153,8 @@ class SerialService:
             
             timestamp = time.time()
             
-            # 发送数据并读取响应
-            response = await serial_driver.write_read(data)
+            # 发送数据并读取响应，使用优化的延迟设置
+            response = await serial_driver.write_read(data, read_timeout=2.0, write_delay=0.02)
             
             return RawDataResponse(
                 sent_data=data.hex().upper(),

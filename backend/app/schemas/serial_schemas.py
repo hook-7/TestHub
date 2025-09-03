@@ -18,11 +18,11 @@ class SerialPortInfo(BaseModel):
 class SerialConfig(BaseModel):
     """串口配置"""
     port: str = Field(..., description="串口设备路径")
-    baudrate: int = Field(default=9600, description="波特率")
+    baudrate: int = Field(default=115200, description="波特率")  # 优化后的默认值
     bytesize: int = Field(default=8, description="数据位")
     parity: str = Field(default="N", description="校验位 (N/E/O)")
     stopbits: int = Field(default=1, description="停止位")
-    timeout: float = Field(default=1.0, description="超时时间(秒)")
+    timeout: float = Field(default=0.5, description="超时时间(秒)")  # 优化后的默认值
 
 
 class SerialConnectionStatus(BaseModel):

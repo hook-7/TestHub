@@ -207,14 +207,14 @@ const connecting = ref(false)
 const disconnecting = ref(false)
 const autoDetecting = ref(false)
 
-// 表单数据
+
 const form = reactive({
   port: '',
-  baudrate: 9600,
+  baudrate: 115200,  
   bytesize: 8,
   parity: 'N',
   stopbits: 1,
-  timeout: 1.0,
+  timeout: 0.5,  
 })
 
 // 表单验证规则

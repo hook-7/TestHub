@@ -318,7 +318,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Download } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
@@ -639,18 +639,28 @@ const exportLogs = () => {
       状态: log.success ? '成功' : '失败'
     }))
     
+    // 构建CSV内容
     const csvContent = [
       ['时间', '方向', '描述', '数据', '状态'].join(','),
       ...logs.map(log => [
         `"${log.时间}"`,
         `"${log.方向}"`, 
         `"${log.描述}"`,
-        `"${log.数据}"`,
+        `"${log.数据?.replace(/"/g, '""') || ''}"`,  // 处理数据中的引号
         `"${log.状态}"`
       ].join(','))
     ].join('\n')
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    // 添加 BOM 以确保中文正确显示
+    const BOM = '\uFEFF'
+    const csvWithBOM = BOM + csvContent
+    
+    // 创建 Blob 对象
+    const blob = new Blob([csvWithBOM], { 
+      type: 'text/csv;charset=utf-8;' 
+    })
+    
+    // 下载文件
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
@@ -659,6 +669,9 @@ const exportLogs = () => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    
+    // 清理URL对象
+    URL.revokeObjectURL(url)
     
     ElMessage.success('日志导出成功')
   } catch (error) {
