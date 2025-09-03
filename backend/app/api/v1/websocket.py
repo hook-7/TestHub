@@ -141,7 +141,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@router.websocket("/ws/terminal/{client_id}")
+@router.websocket("/terminal/{client_id}")
 async def websocket_terminal(websocket: WebSocket, client_id: str):
     """
     WebSocket终端端点
@@ -181,7 +181,7 @@ async def websocket_terminal(websocket: WebSocket, client_id: str):
         manager.disconnect(client_id)
 
 
-@router.get("/ws/status")
+@router.get("/status")
 async def websocket_status():
     """获取WebSocket连接状态"""
     return {
