@@ -60,9 +60,10 @@ class Settings(BaseSettings):
         """常用指令存储文件路径"""
         return self.DATA_DIR / "saved_commands.json"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True
+    }
 
 
 settings = Settings()
