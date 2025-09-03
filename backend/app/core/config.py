@@ -28,12 +28,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8080",
     ]
     
-    # Serial communication settings
-    SERIAL_TIMEOUT: float = 1.0
-    SERIAL_BAUDRATE: int = 9600
+    
+    SERIAL_TIMEOUT: float = 0.5  
+    SERIAL_BAUDRATE: int = 115200  
     SERIAL_BYTESIZE: int = 8
     SERIAL_PARITY: str = "N"  # None
     SERIAL_STOPBITS: int = 1
+    
+    # 串口自动检测配置
+    AUTO_BAUDRATE_LIST: List[int] = [115200, 57600, 38400, 19200, 9600, 4800]  # 按优先级排序
     
     # Session settings - 基于心跳的会话管理
     HEARTBEAT_TIMEOUT_SECONDS: int = 60  # 心跳超时时间（秒）- 1分钟无心跳则清理会话

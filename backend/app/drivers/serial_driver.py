@@ -54,6 +54,55 @@ class SerialDriver:
             logger.error(f"Error getting available ports: {e}")
             return []
     
+    async def auto_detect_baudrate(self, port: str, test_command: bytes = b'AT\r\n') -> Optional[int]:
+        """自动检测最佳波特率"""
+        from app.core.config import settings
+        
+        for baudrate in settings.AUTO_BAUDRATE_LIST:
+            try:
+                logger.info(f"Testing baudrate {baudrate} on port {port}")
+                
+                # 临时连接测试
+                test_config = self.port_config.copy()
+                test_config.update({
+                    "port": port,
+                    "baudrate": baudrate,
+                    "timeout": 0.3  # 短超时用于快速测试
+                })
+                
+                temp_connection = None
+                try:
+                    # 创建临时连接
+                    loop = asyncio.get_event_loop()
+                    temp_connection = await loop.run_in_executor(
+                        self.executor, lambda: serial.Serial(**test_config)
+                    )
+                    
+                    # 发送测试命令
+                    temp_connection.write(test_command)
+                    await asyncio.sleep(0.02)  # 短暂延迟
+                    
+                    # 尝试读取响应
+                    response = temp_connection.read(100)
+                    
+                    if response and len(response) > 0:
+                        logger.info(f"Found working baudrate: {baudrate}")
+                        return baudrate
+                        
+                except Exception as e:
+                    logger.debug(f"Baudrate {baudrate} failed: {e}")
+                finally:
+                    if temp_connection and temp_connection.is_open:
+                        temp_connection.close()
+                        await asyncio.sleep(0.1)  # 给端口一点时间关闭
+                        
+            except Exception as e:
+                logger.debug(f"Error testing baudrate {baudrate}: {e}")
+                continue
+        
+        logger.warning("No working baudrate found, using default")
+        return None
+
     @staticmethod
     def auto_detect_port() -> Optional[str]:
         """自动检测可用的串口设备"""
@@ -86,9 +135,16 @@ class SerialDriver:
             logger.error(f"Error auto-detecting port: {e}")
             return None
     
-    async def connect(self, port: str, **kwargs) -> bool:
+    async def connect(self, port: str, auto_baudrate: bool = False, **kwargs) -> bool:
         """连接串口"""
         try:
+            # 自动检测波特率
+            if auto_baudrate and "baudrate" not in kwargs:
+                detected_baudrate = await self.auto_detect_baudrate(port)
+                if detected_baudrate:
+                    kwargs["baudrate"] = detected_baudrate
+                    logger.info(f"Using auto-detected baudrate: {detected_baudrate}")
+            
             # 更新配置
             self.port_config.update(kwargs)
             self.port_config["port"] = port
@@ -97,7 +153,7 @@ class SerialDriver:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(self.executor, self._connect_sync)
             
-            logger.info(f"Connected to serial port: {port}")
+            logger.info(f"Connected to serial port: {port} at {self.port_config['baudrate']} baud")
             return True
             
         except Exception as e:
@@ -174,15 +230,77 @@ class SerialDriver:
         """同步读取数据"""
         return self.connection.read(size)
     
+    def _read_until_sync(self, terminator: bytes, max_size: int = 1024) -> bytes:
+        """同步读取数据直到遇到终止符"""
+        data = b""
+        start_time = time.time()
+        timeout = self.connection.timeout or 1.0
+        
+        while len(data) < max_size:
+            # 检查超时
+            if time.time() - start_time > timeout:
+                break
+                
+            # 读取一个字节
+            char = self.connection.read(1)
+            if not char:
+                break
+                
+            data += char
+            
+            # 检查是否遇到终止符
+            if terminator in data:
+                break
+                
+        return data
+    
+    async def read_until(self, terminator: bytes = b'\r\n', max_size: int = 1024, 
+                        timeout: Optional[float] = None) -> bytes:
+        """读取数据直到遇到指定的终止符"""
+        if not self.is_connected or not self.connection:
+            raise RuntimeError("Serial port not connected")
+        
+        try:
+            # 设置临时超时
+            original_timeout = self.connection.timeout
+            if timeout is not None:
+                self.connection.timeout = timeout
+            
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(
+                self.executor, self._read_until_sync, terminator, max_size
+            )
+            
+            # 恢复原始超时
+            self.connection.timeout = original_timeout
+            
+            logger.debug(f"Read until terminator {terminator}: {len(data)} bytes")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Error reading until terminator: {e}")
+            return b""
+    
     async def write_read(self, data: bytes, read_size: int = 1024, 
-                        read_timeout: float = 1.0) -> bytes:
-        """写入数据并读取响应"""
+                        read_timeout: float = 1.0, write_delay: float = 0.01) -> bytes:
+        """写入数据并读取响应（固定大小）"""
         await self.write_data(data)
         
-        # 等待一小段时间让设备响应
-        await asyncio.sleep(0.01)
+        # 给设备一点时间处理命令
+        await asyncio.sleep(write_delay)
         
         return await self.read_data(read_size, read_timeout)
+    
+    async def write_read_until(self, data: bytes, terminator: bytes = b'\r\n', 
+                              max_size: int = 1024, read_timeout: float = 1.0, 
+                              write_delay: float = 0.01) -> bytes:
+        """写入数据并读取响应直到遇到终止符（推荐用于AT命令）"""
+        await self.write_data(data)
+        
+        # 给设备一点时间处理命令
+        await asyncio.sleep(write_delay)
+        
+        return await self.read_until(terminator, max_size, read_timeout)
     
     def get_connection_info(self) -> Dict[str, Any]:
         """获取连接信息"""
