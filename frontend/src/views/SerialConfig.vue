@@ -40,15 +40,15 @@
               @focus="loadPorts"
             >
               <el-option
-                v-for="port in connectionStore.availablePorts"
-                :key="port.device"
-                :label="`${port.device} - ${port.description}`"
-                :value="port.device"
+                v-for="port in filteredPorts"
+                :key="port.device || port.name || Math.random()"
+                :label="`${port.device || port.name || '未知设备'} - ${port.description || '无描述'}`"
+                :value="port.device || port.name || ''"
               >
                 <div style="display: flex; justify-content: space-between;">
-                  <span>{{ port.device }}</span>
+                  <span>{{ port.device || port.name || '未知设备' }}</span>
                   <span style="color: var(--el-text-color-secondary); font-size: 12px;">
-                    {{ port.description }}
+                    {{ port.description || '无描述' }}
                   </span>
                 </div>
               </el-option>
@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
@@ -215,6 +215,19 @@ const form = reactive({
   parity: 'E',
   stopbits: 1,
   timeout: 0.5,  
+})
+
+// 过滤有效的端口信息，避免undefined值
+const filteredPorts = computed(() => {
+  return connectionStore.availablePorts.filter(port => 
+    port && (port.device || port.name) && 
+    port.device !== undefined && 
+    port.description !== undefined
+  ).map(port => ({
+    ...port,
+    device: port.device || port.name || '',
+    description: port.description || '无描述'
+  }))
 })
 
 // 表单验证规则
