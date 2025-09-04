@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>登录测试页面</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 3px; }
+        .error { background: #ffe6e6; color: #d63031; }
+        .success { background: #e6ffe6; color: #00b894; }
+        button { padding: 8px 15px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px; }
+        button:hover { background: #0056b3; }
+        pre { white-space: pre-wrap; word-wrap: break-word; font-size: 12px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .status.online { background: #d4edda; border: 1px solid #c3e6cb; }
+        .status.offline { background: #f8d7da; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <h1>🔐 登录系统测试</h1>
+    
+    <div class="status" id="systemStatus">
+        <strong>系统状态检查中...</strong>
+    </div>
+    
+    <div class="test-section">
+        <h3>1. 会话状态检查</h3>
+        <button onclick="checkSessionStatus()">检查会话状态</button>
+        <div id="sessionStatusResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 创建会话（登录）</h3>
+        <button onclick="createSession()">创建新会话</button>
+        <div id="createSessionResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. 验证会话</h3>
+        <input type="text" id="sessionIdInput" placeholder="输入会话ID" style="width: 300px; padding: 5px;">
+        <button onclick="validateSession()">验证会话</button>
+        <div id="validateSessionResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. 强制清理会话</h3>
+        <button onclick="forceCleanup()" style="background: #dc3545;">强制清理所有会话</button>
+        <div id="cleanupResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>5. 完整登录流程测试</h3>
+        <button onclick="testFullLogin()">测试完整登录流程</button>
+        <div id="fullLoginResult" class="result"></div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        
+        async function makeRequest(method, url, data = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                console.log(`发送请求: ${method} ${url}`, data);
+                const response = await fetch(url, options);
+                const result = await response.json();
+                console.log(`响应结果:`, result);
+                
+                return {
+                    success: response.ok,
+                    status: response.status,
+                    data: result
+                };
+            } catch (error) {
+                console.error(`请求失败:`, error);
+                return {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+        
+        async function checkSystemStatus() {
+            const statusDiv = document.getElementById('systemStatus');
+            
+            try {
+                const healthCheck = await makeRequest('GET', '/api/v1/health');
+                if (healthCheck.success) {
+                    statusDiv.className = 'status online';
+                    statusDiv.innerHTML = '✅ <strong>系统在线</strong> - 后端服务正常运行';
+                } else {
+                    statusDiv.className = 'status offline';
+                    statusDiv.innerHTML = '❌ <strong>系统离线</strong> - 后端服务不可用';
+                }
+            } catch (error) {
+                statusDiv.className = 'status offline';
+                statusDiv.innerHTML = `❌ <strong>系统错误</strong> - ${error.message}`;
+            }
+        }
+        
+        async function checkSessionStatus() {
+            const resultDiv = document.getElementById('sessionStatusResult');
+            resultDiv.innerHTML = '检查中...';
+            
+            const result = await makeRequest('GET', '/api/v1/session/status');
+            
+            if (result.success) {
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <strong>✅ 会话状态检查成功</strong><br>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ 会话状态检查失败</strong><br>
+                    状态码: ${result.status}<br>
+                    错误: ${result.error || '未知错误'}<br>
+                    <pre>${JSON.stringify(result.data || {}, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        async function createSession() {
+            const resultDiv = document.getElementById('createSessionResult');
+            resultDiv.innerHTML = '创建中...';
+            
+            const sessionData = {
+                client_info: navigator.userAgent
+            };
+            
+            const result = await makeRequest('POST', '/api/v1/session/create', sessionData);
+            
+            if (result.success) {
+                currentSessionId = result.data.data?.session_id;
+                document.getElementById('sessionIdInput').value = currentSessionId || '';
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <strong>✅ 会话创建成功</strong><br>
+                    会话ID: ${currentSessionId}<br>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ 会话创建失败</strong><br>
+                    状态码: ${result.status}<br>
+                    错误: ${result.error || '未知错误'}<br>
+                    <pre>${JSON.stringify(result.data || {}, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        async function validateSession() {
+            const resultDiv = document.getElementById('validateSessionResult');
+            const sessionId = document.getElementById('sessionIdInput').value;
+            
+            if (!sessionId) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ 请输入会话ID';
+                return;
+            }
+            
+            resultDiv.innerHTML = '验证中...';
+            
+            const result = await makeRequest('POST', '/api/v1/session/validate', {
+                session_id: sessionId
+            });
+            
+            if (result.success) {
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <strong>✅ 会话验证成功</strong><br>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ 会话验证失败</strong><br>
+                    状态码: ${result.status}<br>
+                    错误: ${result.error || '未知错误'}<br>
+                    <pre>${JSON.stringify(result.data || {}, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        async function forceCleanup() {
+            const resultDiv = document.getElementById('cleanupResult');
+            resultDiv.innerHTML = '清理中...';
+            
+            const result = await makeRequest('POST', '/api/v1/session/force-cleanup', {});
+            
+            if (result.success) {
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <strong>✅ 强制清理成功</strong><br>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ 强制清理失败</strong><br>
+                    状态码: ${result.status}<br>
+                    错误: ${result.error || '未知错误'}<br>
+                    <pre>${JSON.stringify(result.data || {}, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        async function testFullLogin() {
+            const resultDiv = document.getElementById('fullLoginResult');
+            resultDiv.innerHTML = '测试完整登录流程...';
+            
+            let steps = [];
+            
+            try {
+                // 步骤1: 检查会话状态
+                steps.push('1. 检查会话状态...');
+                const statusResult = await makeRequest('GET', '/api/v1/session/status');
+                if (statusResult.success) {
+                    steps.push('✅ 会话状态检查成功');
+                } else {
+                    steps.push(`❌ 会话状态检查失败: ${statusResult.error}`);
+                }
+                
+                // 步骤2: 强制清理（确保干净状态）
+                steps.push('2. 清理现有会话...');
+                const cleanupResult = await makeRequest('POST', '/api/v1/session/force-cleanup', {});
+                if (cleanupResult.success) {
+                    steps.push('✅ 会话清理成功');
+                } else {
+                    steps.push(`❌ 会话清理失败: ${cleanupResult.error}`);
+                }
+                
+                // 步骤3: 创建新会话
+                steps.push('3. 创建新会话...');
+                const createResult = await makeRequest('POST', '/api/v1/session/create', {
+                    client_info: 'Test Client - ' + new Date().toISOString()
+                });
+                
+                if (createResult.success) {
+                    const sessionId = createResult.data.data?.session_id;
+                    steps.push(`✅ 会话创建成功: ${sessionId}`);
+                    
+                    // 步骤4: 验证新会话
+                    steps.push('4. 验证新会话...');
+                    const validateResult = await makeRequest('POST', '/api/v1/session/validate', {
+                        session_id: sessionId
+                    });
+                    
+                    if (validateResult.success) {
+                        steps.push('✅ 会话验证成功');
+                        
+                        resultDiv.className = 'result success';
+                        resultDiv.innerHTML = `
+                            <strong>🎉 完整登录流程测试成功！</strong><br>
+                            ${steps.join('<br>')}<br><br>
+                            <strong>会话信息:</strong><br>
+                            <pre>${JSON.stringify(createResult.data.data, null, 2)}</pre>
+                        `;
+                    } else {
+                        steps.push(`❌ 会话验证失败: ${validateResult.error}`);
+                        throw new Error('会话验证失败');
+                    }
+                } else {
+                    steps.push(`❌ 会话创建失败: ${createResult.error}`);
+                    throw new Error('会话创建失败');
+                }
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ 完整登录流程测试失败</strong><br>
+                    ${steps.join('<br>')}<br><br>
+                    <strong>错误信息:</strong> ${error.message}
+                `;
+            }
+        }
+        
+        // 页面加载时检查系统状态
+        window.onload = function() {
+            checkSystemStatus();
+        };
+    </script>
+</body>
+</html>
