@@ -212,7 +212,7 @@ const form = reactive({
   port: '',
   baudrate: 115200,  
   bytesize: 8,
-  parity: 'N',
+  parity: 'E',
   stopbits: 1,
   timeout: 0.5,  
 })

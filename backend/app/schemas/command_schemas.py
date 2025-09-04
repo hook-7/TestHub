@@ -4,7 +4,7 @@ Command Schemas
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from datetime import datetime
 
 
@@ -16,11 +16,14 @@ class SavedCommand(BaseModel):
     description: str = Field(default="", description="指令描述")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: int(v.timestamp() * 1000)  # 转换为毫秒时间戳
-        }
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime) -> int:
+        """将datetime序列化为毫秒时间戳"""
+        return int(dt.timestamp() * 1000)
+    
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class CreateCommandRequest(BaseModel):

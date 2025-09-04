@@ -181,7 +181,7 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     
-    console.log('Starting heartbeat...')
+
     isHeartbeatActive.value = true
     
     heartbeatInterval.value = window.setInterval(async () => {
@@ -193,7 +193,7 @@ export const useSessionStore = defineStore('session', () => {
       try {
         const result = await sessionAPI.sendHeartbeat()
         lastHeartbeat.value = new Date()
-        console.log('Heartbeat sent successfully', result.last_activity)
+
       } catch (error: any) {
         console.error('Heartbeat failed:', error)
         
@@ -221,7 +221,7 @@ export const useSessionStore = defineStore('session', () => {
   // 停止心跳
   const stopHeartbeat = () => {
     if (heartbeatInterval.value) {
-      console.log('Stopping heartbeat...')
+
       clearInterval(heartbeatInterval.value)
       heartbeatInterval.value = null
       isHeartbeatActive.value = false

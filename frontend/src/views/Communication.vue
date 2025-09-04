@@ -197,9 +197,10 @@
             <el-form-item label="十六进制">
               <el-input
                 v-model="rawForm.data"
-                placeholder="输入十六进制数据，例如: 41 54 0D 0A"
+                placeholder="输入十六进制数据，例如: 41 54 0D 0A (不区分大小写，可用空格分隔)"
                 style="font-family: monospace;"
                 @keyup.enter="sendRawData"
+                @input="formatHexInput"
               >
                 <template #append>
                   <el-button 
@@ -595,12 +596,26 @@ const deleteCommand = async (cmd: SavedCommand) => {
 
 const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
   // 右键点击指令时，显示上下文菜单或执行特定操作
-  console.log('Right clicked command:', cmd.name)
+
 }
 
 const sendRawData = async () => {
   if (!rawForm.data.trim()) {
     ElMessage.error('请输入十六进制数据')
+    return
+  }
+  
+  // 验证16进制格式
+  const hexPattern = /^[0-9A-Fa-f\s]+$/
+  const cleanData = rawForm.data.replace(/\s+/g, '')
+  
+  if (!hexPattern.test(rawForm.data)) {
+    ElMessage.error('请输入有效的十六进制数据（只能包含0-9, A-F字符和空格）')
+    return
+  }
+  
+  if (cleanData.length % 2 !== 0) {
+    ElMessage.error('十六进制数据长度必须为偶数（每个字节需要2个字符）')
     return
   }
   
@@ -613,6 +628,13 @@ const sendRawData = async () => {
   } finally {
     rawLoading.value = false
   }
+}
+
+// 格式化16进制输入
+const formatHexInput = (value: string) => {
+  // 移除非16进制字符，保留空格
+  const cleaned = value.replace(/[^0-9A-Fa-f\s]/g, '')
+  rawForm.data = cleaned.toUpperCase()
 }
 
 const clearLogs = async () => {

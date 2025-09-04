@@ -4,10 +4,11 @@ Commands Management API Endpoints
 """
 
 import logging
-from fastapi import APIRouter, Request, Header, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from typing import Optional, List
 
 from app.core.response import APIResponse
+from app.core.dependencies import get_session_id_from_header
 from app.services.command_service import command_service
 from app.schemas.command_schemas import (
     SavedCommand, 
@@ -18,11 +19,6 @@ from app.schemas.command_schemas import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-async def get_session_id_from_header(x_session_id: Optional[str] = Header(None)) -> Optional[str]:
-    """从请求头获取会话ID"""
-    return x_session_id
 
 
 @router.get("/", response_model=APIResponse[CommandsListResponse])
