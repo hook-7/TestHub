@@ -5,6 +5,7 @@ Application Configuration
 import os
 from pathlib import Path
 from typing import List
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -15,10 +16,18 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Server settings
-    HOST: str = "0.0.0.0"
-    PORT: int = 8000
-    DEBUG: bool = True
-    ENVIRONMENT: str = "development"
+    HOST: str = Field(default="0.0.0.0", description="服务器主机地址")
+    PORT: int = Field(default=8000, ge=1, le=65535, description="服务器端口")
+    DEBUG: bool = Field(default=True, description="调试模式")
+    ENVIRONMENT: str = Field(default="development", description="运行环境")
+    
+    @field_validator('ENVIRONMENT')
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        allowed_envs = ["development", "testing", "production"]
+        if v not in allowed_envs:
+            raise ValueError(f"ENVIRONMENT must be one of {allowed_envs}")
+        return v
     
     # CORS settings
     ALLOWED_ORIGINS: List[str] = [
@@ -60,9 +69,12 @@ class Settings(BaseSettings):
         """常用指令存储文件路径"""
         return self.DATA_DIR / "saved_commands.json"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "env_prefix": "HMI_",
+        "validate_assignment": True,
+    }
 
 
 settings = Settings()

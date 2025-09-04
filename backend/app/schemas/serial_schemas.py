@@ -3,7 +3,7 @@ Serial Communication API Schemas for AT Commands
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SerialPortInfo(BaseModel):
@@ -38,7 +38,23 @@ class SerialConnectionStatus(BaseModel):
 
 class RawDataRequest(BaseModel):
     """原始数据请求"""
-    data: str = Field(..., description="数据字符串(AT指令或十六进制)")
+    data: str = Field(..., min_length=1, max_length=1000, description="数据字符串(AT指令或十六进制)")
+    
+    @field_validator('data')
+    @classmethod
+    def validate_data(cls, v: str) -> str:
+        """验证数据格式"""
+        if not v.strip():
+            raise ValueError('数据不能为空')
+        
+        # 检查是否为16进制数据（只包含0-9, A-F, a-f和空格）
+        clean_data = v.replace(' ', '').replace('\t', '').replace('\n', '')
+        if clean_data and all(c in '0123456789ABCDEFabcdef' for c in clean_data):
+            # 16进制数据验证
+            if len(clean_data) % 2 != 0:
+                raise ValueError('十六进制数据长度必须为偶数')
+        
+        return v.strip()
 
 
 class RawDataResponse(BaseModel):

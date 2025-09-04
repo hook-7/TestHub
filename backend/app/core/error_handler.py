@@ -27,7 +27,7 @@ async def hmi_exception_handler(request: Request, exc: HMIException) -> JSONResp
     
     return JSONResponse(
         status_code=200,  # 业务异常仍返回200
-        content=response.dict()
+        content=response.model_dump()
     )
 
 
@@ -46,7 +46,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     
     return JSONResponse(
         status_code=exc.status_code,
-        content=response.dict()
+        content=response.model_dump()
     )
 
 
@@ -66,7 +66,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     
     return JSONResponse(
         status_code=422,
-        content=response.dict()
+        content=response.model_dump()
     )
 
 
@@ -78,7 +78,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     
     return JSONResponse(
         status_code=500,
-        content=response.dict()
+        content=response.model_dump()
     )
 
 

@@ -3,13 +3,12 @@ Serial Communication API Endpoints for AT Commands
 """
 
 import logging
-from fastapi import APIRouter, Request, Header, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 
 from app.core.response import APIResponse
-from app.core.exceptions import SerialException, SessionException, ErrorCode
+from app.core.dependencies import validate_session_dependency
 from app.services.serial_service import serial_service
-from app.services.session_service import session_service
 from app.schemas.serial_schemas import (
     SerialConfig, RawDataRequest
 )
@@ -18,27 +17,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def get_session_id_from_header(x_session_id: Optional[str] = Header(None)) -> Optional[str]:
-    """从请求头获取会话ID"""
-    return x_session_id
-
-
-async def validate_session_dependency(
-    request: Request,
-    session_id: Optional[str] = Depends(get_session_id_from_header)
-) -> str:
-    """会话验证依赖"""
-    if not session_id:
-        raise HTTPException(status_code=401, detail="缺少会话ID，请先登录")
-    
-    is_valid = await session_service.validate_session(session_id, request)
-    if not is_valid:
-        raise HTTPException(status_code=401, detail="会话无效或已过期，请重新登录")
-    
-    return session_id
-
-
-@router.get("/ports", response_model=APIResponse)
+@router.get(
+    "/ports", 
+    response_model=APIResponse, 
+    status_code=status.HTTP_200_OK,
+    summary="获取可用串口列表",
+    description="扫描系统中所有可用的串口设备，返回详细的设备信息",
+    tags=["串口管理"]
+)
 async def get_available_ports():
     """获取可用串口列表"""
     ports = await serial_service.get_available_ports()
@@ -52,7 +38,7 @@ async def auto_detect_port():
     return APIResponse.success(data={"port": port}, msg="自动检测成功")
 
 
-@router.post("/connect", response_model=APIResponse)
+@router.post("/connect", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def connect_serial(
     config: SerialConfig,
     request: Request,
