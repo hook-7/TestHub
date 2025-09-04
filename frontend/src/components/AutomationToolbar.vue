@@ -50,7 +50,7 @@
     </div>
 
     <!-- 状态指示器 -->
-    <div class="status-indicators" v-if="showStatus">
+    <div class="status-indicators" v-if="showStatus && templates">
       <el-badge :value="pendingCount" :hidden="pendingCount === 0" type="warning">
         <el-button size="small" circle @click="$emit('showPending')">
           <el-icon><Clock /></el-icon>
@@ -201,15 +201,15 @@ const {
 } = automationStore
 
 const quickTemplates = computed(() => 
-  templates.value.filter(t => props.quickTemplateIds.includes(t.template_id))
+  templates.value?.filter(t => props.quickTemplateIds.includes(t.template_id)) || []
 )
 
 const otherTemplates = computed(() => 
-  templates.value.filter(t => !props.quickTemplateIds.includes(t.template_id))
+  templates.value?.filter(t => !props.quickTemplateIds.includes(t.template_id)) || []
 )
 
-const pendingCount = computed(() => pendingCommands.value.length)
-const executingCount = computed(() => executingCommands.value.length)
+const pendingCount = computed(() => pendingCommands.value?.length || 0)
+const executingCount = computed(() => executingCommands.value?.length || 0)
 
 const confirmTitle = computed(() => {
   if (!pendingCommand.value) return '命令确认'
@@ -395,6 +395,14 @@ const getCommandTypeText = (type: string): string => {
  */
 const formatDateTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+
+// 错误处理
+const onErrorCaptured = (error: any) => {
+  console.error('AutomationToolbar错误:', error)
+  ElMessage.error('自动化工具栏加载失败，请刷新页面')
+  return false
 }
 
 // 生命周期

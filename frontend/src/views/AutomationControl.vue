@@ -19,7 +19,7 @@
       <div class="template-section">
         <h4>快速执行模板</h4>
         <el-row :gutter="16">
-          <el-col :span="6" v-for="template in templates" :key="template.template_id">
+          <el-col :span="6" v-for="template in (templates || [])" :key="template.template_id">
             <el-card 
               class="template-card" 
               shadow="hover"
@@ -47,7 +47,7 @@
     <el-row :gutter="16" class="status-cards">
       <el-col :span="6">
         <el-card class="status-card pending">
-          <el-statistic title="等待确认" :value="pendingCommands.length" />
+          <el-statistic title="等待确认" :value="pendingCommands?.length || 0" />
           <template #suffix>
             <el-icon class="status-icon"><Clock /></el-icon>
           </template>
@@ -55,7 +55,7 @@
       </el-col>
       <el-col :span="6">
         <el-card class="status-card executing">
-          <el-statistic title="执行中" :value="executingCommands.length" />
+          <el-statistic title="执行中" :value="executingCommands?.length || 0" />
           <template #suffix>
             <el-icon class="status-icon"><Loading /></el-icon>
           </template>
@@ -63,7 +63,7 @@
       </el-col>
       <el-col :span="6">
         <el-card class="status-card">
-          <el-statistic title="总命令数" :value="commands.length" />
+          <el-statistic title="总命令数" :value="commands?.length || 0" />
           <template #suffix>
             <el-icon class="status-icon"><Document /></el-icon>
           </template>

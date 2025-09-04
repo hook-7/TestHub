@@ -21,15 +21,15 @@ export const useAutomationStore = defineStore('automation', () => {
 
   // 计算属性
   const pendingCommands = computed(() => 
-    commands.value.filter(cmd => cmd.status === 'pending')
+    (commands.value || []).filter(cmd => cmd.status === 'pending')
   )
 
   const executingCommands = computed(() => 
-    commands.value.filter(cmd => cmd.status === 'executing')
+    (commands.value || []).filter(cmd => cmd.status === 'executing')
   )
 
   const recentCommands = computed(() => 
-    commands.value
+    (commands.value || [])
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10)
   )
