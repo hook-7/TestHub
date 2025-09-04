@@ -38,7 +38,7 @@
                   <el-button 
                     type="primary" 
                     size="small"
-                    @click.stop="executeWorkflow(workflow.workflow_id)"
+                    @click.stop="executeWorkflowWithParams(workflow.workflow_id)"
                     :loading="executing"
                   >
                     <el-icon><VideoPlay /></el-icon>
@@ -161,7 +161,7 @@
               type="danger"
               @click="cancelWorkflow(row.execution_id)"
             >
-              <el-icon><VideoStop /></el-icon>
+              <el-icon><Close /></el-icon>
               取消
             </el-button>
             <el-button 
@@ -335,7 +335,7 @@ import {
   ElCollapse, ElCollapseItem, ElMessageBox
 } from 'element-plus'
 import {
-  VideoPlay, VideoPause, VideoStop, View, Loading, Document, 
+  VideoPlay, VideoPause, Close, View, Loading, Document, 
   Refresh, Connection, Disconnect
 } from '@element-plus/icons-vue'
 import { useWorkflowStore } from '@/stores/workflow'

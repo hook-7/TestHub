@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作流自动化系统测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .button {
+            background: #409EFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 14px;
+        }
+        .button:hover {
+            background: #66b1ff;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .button.success {
+            background: #67c23a;
+        }
+        .button.warning {
+            background: #e6a23c;
+        }
+        .button.danger {
+            background: #f56c6c;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #f0f9ff;
+            border: 1px solid #67c23a;
+            color: #67c23a;
+        }
+        .error {
+            background: #fef0f0;
+            border: 1px solid #f56c6c;
+            color: #f56c6c;
+        }
+        .info {
+            background: #f4f4f5;
+            border: 1px solid #909399;
+            color: #909399;
+        }
+        .workflow-card {
+            border: 1px solid #e4e7ed;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .workflow-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        .workflow-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+            margin-bottom: 8px;
+        }
+        .workflow-desc {
+            color: #606266;
+            margin-bottom: 12px;
+        }
+        .step-list {
+            font-size: 13px;
+            color: #909399;
+        }
+        .ws-status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 8px 0;
+        }
+        .ws-connected {
+            background: #f0f9ff;
+            border: 1px solid #67c23a;
+            color: #67c23a;
+        }
+        .ws-disconnected {
+            background: #fef0f0;
+            border: 1px solid #f56c6c;
+            color: #f56c6c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 工作流自动化系统测试</h1>
+            <p>测试步骤化流程、变量引用和WebSocket确认功能</p>
+        </div>
+
+        <!-- WebSocket连接状态 -->
+        <div class="section">
+            <h3>🌐 WebSocket连接</h3>
+            <div id="ws-status" class="ws-status ws-disconnected">❌ WebSocket未连接</div>
+            <button class="button" onclick="connectWebSocket()">连接WebSocket</button>
+            <button class="button" onclick="disconnectWebSocket()">断开连接</button>
+            <div id="ws-result" class="result info">等待连接...</div>
+        </div>
+
+        <!-- 工作流列表 -->
+        <div class="section">
+            <h3>📋 可用工作流</h3>
+            <button class="button" onclick="loadWorkflows()">加载工作流列表</button>
+            <div id="workflows-container"></div>
+            <div id="workflows-result" class="result"></div>
+        </div>
+
+        <!-- 工作流执行 -->
+        <div class="section">
+            <h3>🚀 执行工作流</h3>
+            <button class="button success" onclick="executeATTest()">执行AT测试流程</button>
+            <button class="button warning" onclick="executeDeviceRestart()">执行设备重启流程</button>
+            <div id="execution-result" class="result"></div>
+        </div>
+
+        <!-- 执行监控 -->
+        <div class="section">
+            <h3>📊 执行监控</h3>
+            <button class="button" onclick="getExecutions()">获取执行列表</button>
+            <div id="monitoring-result" class="result"></div>
+        </div>
+
+        <!-- 变量测试 -->
+        <div class="section">
+            <h3>🔧 变量系统测试</h3>
+            <p>测试变量解析功能：</p>
+            <input type="text" id="variable-test" placeholder="输入包含变量的文本，如: 设备 ${device_id} 状态" style="width: 300px; padding: 8px;">
+            <button class="button" onclick="testVariableResolve()">测试解析</button>
+            <div id="variable-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000/api/v1/workflow';
+        let websocket = null;
+        let currentExecutions = [];
+
+        // WebSocket连接
+        function connectWebSocket() {
+            try {
+                const wsUrl = `ws://localhost:8000/api/v1/workflow/ws/WS_TEST`;
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = function() {
+                    updateWSStatus(true);
+                    showResult('ws-result', 'WebSocket连接成功！', 'success');
+                    
+                    // 发送心跳
+                    setInterval(() => {
+                        if (websocket && websocket.readyState === WebSocket.OPEN) {
+                            websocket.send(JSON.stringify({ type: 'heartbeat' }));
+                        }
+                    }, 30000);
+                };
+                
+                websocket.onmessage = function(event) {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                };
+                
+                websocket.onclose = function() {
+                    updateWSStatus(false);
+                    showResult('ws-result', 'WebSocket连接断开', 'error');
+                };
+                
+                websocket.onerror = function(error) {
+                    updateWSStatus(false);
+                    showResult('ws-result', `WebSocket错误: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                showResult('ws-result', `连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+                updateWSStatus(false);
+                showResult('ws-result', 'WebSocket已断开', 'info');
+            }
+        }
+
+        function updateWSStatus(connected) {
+            const statusEl = document.getElementById('ws-status');
+            if (connected) {
+                statusEl.className = 'ws-status ws-connected';
+                statusEl.textContent = '✅ WebSocket已连接';
+            } else {
+                statusEl.className = 'ws-status ws-disconnected';
+                statusEl.textContent = '❌ WebSocket未连接';
+            }
+        }
+
+        // 处理WebSocket消息
+        function handleWebSocketMessage(message) {
+            console.log('收到WebSocket消息:', message);
+            
+            if (message.message_type === 'user_confirmation_request') {
+                showConfirmationDialog(message);
+            } else if (message.message_type === 'workflow_step_update') {
+                handleStepUpdate(message);
+            }
+            
+            showResult('ws-result', `收到消息: ${message.message_type}`, 'success');
+        }
+
+        // 显示确认对话框
+        function showConfirmationDialog(message) {
+            const { execution_id, step_id, data } = message;
+            
+            const confirmed = confirm(
+                `🔄 工作流确认\n\n` +
+                `步骤: ${data.step_name}\n` +
+                `${data.step_description || ''}\n\n` +
+                `${data.message}\n\n` +
+                `点击"确定"选择"${data.options[0]}"，点击"取消"选择"${data.options[1]}"`
+            );
+            
+            // 发送确认结果
+            const confirmation = {
+                execution_id,
+                step_id,
+                confirmed,
+                selected_option: confirmed ? data.options[0] : data.options[1],
+                operator_notes: '网页测试确认'
+            };
+            
+            // 通过WebSocket发送确认
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'user_confirmation',
+                    data: confirmation
+                }));
+            }
+            
+            // 同时通过API发送
+            apiCall(`/executions/${execution_id}/confirm`, {
+                method: 'POST',
+                body: JSON.stringify(confirmation),
+                resultId: 'execution-result'
+            });
+        }
+
+        // 处理步骤更新
+        function handleStepUpdate(message) {
+            const { data } = message;
+            console.log(`步骤更新: ${data.step_name} - ${data.step_status}`);
+            
+            const statusText = `步骤: ${data.step_name} | 状态: ${data.step_status}`;
+            showResult('monitoring-result', statusText, 'info');
+        }
+
+        // 通用API调用
+        async function apiCall(url, options = {}) {
+            try {
+                if (options.resultId) {
+                    showResult(options.resultId, '正在请求...', 'info');
+                }
+                
+                const response = await fetch(BASE_URL + url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 0) {
+                    if (options.resultId) {
+                        showResult(options.resultId, JSON.stringify(data.data, null, 2), 'success');
+                    }
+                    return data.data;
+                } else {
+                    if (options.resultId) {
+                        showResult(options.resultId, `错误: ${data.msg}`, 'error');
+                    }
+                    return null;
+                }
+            } catch (error) {
+                if (options.resultId) {
+                    showResult(options.resultId, `网络错误: ${error.message}`, 'error');
+                }
+                return null;
+            }
+        }
+
+        // 显示结果
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.textContent = content;
+        }
+
+        // 加载工作流列表
+        async function loadWorkflows() {
+            const workflows = await apiCall('/workflows', {
+                method: 'GET',
+                resultId: 'workflows-result'
+            });
+            
+            if (workflows) {
+                displayWorkflows(workflows);
+            }
+        }
+
+        // 显示工作流列表
+        function displayWorkflows(workflows) {
+            const container = document.getElementById('workflows-container');
+            container.innerHTML = '';
+            
+            workflows.forEach(workflow => {
+                const card = document.createElement('div');
+                card.className = 'workflow-card';
+                card.onclick = () => showWorkflowSteps(workflow);
+                
+                card.innerHTML = `
+                    <div class="workflow-title">${workflow.name}</div>
+                    <div class="workflow-desc">${workflow.description}</div>
+                    <div class="step-list">步骤数: ${workflow.steps.length} | 起始: ${workflow.start_step_id}</div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        // 显示工作流步骤
+        function showWorkflowSteps(workflow) {
+            let stepsText = `📋 工作流: ${workflow.name}\n\n`;
+            stepsText += `📄 描述: ${workflow.description}\n\n`;
+            stepsText += `🔢 步骤列表:\n`;
+            
+            workflow.steps.forEach((step, index) => {
+                const stepIcon = {
+                    'serial_send': '📡',
+                    'user_confirm': '❓',
+                    'set_variable': '🔧',
+                    'delay': '⏱️',
+                    'log': '📝'
+                }[step.step_type] || '📋';
+                
+                stepsText += `\n${index + 1}. ${stepIcon} ${step.name} (${step.step_type})\n`;
+                if (step.description) stepsText += `   📄 ${step.description}\n`;
+                if (step.serial_command) stepsText += `   📡 串口指令: ${step.serial_command}\n`;
+                if (step.expected_response) stepsText += `   📥 期望回复: ${step.expected_response}\n`;
+                if (step.confirm_message) stepsText += `   ❓ 确认消息: ${step.confirm_message}\n`;
+                if (step.variable_name) stepsText += `   🔧 变量: ${step.variable_name}\n`;
+            });
+            
+            showResult('workflows-result', stepsText, 'info');
+        }
+
+        // 执行AT测试工作流
+        async function executeATTest() {
+            const execution = await apiCall('/workflows/at_command_test/execute', {
+                method: 'POST',
+                body: JSON.stringify({
+                    workflow_id: 'at_command_test',
+                    input_variables: {},
+                    operator_id: 'WEB_USER',
+                    workstation_id: 'WS_TEST'
+                }),
+                resultId: 'execution-result'
+            });
+            
+            if (execution) {
+                currentExecutions.push(execution);
+                monitorExecution(execution.execution_id);
+                showResult('execution-result', 
+                    `✅ AT测试工作流已启动\n执行ID: ${execution.execution_id}\n状态: ${execution.status}`, 
+                    'success');
+            }
+        }
+
+        // 执行设备重启工作流
+        async function executeDeviceRestart() {
+            const execution = await apiCall('/workflows/device_restart/execute', {
+                method: 'POST',
+                body: JSON.stringify({
+                    workflow_id: 'device_restart',
+                    input_variables: { device_id: 'ESP32_TEST' },
+                    operator_id: 'WEB_USER',
+                    workstation_id: 'WS_TEST'
+                }),
+                resultId: 'execution-result'
+            });
+            
+            if (execution) {
+                currentExecutions.push(execution);
+                monitorExecution(execution.execution_id);
+                showResult('execution-result', 
+                    `✅ 设备重启工作流已启动\n执行ID: ${execution.execution_id}\n状态: ${execution.status}`, 
+                    'success');
+            }
+        }
+
+        // 监控执行状态
+        function monitorExecution(executionId) {
+            const interval = setInterval(async () => {
+                const execution = await apiCall(`/executions/${executionId}`, {
+                    method: 'GET'
+                });
+                
+                if (execution) {
+                    updateExecutionStatus(execution);
+                    
+                    if (['completed', 'failed', 'cancelled'].includes(execution.status)) {
+                        clearInterval(interval);
+                        
+                        const statusIcon = execution.status === 'completed' ? '✅' : 
+                                         execution.status === 'failed' ? '❌' : '🚫';
+                        
+                        showResult('monitoring-result', 
+                            `${statusIcon} 工作流执行${execution.status === 'completed' ? '完成' : '结束'}\n` +
+                            `执行ID: ${executionId}\n` +
+                            `最终状态: ${execution.status}\n` +
+                            `步骤完成: ${Object.keys(execution.step_results || {}).length}`,
+                            execution.status === 'completed' ? 'success' : 'error');
+                    }
+                }
+            }, 3000);
+            
+            // 5分钟后停止监控
+            setTimeout(() => clearInterval(interval), 300000);
+        }
+
+        // 更新执行状态
+        function updateExecutionStatus(execution) {
+            const statusText = `📊 执行状态更新\n` +
+                             `工作流: ${execution.workflow_name}\n` +
+                             `状态: ${execution.status}\n` +
+                             `当前步骤: ${execution.current_step_id || '无'}\n` +
+                             `开始时间: ${execution.started_at ? new Date(execution.started_at).toLocaleString() : '无'}`;
+            
+            showResult('monitoring-result', statusText, 'info');
+        }
+
+        // 获取执行列表
+        async function getExecutions() {
+            showResult('monitoring-result', '📋 当前执行实例:\n\n', 'info');
+            
+            for (const exec of currentExecutions) {
+                const current = await apiCall(`/executions/${exec.execution_id}`, {
+                    method: 'GET'
+                });
+                
+                if (current) {
+                    const statusIcon = current.status === 'completed' ? '✅' : 
+                                     current.status === 'running' ? '⚡' :
+                                     current.status === 'paused' ? '⏸️' : '❌';
+                    
+                    const execText = `${statusIcon} ${current.workflow_name}\n` +
+                                   `   ID: ${current.execution_id}\n` +
+                                   `   状态: ${current.status}\n` +
+                                   `   当前步骤: ${current.current_step_id || '无'}\n\n`;
+                    
+                    const resultEl = document.getElementById('monitoring-result');
+                    resultEl.textContent += execText;
+                }
+            }
+        }
+
+        // 测试变量解析
+        function testVariableResolve() {
+            const input = document.getElementById('variable-test').value;
+            
+            // 模拟变量解析
+            const variables = {
+                'device_id': 'ESP32_DEV001',
+                'operator': '张工程师',
+                'current_time': new Date().toISOString(),
+                'device_info': 'ESP32_DevKit_V1',
+                'test_mode': '生产测试'
+            };
+            
+            let resolved = input;
+            for (const [key, value] of Object.entries(variables)) {
+                const regex = new RegExp(`\\$\\{${key}\\}`, 'g');
+                resolved = resolved.replace(regex, value);
+            }
+            
+            const resultText = `🔧 变量解析测试\n\n` +
+                             `原文: ${input}\n` +
+                             `解析: ${resolved}\n\n` +
+                             `可用变量:\n${Object.entries(variables).map(([k,v]) => `  ${k}: ${v}`).join('\n')}`;
+            
+            showResult('variable-result', resultText, 'success');
+        }
+
+        // 页面加载完成
+        window.onload = function() {
+            console.log('🚀 工作流系统测试页面已加载');
+            
+            // 自动加载工作流列表
+            setTimeout(() => {
+                loadWorkflows();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
