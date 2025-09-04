@@ -1,12 +1,19 @@
 import axios, { AxiosInstance } from 'axios'
 import { ElMessage } from 'element-plus'
 
-// 自定义axios实例类型，拦截器会直接返回数据
+// API响应格式
+interface ApiResponse<T = any> {
+  code: number
+  msg: string
+  data: T
+}
+
+// 自定义axios实例类型，拦截器返回完整的API响应
 interface CustomAxiosInstance extends Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete'> {
-  get<T = any>(url: string, config?: any): Promise<T>
-  post<T = any>(url: string, data?: any, config?: any): Promise<T>
-  put<T = any>(url: string, data?: any, config?: any): Promise<T>
-  delete<T = any>(url: string, config?: any): Promise<T>
+  get<T = any>(url: string, config?: any): Promise<ApiResponse<T>>
+  post<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>>
+  put<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>>
+  delete<T = any>(url: string, config?: any): Promise<ApiResponse<T>>
 }
 
 // 创建axios实例
@@ -40,7 +47,7 @@ api.interceptors.response.use(
       return Promise.reject(new Error(data.msg || '请求失败'))
     }
     
-    return data.data  // 返回实际的业务数据
+    return data  // 返回完整的响应对象，包含code, msg, data字段
   },
   (error) => {
     const message = error.response?.data?.msg || error.message || '网络错误'

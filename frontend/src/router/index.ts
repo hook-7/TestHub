@@ -6,6 +6,7 @@ import Communication from '@/views/Communication.vue'
 import WorkflowList from '@/views/WorkflowList.vue'
 import WorkflowEditor from '@/views/WorkflowEditor.vue'
 import WorkflowExecution from '@/views/WorkflowExecution.vue'
+import ApiTest from '@/views/ApiTest.vue'
 import { useSessionStore } from '@/stores/session'
 
 const router = createRouter({
@@ -76,6 +77,15 @@ const router = createRouter({
       meta: { 
         title: '执行监控',
         requiresAuth: true
+      }
+    },
+    {
+      path: '/api-test',
+      name: 'ApiTest',
+      component: ApiTest,
+      meta: { 
+        title: 'API测试',
+        requiresAuth: false
       }
     }
   ]
