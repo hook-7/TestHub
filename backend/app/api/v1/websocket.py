@@ -17,7 +17,10 @@ from app.schemas.websocket import (
     WSErrorMessage, 
     WSMessageType,
     SendMessageRequest,
-    SendMessageResponse
+    SendMessageResponse,
+    WSWorkflowLogMessage,
+    WSWorkflowConfirmMessage,
+    WSWorkflowStatusMessage
 )
 from app.services.serial_service import serial_service
 from app.services.session_service import session_service
@@ -143,10 +146,55 @@ class ConnectionManager:
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
             
+            except Exception as e:
+                logger.error(f"处理命令失败: {str(e)}")
+                error_msg = WSErrorMessage(
+                    error=f"处理命令失败: {str(e)}",
+                    code=500,
+                    timestamp=datetime.now().isoformat()
+                )
+                await self.send_personal_message(error_msg.model_dump(), websocket)
+    
+    async def handle_workflow_confirm(self, websocket: WebSocket, data: dict):
+        """处理工作流确认响应"""
+        try:
+            execution_id = data.get("execution_id")
+            action = data.get("action")
+            
+            if not execution_id or not action:
+                error_msg = WSErrorMessage(
+                    error="缺少必要参数: execution_id 或 action",
+                    code=400,
+                    timestamp=datetime.now().isoformat()
+                )
+                await self.send_personal_message(error_msg.model_dump(), websocket)
+                return
+            
+            # 获取工作流服务并处理确认
+            from app.services.workflow_service import get_workflow_service
+            workflow_service = get_workflow_service()
+            success = workflow_service.handle_confirm_response(execution_id, action)
+            
+            if success:
+                response_msg = WSResponseMessage(
+                    type=WSMessageType.INFO,
+                    message=f"确认操作成功: {action}",
+                    timestamp=datetime.now().isoformat(),
+                    success=True
+                )
+            else:
+                response_msg = WSErrorMessage(
+                    error="确认操作失败：执行实例不存在或不在等待状态",
+                    code=404,
+                    timestamp=datetime.now().isoformat()
+                )
+            
+            await self.send_personal_message(response_msg.model_dump(), websocket)
+            
         except Exception as e:
-            logger.error(f"处理命令失败: {str(e)}")
+            logger.error(f"处理工作流确认失败: {str(e)}")
             error_msg = WSErrorMessage(
-                error=f"处理命令失败: {str(e)}",
+                error=f"处理确认失败: {str(e)}",
                 code=500,
                 timestamp=datetime.now().isoformat()
             )
@@ -180,8 +228,13 @@ async def websocket_terminal(websocket: WebSocket, client_id: str):
                 message_data = json.loads(data)
                 logger.debug(f"收到WebSocket消息: {message_data}")
                 
-                # 处理命令
-                await manager.handle_command(websocket, message_data)
+                # 处理不同类型的消息
+                if message_data.get("type") == WSMessageType.COMMAND:
+                    await manager.handle_command(websocket, message_data)
+                elif message_data.get("type") == "workflow_confirm_response":
+                    await manager.handle_workflow_confirm(websocket, message_data)
+                else:
+                    await manager.handle_command(websocket, message_data)
                 
             except json.JSONDecodeError:
                 error_msg = WSErrorMessage(

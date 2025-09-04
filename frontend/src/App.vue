@@ -92,6 +92,10 @@
               <el-icon><ChatLineRound /></el-icon>
               <span>AT指令交互</span>
             </el-menu-item>
+            <el-menu-item index="/workflow">
+              <el-icon><Operation /></el-icon>
+              <span>工作流管理</span>
+            </el-menu-item>
           </el-menu>
         </el-aside>
 
@@ -113,7 +117,8 @@ import {
   Setting, 
   ChatLineRound,
   User,
-  SwitchButton
+  SwitchButton,
+  Operation
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'

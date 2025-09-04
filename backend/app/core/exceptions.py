@@ -37,6 +37,16 @@ class ErrorCode(Enum):
     SESSION_NOT_FOUND = 1302
     SESSION_EXPIRED = 1303
     SESSION_ACCESS_DENIED = 1304
+    
+    # 工作流相关错误 (1400-1499)
+    WORKFLOW_NOT_FOUND = 1401
+    WORKFLOW_INVALID_DEFINITION = 1402
+    WORKFLOW_EXECUTION_FAILED = 1403
+    WORKFLOW_STEP_FAILED = 1404
+    WORKFLOW_TIMEOUT = 1405
+    WORKFLOW_CANCELLED = 1406
+    WORKFLOW_VARIABLE_ERROR = 1407
+    WORKFLOW_CONFIRM_TIMEOUT = 1408
 
 
 class HMIException(Exception):
@@ -61,6 +71,21 @@ class ConfigException(HMIException):
 
 class SessionException(HMIException):
     """会话相关异常"""
+    pass
+
+
+class WorkflowException(HMIException):
+    """工作流相关异常"""
+    pass
+
+
+class WorkflowError(Exception):
+    """工作流执行错误"""
+    pass
+
+
+class ValidationError(Exception):
+    """验证错误"""
     pass
 
 
@@ -93,6 +118,16 @@ ERROR_MESSAGES = {
     ErrorCode.SESSION_NOT_FOUND: "会话不存在",
     ErrorCode.SESSION_EXPIRED: "会话已过期",
     ErrorCode.SESSION_ACCESS_DENIED: "会话访问被拒绝",
+    
+    # 工作流错误
+    ErrorCode.WORKFLOW_NOT_FOUND: "工作流不存在",
+    ErrorCode.WORKFLOW_INVALID_DEFINITION: "工作流定义无效",
+    ErrorCode.WORKFLOW_EXECUTION_FAILED: "工作流执行失败",
+    ErrorCode.WORKFLOW_STEP_FAILED: "工作流步骤执行失败",
+    ErrorCode.WORKFLOW_TIMEOUT: "工作流执行超时",
+    ErrorCode.WORKFLOW_CANCELLED: "工作流执行已取消",
+    ErrorCode.WORKFLOW_VARIABLE_ERROR: "工作流变量处理错误",
+    ErrorCode.WORKFLOW_CONFIRM_TIMEOUT: "工作流确认超时",
 }
 
 

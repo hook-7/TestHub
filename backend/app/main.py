@@ -28,6 +28,18 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
+    
+    # 初始化工作流服务和WebSocket集成
+    try:
+        from app.services.workflow_service import get_workflow_service
+        from app.api.v1.websocket import manager as websocket_manager
+        
+        workflow_service = get_workflow_service()
+        workflow_service.set_websocket_manager(websocket_manager)
+        logger.info("工作流服务初始化完成")
+    except Exception as e:
+        logger.error(f"工作流服务初始化失败: {e}")
+    
     yield
     # Shutdown
     logger.info("Shutting down Industrial HMI")
@@ -90,6 +102,14 @@ app = FastAPI(
         {
             "name": "实时通信",
             "description": "WebSocket实时数据交互",
+        },
+        {
+            "name": "工作流管理",
+            "description": "工作流定义、编辑和管理",
+        },
+        {
+            "name": "工作流执行",
+            "description": "工作流执行、监控和控制",
         },
     ],
 )

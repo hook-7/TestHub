@@ -3,6 +3,9 @@ import { ElMessage } from 'element-plus'
 import Login from '@/views/Login.vue'
 import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
+import WorkflowList from '@/views/WorkflowList.vue'
+import WorkflowEditor from '@/views/WorkflowEditor.vue'
+import WorkflowExecution from '@/views/WorkflowExecution.vue'
 import { useSessionStore } from '@/stores/session'
 
 const router = createRouter({
@@ -36,6 +39,42 @@ const router = createRouter({
       component: Communication,
       meta: { 
         title: 'AT指令交互',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/workflow',
+      name: 'WorkflowList',
+      component: WorkflowList,
+      meta: { 
+        title: '工作流管理',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/workflow/create',
+      name: 'WorkflowCreate',
+      component: WorkflowEditor,
+      meta: { 
+        title: '新建工作流',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/workflow/edit/:id',
+      name: 'WorkflowEdit',
+      component: WorkflowEditor,
+      meta: { 
+        title: '编辑工作流',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/workflow/execution/:id',
+      name: 'WorkflowExecution',
+      component: WorkflowExecution,
+      meta: { 
+        title: '执行监控',
         requiresAuth: true
       }
     }

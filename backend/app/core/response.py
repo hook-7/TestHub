@@ -4,6 +4,7 @@ Standard API Response Format
 
 from typing import Any, Optional, TypeVar, Generic
 from pydantic import BaseModel
+from app.core.exceptions import ErrorCode
 
 T = TypeVar('T')
 
@@ -37,3 +38,16 @@ class APIResponse(BaseModel, Generic[T]):
     def business_error(cls, code: int, msg: str) -> "APIResponse[Any]":
         """Business error (1xxx codes)"""
         return cls(code=1000 + code, msg=msg)
+
+
+def create_response(
+    data: Any = None, 
+    code: ErrorCode = ErrorCode.SUCCESS, 
+    message: str = "success"
+) -> APIResponse:
+    """创建统一响应格式"""
+    return APIResponse(
+        code=code.value if isinstance(code, ErrorCode) else code,
+        msg=message,
+        data=data
+    )

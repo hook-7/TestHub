@@ -24,6 +24,10 @@ class WSMessageType(str, Enum):
     INFO = "info"
     CONNECT = "connect"
     DISCONNECT = "disconnect"
+    # 工作流相关消息类型
+    WORKFLOW_LOG = "workflow_log"
+    WORKFLOW_CONFIRM = "workflow_confirm"
+    WORKFLOW_STATUS = "workflow_status"
 
 
 class WSCommandMessage(BaseModel):
@@ -63,3 +67,35 @@ class SendMessageResponse(BaseModel):
     success: bool
     message: str
     sent_to_session: Optional[str] = None
+
+
+class WSWorkflowLogMessage(BaseModel):
+    """工作流日志消息"""
+    type: WSMessageType = WSMessageType.WORKFLOW_LOG
+    execution_id: str
+    step_id: str
+    level: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    timestamp: str
+
+
+class WSWorkflowConfirmMessage(BaseModel):
+    """工作流确认消息"""
+    type: WSMessageType = WSMessageType.WORKFLOW_CONFIRM
+    execution_id: str
+    step_id: str
+    message: str
+    options: list[str]
+    timeout: Optional[float] = None
+    timestamp: str
+
+
+class WSWorkflowStatusMessage(BaseModel):
+    """工作流状态消息"""
+    type: WSMessageType = WSMessageType.WORKFLOW_STATUS
+    execution_id: str
+    status: str
+    current_step: Optional[str] = None
+    message: str
+    timestamp: str
