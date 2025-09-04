@@ -151,7 +151,7 @@ import {
 } from 'element-plus'
 import {
   ArrowDown, Plus, Document, Clock, Loading, Check, Close, CircleClose,
-  Setting, Monitor, TestTube, Tools
+  Setting, Monitor, Operation, Tools
 } from '@element-plus/icons-vue'
 import { useAutomationStore } from '@/stores/automation'
 import AutomationConfirmDialog from './AutomationConfirmDialog.vue'
@@ -371,7 +371,7 @@ const getCommandIcon = (commandType: string) => {
   const iconMap: Record<string, any> = {
     system: Setting,
     device: Monitor,
-    test: TestTube,
+    test: Operation,
     maintenance: Tools
   }
   return iconMap[commandType] || Setting
