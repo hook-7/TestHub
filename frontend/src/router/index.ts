@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import Login from '@/views/Login.vue'
 import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
+import AutomationControl from '@/views/AutomationControl.vue'
 import { useSessionStore } from '@/stores/session'
 
 const router = createRouter({
@@ -36,6 +37,15 @@ const router = createRouter({
       component: Communication,
       meta: { 
         title: 'AT指令交互',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/automation',
+      name: 'AutomationControl',
+      component: AutomationControl,
+      meta: {
+        title: '自动化控制',
         requiresAuth: true
       }
     }

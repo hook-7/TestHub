@@ -25,6 +25,18 @@
       </div>
     </div>
 
+    <!-- 自动化工具栏 -->
+    <div class="automation-section">
+      <AutomationToolbar
+        :show-status="true"
+        :quick-template-ids="['clear_cache', 'run_test']"
+        workstation-id="WS001"
+        operator-id="COMM_USER"
+        @command-created="handleAutomationCommand"
+        @show-history="showAutomationHistory"
+      />
+    </div>
+
     <el-row :gutter="20">
       <!-- 左侧：AT指令操作面板 -->
       <el-col :span="12">
@@ -320,6 +332,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download } from '@element-plus/icons-vue'
+import AutomationToolbar from '@/components/AutomationToolbar.vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
@@ -744,6 +757,16 @@ onMounted(async () => {
   }
 })
 
+// 自动化命令处理方法
+const handleAutomationCommand = (command: any) => {
+  ElMessage.success(`自动化命令已创建: ${command.command_id}`)
+  console.log('自动化命令:', command)
+}
+
+const showAutomationHistory = () => {
+  router.push('/automation')
+}
+
 
 </script>
 
@@ -761,6 +784,10 @@ onMounted(async () => {
   padding: 20px 28px;
   margin-bottom: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.automation-section {
+  margin-bottom: 20px;
 }
 
 .status-info {
