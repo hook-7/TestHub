@@ -25,16 +25,23 @@
       </div>
     </div>
 
-    <!-- 自动化工具栏 -->
-    <div class="automation-section">
-      <AutomationToolbar
-        :show-status="true"
-        :quick-template-ids="['clear_cache', 'run_test']"
-        workstation-id="WS001"
-        operator-id="COMM_USER"
-        @command-created="handleAutomationCommand"
-        @show-history="showAutomationHistory"
-      />
+    <!-- 工作流快速操作 -->
+    <div class="workflow-section">
+      <el-card class="workflow-quick-card">
+        <template #header>
+          <span>🔄 快速工作流</span>
+        </template>
+        <el-button-group>
+          <el-button size="small" type="primary" @click="executeATTest">
+            <el-icon><Operation /></el-icon>
+            AT指令测试
+          </el-button>
+          <el-button size="small" type="warning" @click="executeDeviceRestart">
+            <el-icon><Refresh /></el-icon>
+            设备重启流程
+          </el-button>
+        </el-button-group>
+      </el-card>
     </div>
 
     <el-row :gutter="20">
@@ -331,8 +338,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download } from '@element-plus/icons-vue'
-import AutomationToolbar from '@/components/AutomationToolbar.vue'
+import { Delete, Download, Operation, Refresh } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
@@ -757,14 +763,15 @@ onMounted(async () => {
   }
 })
 
-// 自动化命令处理方法
-const handleAutomationCommand = (command: any) => {
-  ElMessage.success(`自动化命令已创建: ${command.command_id}`)
-  console.log('自动化命令:', command)
+// 工作流快速操作方法
+const executeATTest = () => {
+  ElMessage.info('启动AT指令测试工作流...')
+  router.push('/workflow')
 }
 
-const showAutomationHistory = () => {
-  router.push('/automation')
+const executeDeviceRestart = () => {
+  ElMessage.info('启动设备重启工作流...')
+  router.push('/workflow')
 }
 
 
@@ -786,8 +793,29 @@ const showAutomationHistory = () => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
-.automation-section {
+.workflow-section {
   margin-bottom: 20px;
+}
+
+.workflow-quick-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.workflow-quick-card :deep(.el-card__header) {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.workflow-quick-card :deep(.el-button-group .el-button) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.workflow-quick-card :deep(.el-button-group .el-button:hover) {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .status-info {

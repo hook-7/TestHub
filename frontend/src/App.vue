@@ -92,9 +92,9 @@
               <el-icon><ChatLineRound /></el-icon>
               <span>AT指令交互</span>
             </el-menu-item>
-            <el-menu-item index="/automation">
+            <el-menu-item index="/workflow">
               <el-icon><Operation /></el-icon>
-              <span>自动化控制</span>
+              <span>工作流自动化</span>
             </el-menu-item>
           </el-menu>
         </el-aside>

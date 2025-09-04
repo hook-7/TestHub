@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus'
 import Login from '@/views/Login.vue'
 import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
-import AutomationControl from '@/views/AutomationControl.vue'
+import WorkflowControl from '@/views/WorkflowControl.vue'
 import { useSessionStore } from '@/stores/session'
 
 const router = createRouter({
@@ -41,11 +41,11 @@ const router = createRouter({
       }
     },
     {
-      path: '/automation',
-      name: 'AutomationControl',
-      component: AutomationControl,
+      path: '/workflow',
+      name: 'WorkflowControl',
+      component: WorkflowControl,
       meta: {
-        title: '自动化控制',
+        title: '工作流自动化',
         requiresAuth: true
       }
     }
