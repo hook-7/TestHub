@@ -9,6 +9,7 @@ export interface SavedCommand {
   name: string
   command: string
   description: string
+  expected_response: string
   created_at: number // 毫秒时间戳
 }
 
@@ -16,12 +17,14 @@ export interface CreateCommandRequest {
   name: string
   command: string
   description?: string
+  expected_response?: string
 }
 
 export interface UpdateCommandRequest {
   name?: string
   command?: string
   description?: string
+  expected_response?: string
 }
 
 export interface CommandsListResponse {

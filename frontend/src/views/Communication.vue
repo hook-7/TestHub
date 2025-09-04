@@ -104,8 +104,8 @@
               </div>
             </div>
             <div class="quick-commands">
-              <div 
-                v-for="cmd in savedCommands" 
+              <div
+                v-for="cmd in savedCommands"
                 :key="cmd.id"
                 class="quick-command-btn"
                 @click="sendQuickCommand(cmd.command)"
@@ -113,17 +113,29 @@
                 :class="{ disabled: !connectionStore.isConnected }"
                 :title="cmd.description"
               >
-                <div>
+                <div class="command-content">
                   <div class="quick-command-name">{{ cmd.name }}</div>
                   <div class="quick-command-text">{{ cmd.command }}</div>
+                  <div v-if="cmd.expected_response" class="quick-command-expected">
+                    期望: {{ cmd.expected_response }}
+                  </div>
                 </div>
-                <el-icon 
-                  class="delete-icon" 
-                  @click.stop="deleteCommand(cmd)"
-                  :title="`删除指令: ${cmd.name}`"
-                >
-                  <Delete />
-                </el-icon>
+                <div class="command-actions">
+                  <el-icon
+                    class="edit-icon"
+                    @click.stop="openEditCommand(cmd)"
+                    :title="`编辑指令: ${cmd.name}`"
+                  >
+                    <Edit />
+                  </el-icon>
+                  <el-icon
+                    class="delete-icon"
+                    @click.stop="deleteCommand(cmd)"
+                    :title="`删除指令: ${cmd.name}`"
+                  >
+                    <Delete />
+                  </el-icon>
+                </div>
               </div>
               
               <!-- 当没有常用指令时显示提示 -->
@@ -304,11 +316,67 @@
             show-word-limit
           />
         </el-form-item>
+        <el-form-item label="期望返回值">
+          <el-input
+            v-model="newCommand.expected_response"
+            placeholder="指令执行后的期望返回值（可选）"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="showAddCommand = false">取消</el-button>
           <el-button type="primary" @click="addNewCommand">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑指令对话框 -->
+    <el-dialog
+      v-model="showEditCommand"
+      title="编辑常用指令"
+      width="500px"
+      :before-close="handleCloseEditCommand"
+    >
+      <el-form :model="editCommand" label-width="80px">
+        <el-form-item label="指令名称" required>
+          <el-input
+            v-model="editCommand.name"
+            placeholder="例如: 查询版本"
+            maxlength="20"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="指令内容" required>
+          <el-input
+            v-model="editCommand.command"
+            placeholder="例如: AT+GMR"
+            style="font-family: monospace;"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="editCommand.description"
+            placeholder="指令说明（可选）"
+            maxlength="50"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="期望返回值">
+          <el-input
+            v-model="editCommand.expected_response"
+            placeholder="指令执行后的期望返回值（可选）"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="handleCloseEditCommand">取消</el-button>
+          <el-button type="primary" @click="updateCommand">确定</el-button>
         </div>
       </template>
     </el-dialog>
@@ -319,7 +387,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download } from '@element-plus/icons-vue'
+import { Delete, Download, Edit } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
@@ -338,6 +406,7 @@ const batchLoading = ref(false)
 const showHistory = ref(false)
 const showBatchSend = ref(false)
 const showAddCommand = ref(false)
+const showEditCommand = ref(false)
 const commandHistory = ref<string[]>([])
 const batchCommands = ref('')
 const batchDelay = ref(1000)
@@ -354,6 +423,16 @@ const newCommand = reactive({
   name: '',
   command: '',
   description: '',
+  expected_response: '',
+})
+
+// 编辑指令表单
+const editCommand = reactive({
+  id: '',
+  name: '',
+  command: '',
+  description: '',
+  expected_response: '',
 })
 
 const rawForm = reactive({
@@ -366,6 +445,7 @@ interface SavedCommand {
   name: string
   command: string
   description: string
+  expected_response: string
   createdAt: number
 }
 
@@ -512,6 +592,7 @@ const loadSavedCommands = async () => {
       name: cmd.name,
       command: cmd.command,
       description: cmd.description,
+      expected_response: cmd.expected_response,
       createdAt: cmd.created_at // API返回毫秒时间戳
     }))
   } catch (error) {
@@ -532,7 +613,8 @@ const addNewCommand = async () => {
     const createRequest: commandsAPI.CreateCommandRequest = {
       name: newCommand.name.trim(),
       command: newCommand.command.trim(),
-      description: newCommand.description.trim()
+      description: newCommand.description.trim(),
+      expected_response: newCommand.expected_response.trim()
     }
     
     const createdCommand = await commandsAPI.createCommand(createRequest)
@@ -543,6 +625,7 @@ const addNewCommand = async () => {
       name: createdCommand.name,
       command: createdCommand.command,
       description: createdCommand.description,
+      expected_response: createdCommand.expected_response,
       createdAt: createdCommand.created_at
     }
     
@@ -552,6 +635,7 @@ const addNewCommand = async () => {
     newCommand.name = ''
     newCommand.command = ''
     newCommand.description = ''
+    newCommand.expected_response = ''
     showAddCommand.value = false
     
     ElMessage.success('常用指令添加成功')
@@ -566,6 +650,7 @@ const handleCloseAddCommand = () => {
   newCommand.name = ''
   newCommand.command = ''
   newCommand.description = ''
+  newCommand.expected_response = ''
   showAddCommand.value = false
 }
 
@@ -594,9 +679,74 @@ const deleteCommand = async (cmd: SavedCommand) => {
   }
 }
 
+const openEditCommand = (cmd: SavedCommand) => {
+  // 填充编辑表单
+  editCommand.id = cmd.id
+  editCommand.name = cmd.name
+  editCommand.command = cmd.command
+  editCommand.description = cmd.description
+  editCommand.expected_response = cmd.expected_response
+  showEditCommand.value = true
+}
+
+const updateCommand = async () => {
+  if (!editCommand.name.trim() || !editCommand.command.trim()) {
+    ElMessage.error('请填写指令名称和内容')
+    return
+  }
+
+  try {
+    const updateRequest: commandsAPI.UpdateCommandRequest = {
+      name: editCommand.name.trim(),
+      command: editCommand.command.trim(),
+      description: editCommand.description.trim(),
+      expected_response: editCommand.expected_response.trim()
+    }
+
+    const updatedCommand = await commandsAPI.updateCommand(editCommand.id, updateRequest)
+
+    // 更新本地列表中的指令
+    const index = savedCommands.value.findIndex(c => c.id === editCommand.id)
+    if (index !== -1) {
+      savedCommands.value[index] = {
+        id: updatedCommand.id,
+        name: updatedCommand.name,
+        command: updatedCommand.command,
+        description: updatedCommand.description,
+        expected_response: updatedCommand.expected_response,
+        createdAt: updatedCommand.created_at
+      }
+    }
+
+    // 清空表单并关闭弹窗
+    editCommand.id = ''
+    editCommand.name = ''
+    editCommand.command = ''
+    editCommand.description = ''
+    editCommand.expected_response = ''
+    showEditCommand.value = false
+
+    ElMessage.success('常用指令修改成功')
+  } catch (error: any) {
+    console.error('Failed to update command:', error)
+    ElMessage.error(error.message || '修改指令失败')
+  }
+}
+
+const handleCloseEditCommand = () => {
+  // 清空表单
+  editCommand.id = ''
+  editCommand.name = ''
+  editCommand.command = ''
+  editCommand.description = ''
+  editCommand.expected_response = ''
+  showEditCommand.value = false
+}
+
 const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
   // 右键点击指令时，显示上下文菜单或执行特定操作
-
+  // TODO: 实现右键菜单功能，可以快速编辑或删除指令
+  console.log('Right click on command:', cmd.name)
 }
 
 const sendRawData = async () => {
@@ -1322,6 +1472,17 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+.command-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.command-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
 .quick-command-btn::before {
   content: '';
   position: absolute;
@@ -1385,26 +1546,59 @@ onMounted(async () => {
   transition: all 0.2s ease;
 }
 
+.quick-command-expected {
+  font-size: 12px;
+  color: #059669;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  padding: 6px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  border: 1px solid #a7f3d0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
 .quick-command-btn:hover .quick-command-text {
   background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
   border-color: #93c5fd;
   color: #1e40af;
 }
 
+.edit-icon,
 .delete-icon {
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  color: #ef4444;
   cursor: pointer;
   padding: 8px;
   border-radius: 12px;
   font-size: 16px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 1px solid transparent;
 }
 
+.edit-icon {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.delete-icon {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.quick-command-btn:hover .edit-icon,
 .quick-command-btn:hover .delete-icon {
   opacity: 1;
+}
+
+.edit-icon:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+  transform: scale(1.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 
 .delete-icon:hover {

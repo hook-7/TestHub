@@ -47,6 +47,7 @@ class Command(SQLModel, table=True):
     name: str = Field(description="指令名称", max_length=100)
     command: str = Field(description="指令内容", max_length=1000)
     description: str = Field(description="指令描述", max_length=500)
+    expected_response: str = Field(default="", description="期望返回值", max_length=1000)
     created_at: datetime = Field(
         default_factory=datetime.now,
         sa_column=Column(DateTime(timezone=True), server_default=func.now()),

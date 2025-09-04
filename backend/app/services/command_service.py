@@ -33,6 +33,7 @@ class CommandService:
             name=db_command.name,
             command=db_command.command,
             description=db_command.description,
+            expected_response=db_command.expected_response,
             created_at=db_command.created_at
         )
     
@@ -90,7 +91,8 @@ class CommandService:
                     id=str(uuid.uuid4()),
                     name=request.name.strip(),
                     command=request.command.strip(),
-                    description=request.description.strip()
+                    description=request.description.strip(),
+                    expected_response=request.expected_response.strip()
                 )
 
                 session.add(new_command)
@@ -139,6 +141,8 @@ class CommandService:
                     db_command.command = request.command.strip()
                 if request.description is not None:
                     db_command.description = request.description.strip()
+                if request.expected_response is not None:
+                    db_command.expected_response = request.expected_response.strip()
 
                 session.add(db_command)
                 session.commit()
