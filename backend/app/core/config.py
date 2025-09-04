@@ -66,8 +66,18 @@ class Settings(BaseSettings):
     
     @property
     def COMMANDS_FILE(self) -> Path:
-        """常用指令存储文件路径"""
+        """常用指令存储文件路径（向后兼容）"""
         return self.DATA_DIR / "saved_commands.json"
+
+    @property
+    def DATABASE_FILE(self) -> Path:
+        """SQLite数据库文件路径"""
+        return self.DATA_DIR / "commands.db"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        """数据库连接URL"""
+        return f"sqlite:///{self.DATABASE_FILE}"
     
     model_config = {
         "env_file": ".env",

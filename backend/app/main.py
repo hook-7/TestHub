@@ -28,6 +28,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
+
+    # 创建数据库表
+    from app.core.database import create_db_and_tables
+    try:
+        create_db_and_tables()
+        logger.info("Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise
+
     yield
     # Shutdown
     logger.info("Shutting down Industrial HMI")
