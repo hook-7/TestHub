@@ -146,14 +146,14 @@ class ConnectionManager:
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
             
-            except Exception as e:
-                logger.error(f"处理命令失败: {str(e)}")
-                error_msg = WSErrorMessage(
-                    error=f"处理命令失败: {str(e)}",
-                    code=500,
-                    timestamp=datetime.now().isoformat()
-                )
-                await self.send_personal_message(error_msg.model_dump(), websocket)
+        except Exception as e:
+            logger.error(f"处理命令失败: {str(e)}")
+            error_msg = WSErrorMessage(
+                error=f"处理命令失败: {str(e)}",
+                code=500,
+                timestamp=datetime.now().isoformat()
+            )
+            await self.send_personal_message(error_msg.model_dump(), websocket)
     
     async def handle_workflow_confirm(self, websocket: WebSocket, data: dict):
         """处理工作流确认响应"""

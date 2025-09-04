@@ -3,7 +3,7 @@ API v1 routes
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import serial, session, commands, health, workflow
+from app.api.v1.endpoints import serial, session, commands, health, workflow_simple as workflow
 from app.api.v1 import websocket
 
 api_router = APIRouter()

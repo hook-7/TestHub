@@ -171,3 +171,8 @@ class SerialService:
 
 # Global service instance
 serial_service = SerialService()
+
+
+def get_serial_service() -> SerialService:
+    """获取串口服务实例"""
+    return serial_service
