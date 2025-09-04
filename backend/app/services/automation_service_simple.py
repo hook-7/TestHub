@@ -1,16 +1,16 @@
 """
-自动化命令服务
+简化版自动化命令服务 (无外部依赖)
 """
 import asyncio
 import uuid
 import logging
+import time
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
-import subprocess
-import json
 
-from app.schemas.automation import (
+from app.schemas.automation_simple import (
     AutomationCommandRequest,
     AutomationCommandResponse, 
     CommandStatus,
@@ -22,8 +22,8 @@ from app.schemas.automation import (
 logger = logging.getLogger(__name__)
 
 
-class AutomationService:
-    """自动化命令服务"""
+class AutomationServiceSimple:
+    """简化版自动化命令服务"""
     
     def __init__(self):
         self.commands: Dict[str, AutomationCommandResponse] = {}
@@ -96,12 +96,7 @@ class AutomationService:
         self.commands[command_id] = command
         
         # 记录命令创建日志
-        logger.info(
-            f"自动化命令已创建 - 命令ID: {command_id}, "
-            f"类型: {request.command_type}, "
-            f"工位: {request.workstation_id}, "
-            f"操作员: {request.operator_id}"
-        )
+        print(f"📝 自动化命令已创建 - 命令ID: {command_id}, 类型: {request.command_type}")
         
         # 如果不需要确认，直接执行
         if not request.requires_confirmation:
@@ -122,18 +117,14 @@ class AutomationService:
             command.status = CommandStatus.CONFIRMED
             command.updated_at = datetime.now()
             
-            # 记录确认日志
-            logger.info(
-                f"命令已确认执行 - 命令ID: {confirmation.command_id}, "
-                f"备注: {confirmation.operator_notes}"
-            )
+            print(f"✅ 命令已确认执行 - 命令ID: {confirmation.command_id}")
             
             # 异步执行命令
             await self._execute_command_async(confirmation.command_id, None)
         else:
             command.status = CommandStatus.CANCELLED
             command.updated_at = datetime.now()
-            logger.info(f"命令已取消 - 命令ID: {confirmation.command_id}")
+            print(f"❌ 命令已取消 - 命令ID: {confirmation.command_id}")
         
         return command
     
@@ -143,51 +134,33 @@ class AutomationService:
         command.status = CommandStatus.EXECUTING
         command.updated_at = datetime.now()
         
+        print(f"⚡ 开始执行命令: {command_id}")
+        
         try:
-            # 在线程池中执行命令
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self.executor,
-                self._execute_command_sync,
-                command_id,
-                request
-            )
+            # 模拟命令执行
+            start_time = datetime.now()
+            await asyncio.sleep(2)  # 模拟执行时间
+            end_time = datetime.now()
+            
+            execution_time = (end_time - start_time).total_seconds()
             
             command.status = CommandStatus.SUCCESS
-            command.result = result
+            command.execution_time = execution_time
+            command.result = {
+                "success": True,
+                "output": f"命令执行成功",
+                "timestamp": end_time.isoformat()
+            }
+            
+            print(f"✅ 命令执行成功: {command_id}, 耗时: {execution_time:.2f}秒")
             
         except Exception as e:
             command.status = CommandStatus.FAILED
             command.error_message = str(e)
-            logger.error(f"命令执行失败 - 命令ID: {command_id}, 错误: {e}")
+            print(f"❌ 命令执行失败: {command_id} - {e}")
         
         finally:
             command.updated_at = datetime.now()
-    
-    def _execute_command_sync(self, command_id: str, request: Optional[AutomationCommandRequest]) -> Dict[str, Any]:
-        """同步执行命令的具体逻辑"""
-        start_time = datetime.now()
-        
-        try:
-            # 这里实现具体的命令执行逻辑
-            # 根据命令类型和参数执行不同的操作
-            
-            # 模拟命令执行
-            import time
-            time.sleep(2)  # 模拟执行时间
-            
-            execution_time = (datetime.now() - start_time).total_seconds()
-            
-            return {
-                "success": True,
-                "execution_time": execution_time,
-                "output": f"命令 {command_id} 执行成功",
-                "timestamp": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            raise Exception(f"命令执行失败: {e}, 耗时: {execution_time}秒")
     
     def get_command(self, command_id: str) -> Optional[AutomationCommandResponse]:
         """获取命令信息"""
@@ -205,7 +178,7 @@ class AutomationService:
         if status:
             commands = [cmd for cmd in commands if cmd.status == status]
         if command_type:
-            commands = [cmd for cmd in commands if hasattr(cmd, 'command_type') and cmd.command_type == command_type]
+            commands = [cmd for cmd in commands if hasattr(cmd, 'command_type')]
         
         # 排序 (按创建时间倒序)
         commands.sort(key=lambda x: x.created_at, reverse=True)
@@ -262,8 +235,6 @@ class AutomationService:
         for param_name, param_config in schema.items():
             if param_config.get("required", False) and param_name not in parameters:
                 raise ValueError(f"缺少必需参数: {param_name}")
-        
-        # 这里可以添加更详细的参数验证逻辑
     
     async def cancel_command(self, command_id: str) -> AutomationCommandResponse:
         """取消命令执行"""
@@ -277,9 +248,9 @@ class AutomationService:
         command.status = CommandStatus.CANCELLED
         command.updated_at = datetime.now()
         
-        logger.info(f"命令已取消 - 命令ID: {command_id}")
+        print(f"🚫 命令已取消 - 命令ID: {command_id}")
         return command
 
 
 # 全局实例
-automation_service = AutomationService()
+automation_service_simple = AutomationServiceSimple()

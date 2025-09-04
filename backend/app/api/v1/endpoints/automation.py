@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 import logging
 
-from ....schemas.automation import (
+from app.schemas.automation import (
     AutomationCommandRequest,
     AutomationCommandResponse,
     CommandConfirmationRequest,
@@ -14,8 +14,8 @@ from ....schemas.automation import (
     CommandStatus,
     CommandType
 )
-from ....services.automation_service import automation_service
-from ....core.response import APIResponse
+from app.services.automation_service import automation_service
+from app.core.response import APIResponse
 
 logger = logging.getLogger(__name__)
 
