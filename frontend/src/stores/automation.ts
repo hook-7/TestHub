@@ -40,12 +40,8 @@ export const useAutomationStore = defineStore('automation', () => {
   const loadTemplates = async () => {
     try {
       loading.value = true
-      const response = await AutomationAPI.getTemplates()
-      if (response.code === 0) {
-        templates.value = response.data || []
-      } else {
-        ElMessage.error(response.msg || '加载模板失败')
-      }
+      const data = await AutomationAPI.getTemplates()
+      templates.value = data || []
     } catch (error) {
       console.error('加载模板失败:', error)
       ElMessage.error('加载模板失败')
@@ -60,12 +56,8 @@ export const useAutomationStore = defineStore('automation', () => {
   const loadCommands = async (params?: CommandListParams) => {
     try {
       loading.value = true
-      const response = await AutomationAPI.getCommands(params)
-      if (response.code === 0) {
-        commands.value = response.data?.commands || []
-      } else {
-        ElMessage.error(response.msg || '加载命令列表失败')
-      }
+      const data = await AutomationAPI.getCommands(params)
+      commands.value = data?.commands || []
     } catch (error) {
       console.error('加载命令列表失败:', error)
       ElMessage.error('加载命令列表失败')
@@ -80,24 +72,18 @@ export const useAutomationStore = defineStore('automation', () => {
   const createCommand = async (request: AutomationCommandRequest): Promise<AutomationCommand | null> => {
     try {
       executing.value = true
-      const response = await AutomationAPI.createCommand(request)
-      if (response.code === 0) {
-        const command = response.data!
-        commands.value.unshift(command)
-        currentCommand.value = command
-        
-        ElMessage.success('命令创建成功')
-        
-        // 如果需要确认，显示确认弹窗
-        if (request.requires_confirmation && command.status === 'pending') {
-          await showConfirmationDialog(command)
-        }
-        
-        return command
-      } else {
-        ElMessage.error(response.msg || '创建命令失败')
-        return null
+      const command = await AutomationAPI.createCommand(request)
+      commands.value.unshift(command)
+      currentCommand.value = command
+      
+      ElMessage.success('命令创建成功')
+      
+      // 如果需要确认，显示确认弹窗
+      if (request.requires_confirmation && command.status === 'pending') {
+        await showConfirmationDialog(command)
       }
+      
+      return command
     } catch (error) {
       console.error('创建命令失败:', error)
       ElMessage.error('创建命令失败')
@@ -118,31 +104,25 @@ export const useAutomationStore = defineStore('automation', () => {
   ): Promise<AutomationCommand | null> => {
     try {
       executing.value = true
-      const response = await AutomationAPI.executeTemplateCommand(
+      const command = await AutomationAPI.executeTemplateCommand(
         templateId, 
         parameters, 
         operatorId, 
         workstationId
       )
       
-      if (response.code === 0) {
-        const command = response.data!
-        commands.value.unshift(command)
-        currentCommand.value = command
-        
-        ElMessage.success('命令创建成功')
-        
-        // 如果需要确认，显示确认弹窗
-        const template = templates.value.find(t => t.template_id === templateId)
-        if (template?.requires_confirmation && command.status === 'pending') {
-          await showConfirmationDialog(command)
-        }
-        
-        return command
-      } else {
-        ElMessage.error(response.msg || '执行模板命令失败')
-        return null
+      commands.value.unshift(command)
+      currentCommand.value = command
+      
+      ElMessage.success('命令创建成功')
+      
+      // 如果需要确认，显示确认弹窗
+      const template = templates.value.find(t => t.template_id === templateId)
+      if (template?.requires_confirmation && command.status === 'pending') {
+        await showConfirmationDialog(command)
       }
+      
+      return command
     } catch (error) {
       console.error('执行模板命令失败:', error)
       ElMessage.error('执行模板命令失败')
@@ -188,32 +168,28 @@ export const useAutomationStore = defineStore('automation', () => {
    */
   const confirmCommand = async (commandId: string, confirmed: boolean, notes?: string) => {
     try {
-      const response = await AutomationAPI.confirmCommand(commandId, {
+      const command = await AutomationAPI.confirmCommand(commandId, {
         command_id: commandId,
         confirmed,
         operator_notes: notes
       })
       
-      if (response.code === 0) {
-        // 更新本地命令状态
-        const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
-        if (index !== -1) {
-          commands.value[index] = response.data!
-        }
-        
-        if (currentCommand.value?.command_id === commandId) {
-          currentCommand.value = response.data!
-        }
-        
-        if (confirmed) {
-          ElMessage.success('命令已确认执行')
-          // 开始轮询检查执行状态
-          pollCommandStatus(commandId)
-        } else {
-          ElMessage.info('命令已取消')
-        }
+      // 更新本地命令状态
+      const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
+      if (index !== -1) {
+        commands.value[index] = command
+      }
+      
+      if (currentCommand.value?.command_id === commandId) {
+        currentCommand.value = command
+      }
+      
+      if (confirmed) {
+        ElMessage.success('命令已确认执行')
+        // 开始轮询检查执行状态
+        pollCommandStatus(commandId)
       } else {
-        ElMessage.error(response.msg || '确认命令失败')
+        ElMessage.info('命令已取消')
       }
     } catch (error) {
       console.error('确认命令失败:', error)
@@ -227,29 +203,26 @@ export const useAutomationStore = defineStore('automation', () => {
   const pollCommandStatus = async (commandId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await AutomationAPI.getCommand(commandId)
-        if (response.code === 0) {
-          const command = response.data!
+        const command = await AutomationAPI.getCommand(commandId)
+        
+        // 更新本地状态
+        const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
+        if (index !== -1) {
+          commands.value[index] = command
+        }
+        
+        if (currentCommand.value?.command_id === commandId) {
+          currentCommand.value = command
+        }
+        
+        // 如果命令完成，停止轮询
+        if (['success', 'failed', 'cancelled'].includes(command.status)) {
+          clearInterval(pollInterval)
           
-          // 更新本地状态
-          const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
-          if (index !== -1) {
-            commands.value[index] = command
-          }
-          
-          if (currentCommand.value?.command_id === commandId) {
-            currentCommand.value = command
-          }
-          
-          // 如果命令完成，停止轮询
-          if (['success', 'failed', 'cancelled'].includes(command.status)) {
-            clearInterval(pollInterval)
-            
-            if (command.status === 'success') {
-              ElMessage.success('命令执行成功')
-            } else if (command.status === 'failed') {
-              ElMessage.error(`命令执行失败: ${command.error_message}`)
-            }
+          if (command.status === 'success') {
+            ElMessage.success('命令执行成功')
+          } else if (command.status === 'failed') {
+            ElMessage.error(`命令执行失败: ${command.error_message}`)
           }
         }
       } catch (error) {
@@ -269,22 +242,19 @@ export const useAutomationStore = defineStore('automation', () => {
    */
   const cancelCommand = async (commandId: string) => {
     try {
-      const response = await AutomationAPI.cancelCommand(commandId)
-      if (response.code === 0) {
-        // 更新本地状态
-        const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
-        if (index !== -1) {
-          commands.value[index] = response.data!
-        }
-        
-        if (currentCommand.value?.command_id === commandId) {
-          currentCommand.value = response.data!
-        }
-        
-        ElMessage.success('命令已取消')
-      } else {
-        ElMessage.error(response.msg || '取消命令失败')
+      const command = await AutomationAPI.cancelCommand(commandId)
+      
+      // 更新本地状态
+      const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
+      if (index !== -1) {
+        commands.value[index] = command
       }
+      
+      if (currentCommand.value?.command_id === commandId) {
+        currentCommand.value = command
+      }
+      
+      ElMessage.success('命令已取消')
     } catch (error) {
       console.error('取消命令失败:', error)
       ElMessage.error('取消命令失败')
@@ -296,19 +266,16 @@ export const useAutomationStore = defineStore('automation', () => {
    */
   const refreshCommand = async (commandId: string) => {
     try {
-      const response = await AutomationAPI.getCommand(commandId)
-      if (response.code === 0) {
-        const command = response.data!
-        
-        // 更新本地状态
-        const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
-        if (index !== -1) {
-          commands.value[index] = command
-        }
-        
-        if (currentCommand.value?.command_id === commandId) {
-          currentCommand.value = command
-        }
+      const command = await AutomationAPI.getCommand(commandId)
+      
+      // 更新本地状态
+      const index = commands.value.findIndex(cmd => cmd.command_id === commandId)
+      if (index !== -1) {
+        commands.value[index] = command
+      }
+      
+      if (currentCommand.value?.command_id === commandId) {
+        currentCommand.value = command
       }
     } catch (error) {
       console.error('刷新命令状态失败:', error)

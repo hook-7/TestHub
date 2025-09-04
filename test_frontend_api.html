@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动化API测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+        .test-button {
+            background: #409EFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #66b1ff;
+        }
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #f0f9ff;
+            border: 1px solid #67c23a;
+            color: #67c23a;
+        }
+        .error {
+            background: #fef0f0;
+            border: 1px solid #f56c6c;
+            color: #f56c6c;
+        }
+        .loading {
+            background: #f4f4f5;
+            border: 1px solid #909399;
+            color: #909399;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 自动化命令API测试</h1>
+            <p>测试前后端API连接和功能</p>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 1. 获取命令模板</h3>
+            <button class="test-button" onclick="testGetTemplates()">获取模板列表</button>
+            <div id="templates-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🚀 2. 执行无需确认的命令</h3>
+            <button class="test-button" onclick="testExecuteImmediate()">执行清理缓存</button>
+            <div id="immediate-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>⚠️ 3. 执行需要确认的命令</h3>
+            <button class="test-button" onclick="testExecuteWithConfirm()">执行备份数据</button>
+            <div id="confirm-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 4. 获取命令列表</h3>
+            <button class="test-button" onclick="testGetCommands()">获取命令历史</button>
+            <div id="commands-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔧 5. 自定义命令测试</h3>
+            <input type="text" id="custom-command" placeholder="输入命令名称" style="padding: 8px; margin: 5px; width: 200px;">
+            <button class="test-button" onclick="testCustomCommand()">创建自定义命令</button>
+            <div id="custom-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000/api/v1/automation';
+        
+        // 显示结果的辅助函数
+        function showResult(elementId, content, type = 'loading') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.textContent = content;
+        }
+
+        // 通用API调用函数
+        async function apiCall(url, options = {}) {
+            try {
+                showResult(options.resultId, '正在请求...', 'loading');
+                
+                const response = await fetch(BASE_URL + url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 0) {
+                    showResult(options.resultId, JSON.stringify(data.data, null, 2), 'success');
+                    return data.data;
+                } else {
+                    showResult(options.resultId, `错误: ${data.msg}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showResult(options.resultId, `网络错误: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        // 测试获取模板列表
+        async function testGetTemplates() {
+            const templates = await apiCall('/templates', {
+                method: 'GET',
+                resultId: 'templates-result'
+            });
+            
+            if (templates) {
+                console.log('获取到模板:', templates);
+            }
+        }
+
+        // 测试立即执行命令
+        async function testExecuteImmediate() {
+            const command = await apiCall('/templates/clear_cache/execute', {
+                method: 'POST',
+                body: JSON.stringify({}),
+                resultId: 'immediate-result'
+            });
+            
+            if (command) {
+                console.log('命令已创建:', command);
+                // 如果命令正在执行，开始轮询状态
+                if (command.status === 'executing') {
+                    pollCommandStatus(command.command_id, 'immediate-result');
+                }
+            }
+        }
+
+        // 测试需要确认的命令
+        async function testExecuteWithConfirm() {
+            const command = await apiCall('/templates/backup_data/execute', {
+                method: 'POST',
+                body: JSON.stringify({
+                    backup_path: '/tmp/test_backup',
+                    include_logs: true
+                }),
+                resultId: 'confirm-result'
+            });
+            
+            if (command) {
+                console.log('命令已创建，等待确认:', command);
+                
+                if (command.status === 'pending') {
+                    // 模拟用户确认
+                    setTimeout(() => {
+                        confirmCommand(command.command_id, 'confirm-result');
+                    }, 2000);
+                }
+            }
+        }
+
+        // 确认命令执行
+        async function confirmCommand(commandId, resultId) {
+            const result = await apiCall(`/commands/${commandId}/confirm`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    command_id: commandId,
+                    confirmed: true,
+                    operator_notes: 'API测试自动确认'
+                }),
+                resultId: resultId
+            });
+            
+            if (result && result.status === 'executing') {
+                pollCommandStatus(commandId, resultId);
+            }
+        }
+
+        // 轮询命令状态
+        function pollCommandStatus(commandId, resultId) {
+            let pollCount = 0;
+            const maxPolls = 15; // 最多轮询15次 (30秒)
+            
+            const interval = setInterval(async () => {
+                pollCount++;
+                
+                const command = await apiCall(`/commands/${commandId}`, {
+                    method: 'GET',
+                    resultId: resultId
+                });
+                
+                if (command) {
+                    if (['success', 'failed', 'cancelled'].includes(command.status)) {
+                        clearInterval(interval);
+                        console.log('命令执行完成:', command);
+                    }
+                }
+                
+                if (pollCount >= maxPolls) {
+                    clearInterval(interval);
+                    showResult(resultId, '轮询超时，请手动刷新查看结果', 'error');
+                }
+            }, 2000);
+        }
+
+        // 测试获取命令列表
+        async function testGetCommands() {
+            await apiCall('/commands?page=1&page_size=5', {
+                method: 'GET',
+                resultId: 'commands-result'
+            });
+        }
+
+        // 测试自定义命令
+        async function testCustomCommand() {
+            const commandName = document.getElementById('custom-command').value;
+            if (!commandName) {
+                showResult('custom-result', '请输入命令名称', 'error');
+                return;
+            }
+
+            const command = await apiCall('/commands', {
+                method: 'POST',
+                body: JSON.stringify({
+                    command_name: commandName,
+                    command_type: 'system',
+                    priority: 'normal',
+                    requires_confirmation: false,
+                    description: 'API测试自定义命令',
+                    parameters: {},
+                    operator_id: 'API_TEST',
+                    workstation_id: 'WS_TEST'
+                }),
+                resultId: 'custom-result'
+            });
+            
+            if (command) {
+                console.log('自定义命令已创建:', command);
+            }
+        }
+
+        // 页面加载完成后自动测试连接
+        window.onload = function() {
+            console.log('🚀 自动化API测试页面已加载');
+            console.log('API基础URL:', BASE_URL);
+            
+            // 自动测试模板获取
+            setTimeout(() => {
+                testGetTemplates();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
