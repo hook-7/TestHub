@@ -207,8 +207,7 @@ async def websocket_status():
         "msg": "success",
         "data": {
             "active_connections": len(manager.active_connections),
-            "connected_clients": list(manager.active_connections.keys()),
-            "session_connections": manager.session_connections
+            "connected_clients": list(manager.active_connections.keys())
         }
     }
 

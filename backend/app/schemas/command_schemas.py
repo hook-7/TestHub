@@ -14,6 +14,7 @@ class SavedCommand(BaseModel):
     name: str = Field(..., description="指令显示名称")
     command: str = Field(..., description="实际指令内容")
     description: str = Field(default="", description="指令描述")
+    expected_response: str = Field(default="", description="期望返回值")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     
     @field_serializer('created_at')
@@ -31,6 +32,7 @@ class CreateCommandRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=50, description="指令显示名称")
     command: str = Field(..., min_length=1, max_length=200, description="实际指令内容")
     description: str = Field(default="", max_length=200, description="指令描述")
+    expected_response: str = Field(default="", max_length=1000, description="期望返回值")
 
 
 class UpdateCommandRequest(BaseModel):
@@ -38,6 +40,7 @@ class UpdateCommandRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50, description="指令显示名称")
     command: Optional[str] = Field(None, min_length=1, max_length=200, description="实际指令内容")
     description: Optional[str] = Field(None, max_length=200, description="指令描述")
+    expected_response: Optional[str] = Field(None, max_length=1000, description="期望返回值")
 
 
 class CommandsListResponse(BaseModel):
