@@ -29,5 +29,8 @@ def setup_logging():
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("fastapi").setLevel(logging.INFO)
     
+    # Suppress watchfiles verbose logging (file change detection)
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    
     logger = logging.getLogger(__name__)
     logger.info("Logging configured successfully")
