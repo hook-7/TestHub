@@ -92,7 +92,7 @@ export const useCommunicationStore = defineStore('communication', () => {
   const addLog = (log: Omit<CommunicationLog, 'id' | 'timestamp'>) => {
     const newLog: CommunicationLog = {
       ...log,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
       timestamp: Date.now(),
     }
     

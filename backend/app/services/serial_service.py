@@ -103,9 +103,9 @@ class SerialService:
             
             timestamp = time.time()
             
-            # 直接发送前端传来的指令，不做任何修改
+            if not command.endswith('\r\n'):
+                command = command + '\r\n'
             data = command.encode('utf-8')
-            
             # 使用智能读取方法，支持多种AT指令终止符
             terminators = [b'\r\nOK\r\n', b'\r\nERROR\r\n', b'\r\n', b'OK\r\n', b'ERROR\r\n']
             response = None
