@@ -11,6 +11,7 @@ export interface SavedCommand {
   description: string
   expected_response: string
   send_as_hex: boolean
+  show_notification: boolean
   created_at: number // 毫秒时间戳
 }
 
@@ -20,6 +21,7 @@ export interface CreateCommandRequest {
   description?: string
   expected_response?: string
   send_as_hex?: boolean
+  show_notification?: boolean
 }
 
 export interface UpdateCommandRequest {
@@ -28,6 +30,7 @@ export interface UpdateCommandRequest {
   description?: string
   expected_response?: string
   send_as_hex?: boolean
+  show_notification?: boolean
 }
 
 export interface CommandsListResponse {
