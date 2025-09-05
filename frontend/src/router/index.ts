@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import Login from '@/views/Login.vue'
 import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
+import Workflow from '@/views/Workflow.vue'
 import { useSessionStore } from '@/stores/session'
 
 const router = createRouter({
@@ -36,6 +37,15 @@ const router = createRouter({
       component: Communication,
       meta: { 
         title: 'AT指令交互',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/workflow',
+      name: 'Workflow',
+      component: Workflow,
+      meta: { 
+        title: '工作流管理',
         requiresAuth: true
       }
     }

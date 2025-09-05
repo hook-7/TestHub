@@ -216,7 +216,7 @@ async def websocket_status():
 
 
 @router.post("/send-message", response_model=APIResponse)
-async def send_message_to_user(message_request: SendMessageRequest):
+async def send_message_to_user(message_request: SendMessageRequest):# 做测试使用
     """
     向已登录用户发送WebSocket消息
 
