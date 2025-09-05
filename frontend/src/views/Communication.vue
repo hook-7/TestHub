@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <el-row :gutter="20">
+    <el-row :gutter="20" class="main-row">
       <!-- 左侧：AT指令操作面板 -->
       <el-col :span="12">
         <el-card class="command-card">
@@ -39,9 +39,10 @@
           </template>
 
           <!-- 指令输入区 -->
-          <el-form :model="commandForm" label-width="80px">
-            <el-form-item label="指令内容">
-              <el-input
+          <div class="form-section">
+            <el-form :model="commandForm" label-width="80px">
+              <el-form-item label="指令内容">
+                <el-input
                 v-model="commandForm.command"
                 placeholder="输入指令内容，例如: AT+GMR 或任何自定义指令"
                 style="font-family: monospace;"
@@ -84,8 +85,34 @@
             </el-form-item>
           </el-form>
 
+          <!-- 原始数据发送 -->
+          <el-divider>原始数据发送</el-divider>
+          <el-form :model="rawForm" label-width="80px">
+            <el-form-item label="十六进制">
+              <el-input
+                v-model="rawForm.data"
+                placeholder="输入十六进制数据，例如: 41 54 0D 0A (不区分大小写，可用空格分隔)"
+                style="font-family: monospace;"
+                @keyup.enter="sendRawData"
+                @input="formatHexInput"
+              >
+                <template #append>
+                  <el-button 
+                    type="primary" 
+                    @click="sendRawData"
+                    :disabled="!connectionStore.isConnected"
+                    :loading="rawLoading"
+                  >
+                    <el-icon><Position /></el-icon>
+                    发送
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+          </el-form>
+
           <!-- 常用指令快捷按钮 -->
-          <div style="margin-top: 20px;">
+          <div class="commands-section">
             <div class="command-header">
               <h4 class="command-title">常用指令</h4>
               <div class="command-actions">
@@ -202,32 +229,7 @@
               </div>
             </div>
           </el-collapse-transition>
-
-          <!-- 原始数据发送 -->
-          <el-divider>原始数据发送</el-divider>
-          <el-form :model="rawForm" label-width="80px">
-            <el-form-item label="十六进制">
-              <el-input
-                v-model="rawForm.data"
-                placeholder="输入十六进制数据，例如: 41 54 0D 0A (不区分大小写，可用空格分隔)"
-                style="font-family: monospace;"
-                @keyup.enter="sendRawData"
-                @input="formatHexInput"
-              >
-                <template #append>
-                  <el-button 
-                    type="primary" 
-                    @click="sendRawData"
-                    :disabled="!connectionStore.isConnected"
-                    :loading="rawLoading"
-                  >
-                    <el-icon><Position /></el-icon>
-                    发送
-                  </el-button>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-form>
+          </div>
         </el-card>
       </el-col>
 
@@ -901,7 +903,10 @@ onMounted(async () => {
 .page-container {
   padding: 20px;
   background: #ffffff;
-  min-height: calc(100vh - 70px);
+  height: calc(100vh - 70px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .status-bar {
@@ -996,13 +1001,26 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.main-row {
+  flex: 1;
+  height: 100%;
+  margin: 0 -10px;
+}
+
+.main-row .el-col {
+  height: 100%;
+  padding: 0 10px;
+}
+
 .command-card {
-  height: 600px;
+  height: 100%;
   background: #ffffff;
   border: 1px solid #e0e6ed;
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .command-card:hover {
@@ -1010,13 +1028,15 @@ onMounted(async () => {
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
 }
 
-.logs-card {
-  height: 600px;
+.log-card {
+  height: 100%;
   background: #ffffff;
   border: 1px solid #e0e6ed;
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .logs-card:hover {
@@ -1050,13 +1070,25 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.form-section {
+  flex-shrink: 0;
+  margin-bottom: 20px;
+}
+
+.commands-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .quick-commands {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 16px;
   min-height: 40px;
-  max-height: 200px;
+  flex: 1;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -1091,12 +1123,13 @@ onMounted(async () => {
 }
 
 .log-container {
-  height: 500px;
+  flex: 1;
   overflow-y: auto;
   padding: 16px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.05);
+  min-height: 0;
 }
 
 .log-item {
@@ -1186,12 +1219,27 @@ onMounted(async () => {
 
 
 /* Element Plus 组件样式覆盖 */
+:deep(.el-card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 :deep(.el-card__header) {
   background: #f8f9fa;
   border-bottom: 1px solid #e0e6ed;
   font-weight: 600;
   font-size: 16px;
   color: #2d3748;
+  flex-shrink: 0;
+}
+
+:deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 20px;
 }
 
 :deep(.el-button--primary) {
