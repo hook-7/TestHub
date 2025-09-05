@@ -10,6 +10,7 @@ export interface SavedCommand {
   command: string
   description: string
   expected_response: string
+  send_as_hex: boolean
   created_at: number // 毫秒时间戳
 }
 
@@ -18,6 +19,7 @@ export interface CreateCommandRequest {
   command: string
   description?: string
   expected_response?: string
+  send_as_hex?: boolean
 }
 
 export interface UpdateCommandRequest {
@@ -25,6 +27,7 @@ export interface UpdateCommandRequest {
   command?: string
   description?: string
   expected_response?: string
+  send_as_hex?: boolean
 }
 
 export interface CommandsListResponse {

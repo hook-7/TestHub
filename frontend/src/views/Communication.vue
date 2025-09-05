@@ -135,13 +135,18 @@
                 v-for="cmd in savedCommands"
                 :key="cmd.id"
                 class="quick-command-btn"
-                @click="sendQuickCommand(cmd.command)"
+                @click="sendQuickCommand(cmd)"
                 @contextmenu.prevent="handleCommandRightClick($event, cmd)"
                 :class="{ disabled: !connectionStore.isConnected }"
                 :title="cmd.description"
               >
                 <div class="command-content">
-                  <div class="quick-command-name">{{ cmd.name }}</div>
+                  <div class="quick-command-name">
+                    {{ cmd.name }}
+                    <el-tag v-if="cmd.send_as_hex" size="small" type="warning" style="margin-left: 8px;">
+                      16进制
+                    </el-tag>
+                  </div>
                   <div class="quick-command-text">{{ cmd.command }}</div>
                   <div v-if="cmd.expected_response" class="quick-command-expected">
                     期望: {{ cmd.expected_response }}
@@ -326,6 +331,12 @@
             show-word-limit
           />
         </el-form-item>
+        <el-form-item label="发送方式">
+          <el-radio-group v-model="newCommand.send_as_hex">
+            <el-radio :value="false">文本发送</el-radio>
+            <el-radio :value="true">16进制发送</el-radio>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -373,6 +384,12 @@
             maxlength="200"
             show-word-limit
           />
+        </el-form-item>
+        <el-form-item label="发送方式">
+          <el-radio-group v-model="editCommand.send_as_hex">
+            <el-radio :value="false">文本发送</el-radio>
+            <el-radio :value="true">16进制发送</el-radio>
+          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -426,6 +443,7 @@ const newCommand = reactive({
   command: '',
   description: '',
   expected_response: '',
+  send_as_hex: false,
 })
 
 // 编辑指令表单
@@ -435,6 +453,7 @@ const editCommand = reactive({
   command: '',
   description: '',
   expected_response: '',
+  send_as_hex: false,
 })
 
 const rawForm = reactive({
@@ -448,6 +467,7 @@ interface SavedCommand {
   command: string
   description: string
   expected_response: string
+  send_as_hex: boolean
   createdAt: number
 }
 
@@ -517,15 +537,23 @@ const clearCommandInput = () => {
   commandForm.command = ''
 }
 
-const sendQuickCommand = async (command: string) => {
+const sendQuickCommand = async (cmd: SavedCommand) => {
   // 应用用户设置的控制选项（自动添加终止符等）
   commandLoading.value = true
   try {
-    const formattedCommand = formatCommand(command)
-    await communicationStore.sendATCommand(formattedCommand)
-    ElMessage.success('指令发送成功')
+    if (cmd.send_as_hex) {
+      // 16进制发送
+      await communicationStore.sendRawData(cmd.command)
+      ElMessage.success('16进制指令发送成功')
+    } else {
+      // 文本发送
+      const formattedCommand = formatCommand(cmd.command)
+      await communicationStore.sendATCommand(formattedCommand)
+      ElMessage.success('指令发送成功')
+    }
+    
     // 同时更新输入框显示（显示原始指令，不显示终止符）
-    const cleanCommand = command.replace(/\r\n|\r|\n/g, '')
+    const cleanCommand = cmd.command.replace(/\r\n|\r|\n/g, '')
     commandForm.command = cleanCommand
     // 添加到历史记录
     addToHistory(cleanCommand)
@@ -595,6 +623,7 @@ const loadSavedCommands = async () => {
       command: cmd.command,
       description: cmd.description,
       expected_response: cmd.expected_response,
+      send_as_hex: cmd.send_as_hex,
       createdAt: cmd.created_at // API返回毫秒时间戳
     }))
   } catch (error) {
@@ -616,7 +645,8 @@ const addNewCommand = async () => {
       name: newCommand.name.trim(),
       command: newCommand.command.trim(),
       description: newCommand.description.trim(),
-      expected_response: newCommand.expected_response.trim()
+      expected_response: newCommand.expected_response.trim(),
+      send_as_hex: newCommand.send_as_hex
     }
     
     const createdCommand = await commandsAPI.createCommand(createRequest)
@@ -628,6 +658,7 @@ const addNewCommand = async () => {
       command: createdCommand.command,
       description: createdCommand.description,
       expected_response: createdCommand.expected_response,
+      send_as_hex: createdCommand.send_as_hex,
       createdAt: createdCommand.created_at
     }
     
@@ -638,6 +669,7 @@ const addNewCommand = async () => {
     newCommand.command = ''
     newCommand.description = ''
     newCommand.expected_response = ''
+    newCommand.send_as_hex = false
     showAddCommand.value = false
     
     ElMessage.success('常用指令添加成功')
@@ -653,6 +685,7 @@ const handleCloseAddCommand = () => {
   newCommand.command = ''
   newCommand.description = ''
   newCommand.expected_response = ''
+  newCommand.send_as_hex = false
   showAddCommand.value = false
 }
 
@@ -688,6 +721,7 @@ const openEditCommand = (cmd: SavedCommand) => {
   editCommand.command = cmd.command
   editCommand.description = cmd.description
   editCommand.expected_response = cmd.expected_response
+  editCommand.send_as_hex = cmd.send_as_hex
   showEditCommand.value = true
 }
 
@@ -702,7 +736,8 @@ const updateCommand = async () => {
       name: editCommand.name.trim(),
       command: editCommand.command.trim(),
       description: editCommand.description.trim(),
-      expected_response: editCommand.expected_response.trim()
+      expected_response: editCommand.expected_response.trim(),
+      send_as_hex: editCommand.send_as_hex
     }
 
     const updatedCommand = await commandsAPI.updateCommand(editCommand.id, updateRequest)
@@ -716,6 +751,7 @@ const updateCommand = async () => {
         command: updatedCommand.command,
         description: updatedCommand.description,
         expected_response: updatedCommand.expected_response,
+        send_as_hex: updatedCommand.send_as_hex,
         createdAt: updatedCommand.created_at
       }
     }
@@ -726,6 +762,7 @@ const updateCommand = async () => {
     editCommand.command = ''
     editCommand.description = ''
     editCommand.expected_response = ''
+    editCommand.send_as_hex = false
     showEditCommand.value = false
 
     ElMessage.success('常用指令修改成功')
@@ -742,6 +779,7 @@ const handleCloseEditCommand = () => {
   editCommand.command = ''
   editCommand.description = ''
   editCommand.expected_response = ''
+  editCommand.send_as_hex = false
   showEditCommand.value = false
 }
 
