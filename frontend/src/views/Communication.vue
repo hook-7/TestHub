@@ -128,6 +128,10 @@
                   <el-icon><List /></el-icon>
                   批量发送
                 </el-button>
+                <el-button size="small" @click="showWorkflowManager = !showWorkflowManager">
+                  <el-icon><Operation /></el-icon>
+                  流水作业
+                </el-button>
               </div>
             </div>
             <div class="quick-commands">
@@ -226,6 +230,72 @@
                   style="width: 120px; margin-left: 8px;"
                 />
                 <span style="margin-left: 4px; font-size: 12px; color: #666;">ms间隔</span>
+              </div>
+            </div>
+          </el-collapse-transition>
+
+          <!-- 流水作业管理 -->
+          <el-collapse-transition>
+            <div v-show="showWorkflowManager" style="margin-top: 16px;">
+              <div class="workflow-header">
+                <h4>流水作业管理</h4>
+                <el-button 
+                  type="primary" 
+                  size="small"
+                  @click="openCreateWorkflow"
+                >
+                  <el-icon><Plus /></el-icon>
+                  创建工作流
+                </el-button>
+              </div>
+              
+              <div class="workflow-list">
+                <div
+                  v-for="workflow in workflows"
+                  :key="workflow.id"
+                  class="workflow-item"
+                >
+                  <div class="workflow-info">
+                    <div class="workflow-name">{{ workflow.name }}</div>
+                    <div class="workflow-description">{{ workflow.description || '无描述' }}</div>
+                    <div class="workflow-steps-count">{{ workflow.steps.length }} 个步骤</div>
+                  </div>
+                  <div class="workflow-actions">
+                    <el-button
+                      size="small"
+                      type="success"
+                      @click="executeWorkflow(workflow)"
+                      :disabled="!connectionStore.isConnected"
+                      title="执行工作流"
+                    >
+                      <el-icon><VideoPlay /></el-icon>
+                      执行
+                    </el-button>
+                    <el-button
+                      size="small"
+                      @click="openEditWorkflow(workflow)"
+                      title="编辑工作流"
+                    >
+                      <el-icon><Edit /></el-icon>
+                      编辑
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="deleteWorkflow(workflow)"
+                      title="删除工作流"
+                    >
+                      <el-icon><Delete /></el-icon>
+                      删除
+                    </el-button>
+                  </div>
+                </div>
+                
+                <div v-if="workflows.length === 0" class="no-workflows-hint">
+                  <el-text type="info" size="small">
+                    暂无工作流，点击"创建工作流"来创建您的第一个流水作业
+                  </el-text>
+                </div>
               </div>
             </div>
           </el-collapse-transition>
@@ -382,6 +452,349 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 创建工作流对话框 -->
+    <el-dialog
+      v-model="showCreateWorkflow"
+      title="创建流水作业"
+      width="800px"
+    >
+      <el-form :model="newWorkflow" label-width="80px">
+        <el-form-item label="名称" required>
+          <el-input
+            v-model="newWorkflow.name"
+            placeholder="请输入工作流名称"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="newWorkflow.description"
+            type="textarea"
+            placeholder="请输入工作流描述（可选）"
+            maxlength="500"
+            show-word-limit
+            :rows="2"
+          />
+        </el-form-item>
+        <el-form-item label="步骤">
+          <div class="workflow-steps">
+            <div
+              v-for="(step, index) in newWorkflow.steps"
+              :key="index"
+              class="workflow-step"
+            >
+              <div class="step-header">
+                <span class="step-number">步骤 {{ step.step_order }}</span>
+                <div class="step-actions">
+                  <el-button
+                    size="small"
+                    @click="moveStepUp(index, false)"
+                    :disabled="index === 0"
+                    title="上移"
+                  >
+                    <el-icon><ArrowUp /></el-icon>
+                  </el-button>
+                  <el-button
+                    size="small"
+                    @click="moveStepDown(index, false)"
+                    :disabled="index === newWorkflow.steps.length - 1"
+                    title="下移"
+                  >
+                    <el-icon><ArrowDown /></el-icon>
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    @click="removeWorkflowStep(index, false)"
+                    title="删除"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="指令" size="small">
+                    <el-select
+                      v-model="step.command_id"
+                      placeholder="选择指令"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="cmd in savedCommands"
+                        :key="cmd.id"
+                        :label="`${cmd.name} (${cmd.command})`"
+                        :value="cmd.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="延迟(ms)" size="small">
+                    <el-input-number
+                      v-model="step.delay_ms"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="重试次数" size="small">
+                    <el-input-number
+                      v-model="step.retry_count"
+                      :min="0"
+                      :max="10"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="超时(ms)" size="small">
+                    <el-input-number
+                      v-model="step.timeout_ms"
+                      :min="100"
+                      :max="60000"
+                      :step="100"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+            <el-button
+              type="dashed"
+              @click="addWorkflowStep(false)"
+              style="width: 100%; margin-top: 16px;"
+            >
+              <el-icon><Plus /></el-icon>
+              添加步骤
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showCreateWorkflow = false">取消</el-button>
+          <el-button type="primary" @click="createWorkflow">创建</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑工作流对话框 -->
+    <el-dialog
+      v-model="showEditWorkflow"
+      title="编辑流水作业"
+      width="800px"
+    >
+      <el-form :model="editWorkflow" label-width="80px">
+        <el-form-item label="名称" required>
+          <el-input
+            v-model="editWorkflow.name"
+            placeholder="请输入工作流名称"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="editWorkflow.description"
+            type="textarea"
+            placeholder="请输入工作流描述（可选）"
+            maxlength="500"
+            show-word-limit
+            :rows="2"
+          />
+        </el-form-item>
+        <el-form-item label="步骤">
+          <div class="workflow-steps">
+            <div
+              v-for="(step, index) in editWorkflow.steps"
+              :key="index"
+              class="workflow-step"
+            >
+              <div class="step-header">
+                <span class="step-number">步骤 {{ step.step_order }}</span>
+                <div class="step-actions">
+                  <el-button
+                    size="small"
+                    @click="moveStepUp(index, true)"
+                    :disabled="index === 0"
+                    title="上移"
+                  >
+                    <el-icon><ArrowUp /></el-icon>
+                  </el-button>
+                  <el-button
+                    size="small"
+                    @click="moveStepDown(index, true)"
+                    :disabled="index === editWorkflow.steps.length - 1"
+                    title="下移"
+                  >
+                    <el-icon><ArrowDown /></el-icon>
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    @click="removeWorkflowStep(index, true)"
+                    title="删除"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="指令" size="small">
+                    <el-select
+                      v-model="step.command_id"
+                      placeholder="选择指令"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="cmd in savedCommands"
+                        :key="cmd.id"
+                        :label="`${cmd.name} (${cmd.command})`"
+                        :value="cmd.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="延迟(ms)" size="small">
+                    <el-input-number
+                      v-model="step.delay_ms"
+                      :min="0"
+                      :max="60000"
+                      :step="100"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="重试次数" size="small">
+                    <el-input-number
+                      v-model="step.retry_count"
+                      :min="0"
+                      :max="10"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="4">
+                  <el-form-item label="超时(ms)" size="small">
+                    <el-input-number
+                      v-model="step.timeout_ms"
+                      :min="100"
+                      :max="60000"
+                      :step="100"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+            <el-button
+              type="dashed"
+              @click="addWorkflowStep(true)"
+              style="width: 100%; margin-top: 16px;"
+            >
+              <el-icon><Plus /></el-icon>
+              添加步骤
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showEditWorkflow = false">取消</el-button>
+          <el-button type="primary" @click="updateWorkflowData">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 执行状态对话框 -->
+    <el-dialog
+      v-model="showExecutionStatus"
+      title="工作流执行状态"
+      width="800px"
+      :before-close="closeExecutionStatus"
+    >
+      <div v-if="currentExecution" class="execution-status">
+        <div class="execution-header">
+          <h3>{{ currentExecution.workflow_name }}</h3>
+          <el-tag 
+            :type="currentExecution.status === 'completed' ? 'success' : 
+                   currentExecution.status === 'failed' ? 'danger' :
+                   currentExecution.status === 'running' ? 'warning' : 'info'"
+          >
+            {{ currentExecution.status === 'pending' ? '准备中' :
+               currentExecution.status === 'running' ? '执行中' :
+               currentExecution.status === 'completed' ? '已完成' :
+               currentExecution.status === 'failed' ? '执行失败' :
+               currentExecution.status === 'cancelled' ? '已取消' : currentExecution.status }}
+          </el-tag>
+        </div>
+        
+        <div class="execution-progress">
+          <el-progress
+            :percentage="getExecutionProgress()"
+            :status="currentExecution.status === 'completed' ? 'success' : 
+                     currentExecution.status === 'failed' ? 'exception' : undefined"
+          />
+          <div class="progress-text">
+            {{ currentExecution.completed_steps }} / {{ currentExecution.total_steps }} 步骤已完成
+          </div>
+        </div>
+
+        <div v-if="currentExecution.error_message" class="error-message">
+          <el-alert
+            :title="currentExecution.error_message"
+            type="error"
+            :closable="false"
+          />
+        </div>
+
+        <div class="execution-steps">
+          <h4>执行详情</h4>
+          <div
+            v-for="step in currentExecution.steps"
+            :key="step.id"
+            class="execution-step"
+          >
+            <div class="step-info">
+              <el-tag
+                size="small"
+                :type="getStepStatusColor(step.status)"
+              >
+                步骤 {{ step.step_order }}
+              </el-tag>
+              <span class="step-command">{{ step.command_name }}: {{ step.command_content }}</span>
+            </div>
+            <div v-if="step.response_received" class="step-response">
+              <strong>响应:</strong> {{ step.response_received }}
+            </div>
+            <div v-if="step.error_message" class="step-error">
+              <strong>错误:</strong> {{ step.error_message }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button
+            v-if="currentExecution && ['pending', 'running'].includes(currentExecution.status)"
+            type="danger"
+            @click="cancelWorkflowExecution"
+          >
+            取消执行
+          </el-button>
+          <el-button @click="closeExecutionStatus">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -389,12 +802,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Edit } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Delete, Download, Edit, Operation, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
 import type { CommunicationLog } from '@/stores/communication'
 import * as commandsAPI from '@/api/commands'
+import * as workflowsAPI from '@/api/workflows'
+import type { BatchWorkflow, WorkflowExecutionStatus } from '@/api/workflows'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
@@ -409,6 +824,10 @@ const showHistory = ref(false)
 const showBatchSend = ref(false)
 const showAddCommand = ref(false)
 const showEditCommand = ref(false)
+const showWorkflowManager = ref(false)
+const showCreateWorkflow = ref(false)
+const showEditWorkflow = ref(false)
+const showExecutionStatus = ref(false)
 const commandHistory = ref<string[]>([])
 const batchCommands = ref('')
 const batchDelay = ref(1000)
@@ -453,6 +872,38 @@ interface SavedCommand {
 
 // 保存的指令列表
 const savedCommands = ref<SavedCommand[]>([])
+
+// 工作流相关数据
+const workflows = ref<BatchWorkflow[]>([])
+const currentExecution = ref<WorkflowExecutionStatus | null>(null)
+const executionTimer = ref<number | null>(null)
+
+// 新建工作流表单
+const newWorkflow = reactive({
+  name: '',
+  description: '',
+  steps: [] as Array<{
+    command_id: string
+    step_order: number
+    delay_ms: number
+    retry_count: number
+    timeout_ms: number
+  }>
+})
+
+// 编辑工作流表单
+const editWorkflow = reactive({
+  id: '',
+  name: '',
+  description: '',
+  steps: [] as Array<{
+    command_id: string
+    step_order: number
+    delay_ms: number
+    retry_count: number
+    timeout_ms: number
+  }>
+})
 
 // 常用指令现在完全由用户自定义
 
@@ -866,6 +1317,285 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
+// 工作流相关方法
+const loadWorkflows = async () => {
+  try {
+    const response = await workflowsAPI.getAllWorkflows()
+    workflows.value = response.workflows
+  } catch (error: any) {
+    console.error('Failed to load workflows:', error)
+    ElMessage.error('加载工作流失败')
+  }
+}
+
+const openCreateWorkflow = () => {
+  // 重置表单
+  newWorkflow.name = ''
+  newWorkflow.description = ''
+  newWorkflow.steps = []
+  showCreateWorkflow.value = true
+}
+
+const openEditWorkflow = (workflow: BatchWorkflow) => {
+  editWorkflow.id = workflow.id
+  editWorkflow.name = workflow.name
+  editWorkflow.description = workflow.description
+  editWorkflow.steps = workflow.steps.map(step => ({
+    command_id: step.command_id,
+    step_order: step.step_order,
+    delay_ms: step.delay_ms,
+    retry_count: step.retry_count,
+    timeout_ms: step.timeout_ms
+  }))
+  showEditWorkflow.value = true
+}
+
+const addWorkflowStep = (isEdit = false) => {
+  const steps = isEdit ? editWorkflow.steps : newWorkflow.steps
+  const newOrder = steps.length > 0 ? Math.max(...steps.map(s => s.step_order)) + 1 : 1
+  
+  steps.push({
+    command_id: '',
+    step_order: newOrder,
+    delay_ms: 1000,
+    retry_count: 0,
+    timeout_ms: 5000
+  })
+}
+
+const removeWorkflowStep = (index: number, isEdit = false) => {
+  const steps = isEdit ? editWorkflow.steps : newWorkflow.steps
+  steps.splice(index, 1)
+  // 重新排序
+  steps.forEach((step, idx) => {
+    step.step_order = idx + 1
+  })
+}
+
+const moveStepUp = (index: number, isEdit = false) => {
+  const steps = isEdit ? editWorkflow.steps : newWorkflow.steps
+  if (index > 0) {
+    [steps[index], steps[index - 1]] = [steps[index - 1], steps[index]]
+    // 重新排序
+    steps.forEach((step, idx) => {
+      step.step_order = idx + 1
+    })
+  }
+}
+
+const moveStepDown = (index: number, isEdit = false) => {
+  const steps = isEdit ? editWorkflow.steps : newWorkflow.steps
+  if (index < steps.length - 1) {
+    [steps[index], steps[index + 1]] = [steps[index + 1], steps[index]]
+    // 重新排序
+    steps.forEach((step, idx) => {
+      step.step_order = idx + 1
+    })
+  }
+}
+
+const createWorkflow = async () => {
+  try {
+    if (!newWorkflow.name.trim()) {
+      ElMessage.error('请输入工作流名称')
+      return
+    }
+    
+    if (newWorkflow.steps.length === 0) {
+      ElMessage.error('请添加至少一个步骤')
+      return
+    }
+    
+    // 验证所有步骤都有选择指令
+    for (const step of newWorkflow.steps) {
+      if (!step.command_id) {
+        ElMessage.error(`步骤 ${step.step_order} 未选择指令`)
+        return
+      }
+    }
+    
+    const request = {
+      name: newWorkflow.name.trim(),
+      description: newWorkflow.description.trim(),
+      steps: newWorkflow.steps
+    }
+    
+    await workflowsAPI.createWorkflow(request)
+    await loadWorkflows()
+    
+    showCreateWorkflow.value = false
+    ElMessage.success('工作流创建成功')
+  } catch (error: any) {
+    console.error('Failed to create workflow:', error)
+    ElMessage.error(error.message || '创建工作流失败')
+  }
+}
+
+const updateWorkflowData = async () => {
+  try {
+    if (!editWorkflow.name.trim()) {
+      ElMessage.error('请输入工作流名称')
+      return
+    }
+    
+    if (editWorkflow.steps.length === 0) {
+      ElMessage.error('请添加至少一个步骤')
+      return
+    }
+    
+    // 验证所有步骤都有选择指令
+    for (const step of editWorkflow.steps) {
+      if (!step.command_id) {
+        ElMessage.error(`步骤 ${step.step_order} 未选择指令`)
+        return
+      }
+    }
+    
+    const request = {
+      name: editWorkflow.name.trim(),
+      description: editWorkflow.description.trim(),
+      steps: editWorkflow.steps
+    }
+    
+    await workflowsAPI.updateWorkflow(editWorkflow.id, request)
+    await loadWorkflows()
+    
+    showEditWorkflow.value = false
+    ElMessage.success('工作流更新成功')
+  } catch (error: any) {
+    console.error('Failed to update workflow:', error)
+    ElMessage.error(error.message || '更新工作流失败')
+  }
+}
+
+const deleteWorkflow = async (workflow: BatchWorkflow) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除工作流 "${workflow.name}" 吗？此操作不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    await workflowsAPI.deleteWorkflow(workflow.id)
+    await loadWorkflows()
+    
+    ElMessage.success('工作流删除成功')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('Failed to delete workflow:', error)
+      ElMessage.error(error.message || '删除工作流失败')
+    }
+  }
+}
+
+const executeWorkflow = async (workflow: BatchWorkflow) => {
+  try {
+    if (!connectionStore.isConnected) {
+      ElMessage.error('请先连接串口')
+      return
+    }
+    
+    const response = await workflowsAPI.executeWorkflow({
+      workflow_id: workflow.id
+    })
+    
+    currentExecution.value = {
+      id: response.execution_id,
+      workflow_id: response.workflow_id,
+      workflow_name: response.workflow_name,
+      status: response.status,
+      started_at: undefined,
+      finished_at: undefined,
+      total_steps: response.total_steps,
+      completed_steps: 0,
+      error_message: undefined,
+      created_at: Date.now(),
+      steps: []
+    }
+    
+    showExecutionStatus.value = true
+    
+    // 开始轮询执行状态
+    startExecutionPolling(response.execution_id)
+    
+    ElMessage.success('工作流执行已启动')
+  } catch (error: any) {
+    console.error('Failed to execute workflow:', error)
+    ElMessage.error(error.message || '执行工作流失败')
+  }
+}
+
+const startExecutionPolling = (executionId: string) => {
+  if (executionTimer.value) {
+    clearInterval(executionTimer.value)
+  }
+  
+  executionTimer.value = setInterval(async () => {
+    try {
+      const status = await workflowsAPI.getExecutionStatus(executionId)
+      currentExecution.value = status
+      
+      // 如果执行完成或失败，停止轮询
+      if (['completed', 'failed', 'cancelled'].includes(status.status)) {
+        if (executionTimer.value) {
+          clearInterval(executionTimer.value)
+          executionTimer.value = null
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get execution status:', error)
+      // 继续轮询，可能是临时网络问题
+    }
+  }, 1000)
+}
+
+const cancelWorkflowExecution = async () => {
+  try {
+    if (!currentExecution.value) return
+    
+    await workflowsAPI.cancelExecution(currentExecution.value.id)
+    
+    if (executionTimer.value) {
+      clearInterval(executionTimer.value)
+      executionTimer.value = null
+    }
+    
+    ElMessage.success('工作流执行已取消')
+  } catch (error: any) {
+    console.error('Failed to cancel execution:', error)
+    ElMessage.error(error.message || '取消执行失败')
+  }
+}
+
+const closeExecutionStatus = () => {
+  showExecutionStatus.value = false
+  currentExecution.value = null
+  
+  if (executionTimer.value) {
+    clearInterval(executionTimer.value)
+    executionTimer.value = null
+  }
+}
+
+const getStepStatusColor = (status: string) => {
+  switch (status) {
+    case 'completed': return 'success'
+    case 'failed': return 'danger'
+    case 'running': return 'warning'
+    case 'pending': return 'info'
+    default: return 'info'
+  }
+}
+
+const getExecutionProgress = () => {
+  if (!currentExecution.value) return 0
+  return (currentExecution.value.completed_steps / currentExecution.value.total_steps) * 100
+}
+
 // 生命周期
 onMounted(async () => {
   // 初始化会话管理
@@ -886,6 +1616,9 @@ onMounted(async () => {
   
   // 加载保存的指令
   await loadSavedCommands()
+  
+  // 加载工作流
+  await loadWorkflows()
   
   // 初始化WebSocket连接
   try {
@@ -1730,6 +2463,196 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+/* 工作流管理样式 */
+.workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.workflow-header h4 {
+  margin: 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.workflow-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.workflow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.workflow-item:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+}
+
+.workflow-info {
+  flex: 1;
+  margin-right: 16px;
+}
+
+.workflow-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.workflow-description {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.workflow-steps-count {
+  font-size: 12px;
+  color: #67c23a;
+}
+
+.workflow-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.no-workflows-hint {
+  text-align: center;
+  padding: 32px;
+  color: #909399;
+}
+
+/* 工作流步骤样式 */
+.workflow-steps {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.workflow-step {
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.workflow-step:last-child {
+  margin-bottom: 0;
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.step-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.step-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 执行状态样式 */
+.execution-status {
+  padding: 16px 0;
+}
+
+.execution-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.execution-header h3 {
+  margin: 0;
+  color: #303133;
+}
+
+.execution-progress {
+  margin-bottom: 24px;
+}
+
+.progress-text {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.error-message {
+  margin-bottom: 24px;
+}
+
+.execution-steps {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.execution-steps h4 {
+  margin: 0 0 16px 0;
+  color: #303133;
+  font-size: 16px;
+}
+
+.execution-step {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #e4e7ed;
+}
+
+.step-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.step-command {
+  font-size: 14px;
+  color: #303133;
+}
+
+.step-response,
+.step-error {
+  font-size: 12px;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.step-response {
+  background: #f0f9ff;
+  color: #1d4ed8;
+}
+
+.step-error {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
 

@@ -56,3 +56,87 @@ class Command(SQLModel, table=True):
 
     class Config:
         from_attributes = True
+
+
+class BatchWorkflow(SQLModel, table=True):
+    """批量作业工作流模型"""
+    __tablename__ = "batch_workflows"
+
+    id: Optional[str] = Field(default=None, primary_key=True, description="工作流ID")
+    name: str = Field(description="工作流名称", max_length=100)
+    description: str = Field(default="", description="工作流描述", max_length=500)
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowStep(SQLModel, table=True):
+    """工作流步骤模型"""
+    __tablename__ = "workflow_steps"
+
+    id: Optional[str] = Field(default=None, primary_key=True, description="步骤ID")
+    workflow_id: str = Field(description="所属工作流ID", foreign_key="batch_workflows.id")
+    command_id: str = Field(description="关联的指令ID", foreign_key="commands.id")
+    step_order: int = Field(description="执行顺序", ge=1)
+    delay_ms: int = Field(default=1000, description="执行后延迟时间(毫秒)", ge=0)
+    retry_count: int = Field(default=0, description="重试次数", ge=0)
+    timeout_ms: int = Field(default=5000, description="超时时间(毫秒)", ge=100)
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowExecution(SQLModel, table=True):
+    """工作流执行记录模型"""
+    __tablename__ = "workflow_executions"
+
+    id: Optional[str] = Field(default=None, primary_key=True, description="执行记录ID")
+    workflow_id: str = Field(description="工作流ID", foreign_key="batch_workflows.id")
+    status: str = Field(description="执行状态", default="pending")  # pending, running, completed, failed, cancelled
+    started_at: Optional[datetime] = Field(default=None, description="开始时间")
+    finished_at: Optional[datetime] = Field(default=None, description="结束时间")
+    total_steps: int = Field(description="总步骤数", ge=0)
+    completed_steps: int = Field(default=0, description="已完成步骤数", ge=0)
+    error_message: Optional[str] = Field(default=None, description="错误信息", max_length=1000)
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
+
+    class Config:
+        from_attributes = True
+
+
+class StepExecution(SQLModel, table=True):
+    """步骤执行记录模型"""
+    __tablename__ = "step_executions"
+
+    id: Optional[str] = Field(default=None, primary_key=True, description="步骤执行ID")
+    workflow_execution_id: str = Field(description="工作流执行ID", foreign_key="workflow_executions.id")
+    step_id: str = Field(description="步骤ID", foreign_key="workflow_steps.id")
+    status: str = Field(description="执行状态", default="pending")  # pending, running, completed, failed, skipped
+    started_at: Optional[datetime] = Field(default=None, description="开始时间")
+    finished_at: Optional[datetime] = Field(default=None, description="结束时间")
+    command_sent: Optional[str] = Field(default=None, description="发送的指令", max_length=1000)
+    response_received: Optional[str] = Field(default=None, description="接收的响应", max_length=2000)
+    retry_attempt: int = Field(default=0, description="重试次数", ge=0)
+    error_message: Optional[str] = Field(default=None, description="错误信息", max_length=1000)
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
+
+    class Config:
+        from_attributes = True
