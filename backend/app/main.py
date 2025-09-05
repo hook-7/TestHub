@@ -137,7 +137,19 @@ if frontend_dist.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
     logger.info(f"Serving frontend from: {frontend_dist}")
 else:
-    logger.warning(f"Frontend dist directory not found: {frontend_dist}")
+    # 尝试从打包程序同级目录的 dist 文件夹中查找
+    import sys
+    if getattr(sys, 'frozen', False):
+        # 打包环境：从可执行文件同级的 dist 目录查找
+        executable_dir = Path(sys.executable).parent
+        frontend_dist_fallback = executable_dir / "dist"
+        if frontend_dist_fallback.exists():
+            app.mount("/", StaticFiles(directory=str(frontend_dist_fallback), html=True), name="frontend")
+            logger.info(f"Serving frontend from fallback location: {frontend_dist_fallback}")
+        else:
+            logger.warning(f"Frontend dist directory not found in fallback location: {frontend_dist_fallback}")
+    else:
+        logger.warning(f"Frontend dist directory not found: {frontend_dist}")
 
 
 
