@@ -12,7 +12,8 @@ export enum WSMessageType {
   ERROR = 'error', 
   INFO = 'info',
   CONNECT = 'connect',
-  DISCONNECT = 'disconnect'
+  DISCONNECT = 'disconnect',
+  AUTO_AT = "auto_at"
 }
 
 // WebSocket消息接口
