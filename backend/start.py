@@ -26,12 +26,21 @@ if __name__ == "__main__":
     
     # Detect if running as PyInstaller executable
     is_packaged = getattr(sys, 'frozen', False)
-    
-    uvicorn.run(
-        app,  # Use imported app object instead of string
+    if is_packaged:
+        uvicorn.run(
+        app,  
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.DEBUG and not is_packaged,  # Disable reload for packaged app
+        reload=False,  
         log_level="info" if not settings.DEBUG else "debug",
         access_log=True,
     )
+    else:
+        uvicorn.run(
+            "app.main:app",  
+            host=settings.HOST,
+            port=settings.PORT,
+            reload=settings.DEBUG,  
+            log_level="info" if not settings.DEBUG else "debug",
+            access_log=True,
+        )
