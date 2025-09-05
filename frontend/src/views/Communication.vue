@@ -337,6 +337,11 @@
             <el-radio :value="true">16进制发送</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="通知设置">
+          <el-checkbox v-model="newCommand.show_notification">
+            执行后弹出通知
+          </el-checkbox>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -391,6 +396,11 @@
             <el-radio :value="true">16进制发送</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="通知设置">
+          <el-checkbox v-model="editCommand.show_notification">
+            执行后弹出通知
+          </el-checkbox>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -444,6 +454,7 @@ const newCommand = reactive({
   description: '',
   expected_response: '',
   send_as_hex: false,
+  show_notification: false,
 })
 
 // 编辑指令表单
@@ -454,6 +465,7 @@ const editCommand = reactive({
   description: '',
   expected_response: '',
   send_as_hex: false,
+  show_notification: false,
 })
 
 const rawForm = reactive({
@@ -468,6 +480,7 @@ interface SavedCommand {
   description: string
   expected_response: string
   send_as_hex: boolean
+  show_notification: boolean
   createdAt: number
 }
 
@@ -624,6 +637,7 @@ const loadSavedCommands = async () => {
       description: cmd.description,
       expected_response: cmd.expected_response,
       send_as_hex: cmd.send_as_hex,
+      show_notification: cmd.show_notification,
       createdAt: cmd.created_at // API返回毫秒时间戳
     }))
   } catch (error) {
@@ -646,7 +660,8 @@ const addNewCommand = async () => {
       command: newCommand.command.trim(),
       description: newCommand.description.trim(),
       expected_response: newCommand.expected_response.trim(),
-      send_as_hex: newCommand.send_as_hex
+      send_as_hex: newCommand.send_as_hex,
+      show_notification: newCommand.show_notification
     }
     
     const createdCommand = await commandsAPI.createCommand(createRequest)
@@ -659,6 +674,7 @@ const addNewCommand = async () => {
       description: createdCommand.description,
       expected_response: createdCommand.expected_response,
       send_as_hex: createdCommand.send_as_hex,
+      show_notification: createdCommand.show_notification,
       createdAt: createdCommand.created_at
     }
     
@@ -670,6 +686,7 @@ const addNewCommand = async () => {
     newCommand.description = ''
     newCommand.expected_response = ''
     newCommand.send_as_hex = false
+    newCommand.show_notification = false
     showAddCommand.value = false
     
     ElMessage.success('常用指令添加成功')
@@ -686,6 +703,7 @@ const handleCloseAddCommand = () => {
   newCommand.description = ''
   newCommand.expected_response = ''
   newCommand.send_as_hex = false
+  newCommand.show_notification = true
   showAddCommand.value = false
 }
 
@@ -722,6 +740,7 @@ const openEditCommand = (cmd: SavedCommand) => {
   editCommand.description = cmd.description
   editCommand.expected_response = cmd.expected_response
   editCommand.send_as_hex = cmd.send_as_hex
+  editCommand.show_notification = cmd.show_notification
   showEditCommand.value = true
 }
 
@@ -737,7 +756,8 @@ const updateCommand = async () => {
       command: editCommand.command.trim(),
       description: editCommand.description.trim(),
       expected_response: editCommand.expected_response.trim(),
-      send_as_hex: editCommand.send_as_hex
+      send_as_hex: editCommand.send_as_hex,
+      show_notification: editCommand.show_notification
     }
 
     const updatedCommand = await commandsAPI.updateCommand(editCommand.id, updateRequest)
@@ -752,6 +772,7 @@ const updateCommand = async () => {
         description: updatedCommand.description,
         expected_response: updatedCommand.expected_response,
         send_as_hex: updatedCommand.send_as_hex,
+        show_notification: updatedCommand.show_notification,
         createdAt: updatedCommand.created_at
       }
     }
@@ -763,6 +784,7 @@ const updateCommand = async () => {
     editCommand.description = ''
     editCommand.expected_response = ''
     editCommand.send_as_hex = false
+    editCommand.show_notification = false
     showEditCommand.value = false
 
     ElMessage.success('常用指令修改成功')
@@ -780,6 +802,7 @@ const handleCloseEditCommand = () => {
   editCommand.description = ''
   editCommand.expected_response = ''
   editCommand.send_as_hex = false
+  editCommand.show_notification = true
   showEditCommand.value = false
 }
 
