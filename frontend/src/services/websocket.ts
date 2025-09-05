@@ -13,7 +13,8 @@ export enum WSMessageType {
   INFO = 'info',
   CONNECT = 'connect',
   DISCONNECT = 'disconnect',
-  AUTO_AT = "auto_at"
+  AUTO_AT = "auto_at",
+  NOTIFICATION = "notification"
 }
 
 // WebSocket消息接口
@@ -39,6 +40,16 @@ export interface WSErrorMessage {
   timestamp: string
 }
 
+export interface WSNotificationMessage {
+  type: WSMessageType.NOTIFICATION
+  title: string
+  message: string
+  level: 'info' | 'warning' | 'error' | 'success'
+  requireConfirm: boolean
+  timestamp: string
+  id?: string
+}
+
 // WebSocket客户端类
 export class WebSocketClient {
   private ws: WebSocket | null = null
@@ -51,7 +62,7 @@ export class WebSocketClient {
   private isManualDisconnect = false
 
   // 事件回调
-  private onMessageCallback?: (message: WSResponseMessage | WSErrorMessage) => void
+  private onMessageCallback?: (message: WSResponseMessage | WSErrorMessage | WSNotificationMessage) => void
   private onConnectionChangeCallback?: (connected: boolean) => void
 
   constructor(clientId?: string) {
@@ -260,7 +271,7 @@ export class WebSocketClient {
   /**
    * 设置消息回调
    */
-  onMessage(callback: (message: WSResponseMessage | WSErrorMessage) => void) {
+  onMessage(callback: (message: WSResponseMessage | WSErrorMessage | WSNotificationMessage) => void) {
     this.onMessageCallback = callback
   }
 

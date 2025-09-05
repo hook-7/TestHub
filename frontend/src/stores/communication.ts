@@ -4,7 +4,7 @@ import type { RawDataResponse } from '@/api/serial'
 import { serialAPI } from '@/api/serial'
 import { ElMessage } from 'element-plus'
 import { WebSocketClient, WSMessageType } from '@/services/websocket'
-import type { WSResponseMessage, WSErrorMessage } from '@/services/websocket'
+import type { WSResponseMessage, WSErrorMessage, WSNotificationMessage } from '@/services/websocket'
 
 export interface CommunicationLog {
   id: string
@@ -25,6 +25,10 @@ export const useCommunicationStore = defineStore('communication', () => {
   const wsClient = ref<WebSocketClient | null>(null)
   const wsConnected = ref(false)
 
+  // 通知对话框状态
+  const showNotificationDialog = ref(false)
+  const currentNotification = ref<WSNotificationMessage | null>(null)
+
   // 计算属性
   const logCount = computed(() => logs.value.length)
   const isRealTimeConnected = computed(() => wsConnected.value)
@@ -37,7 +41,7 @@ export const useCommunicationStore = defineStore('communication', () => {
       wsClient.value = new WebSocketClient()
       
       // 设置消息回调
-      wsClient.value.onMessage((message: WSResponseMessage | WSErrorMessage) => {
+      wsClient.value.onMessage((message: WSResponseMessage | WSErrorMessage | WSNotificationMessage) => {
         handleWebSocketMessage(message)
       })
 
@@ -67,8 +71,28 @@ export const useCommunicationStore = defineStore('communication', () => {
   }
 
   // 处理WebSocket消息
-  const handleWebSocketMessage = (message: WSResponseMessage | WSErrorMessage) => {
+  const handleWebSocketMessage = (message: WSResponseMessage | WSErrorMessage | WSNotificationMessage) => {
     const isError = message.type === WSMessageType.ERROR
+
+    // 处理通知消息
+    if (message.type === WSMessageType.NOTIFICATION) {
+      const notificationMsg = message as WSNotificationMessage
+      
+      // 记录通知日志
+      addLog({
+        type: 'at',
+        direction: 'received',
+        description: `系统通知: ${notificationMsg.title}`,
+        data: notificationMsg.message,
+        success: notificationMsg.level !== 'error'
+      })
+
+      // 显示通知对话框
+      currentNotification.value = notificationMsg
+      showNotificationDialog.value = true
+
+      return
+    }
 
     if (message.type === WSMessageType.AUTO_AT) {
       addLog({
@@ -105,6 +129,39 @@ export const useCommunicationStore = defineStore('communication', () => {
       wsClient.value = null
       wsConnected.value = false
     }
+  }
+
+  // 处理通知确认
+  const handleNotificationConfirm = (notification: WSNotificationMessage) => {
+    // 记录用户确认日志
+    addLog({
+      type: 'at',
+      direction: 'sent',
+      description: `用户确认通知: ${notification.title}`,
+      data: `已确认消息: ${notification.message}`,
+      success: true
+    })
+
+    // 如果需要，可以发送确认消息到后端
+    if (wsClient.value && wsClient.value.isConnected() && notification.id) {
+      const confirmMessage = {
+        type: 'notification_confirm',
+        notification_id: notification.id,
+        timestamp: new Date().toISOString()
+      }
+      
+      try {
+        wsClient.value.sendCommand('NOTIFICATION_CONFIRM', [JSON.stringify(confirmMessage)])
+      } catch (error) {
+        console.error('发送通知确认失败:', error)
+      }
+    }
+  }
+
+  // 关闭通知对话框
+  const closeNotificationDialog = () => {
+    showNotificationDialog.value = false
+    currentNotification.value = null
   }
   
   // 操作
@@ -210,6 +267,8 @@ export const useCommunicationStore = defineStore('communication', () => {
     logs,
     maxLogs,
     wsConnected,
+    showNotificationDialog,
+    currentNotification,
     
     // 计算属性
     logCount,
@@ -221,6 +280,8 @@ export const useCommunicationStore = defineStore('communication', () => {
     sendATCommand,
     sendRawData,
     initializeWebSocket,
-    disconnectWebSocket
+    disconnectWebSocket,
+    handleNotificationConfirm,
+    closeNotificationDialog
   }
 })

@@ -382,6 +382,14 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 通知对话框 -->
+    <NotificationDialog
+      v-model="communicationStore.showNotificationDialog"
+      :notification="communicationStore.currentNotification"
+      @confirm="handleNotificationConfirm"
+      @close="handleNotificationClose"
+    />
   </div>
 </template>
 
@@ -394,7 +402,9 @@ import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { useSessionStore } from '@/stores/session'
 import type { CommunicationLog } from '@/stores/communication'
+import type { WSNotificationMessage } from '@/services/websocket'
 import * as commandsAPI from '@/api/commands'
+import NotificationDialog from '@/components/NotificationDialog.vue'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
@@ -896,6 +906,15 @@ onMounted(async () => {
   }
 })
 
+// 通知处理方法
+const handleNotificationConfirm = (notification: WSNotificationMessage) => {
+  communicationStore.handleNotificationConfirm(notification)
+  communicationStore.closeNotificationDialog()
+}
+
+const handleNotificationClose = () => {
+  communicationStore.closeNotificationDialog()
+}
 
 </script>
 
