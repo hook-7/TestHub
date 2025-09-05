@@ -34,6 +34,8 @@ class CommandService:
             command=db_command.command,
             description=db_command.description,
             expected_response=db_command.expected_response,
+            send_as_hex=db_command.send_as_hex,
+            show_notification=db_command.show_notification,
             created_at=db_command.created_at
         )
     
@@ -92,7 +94,9 @@ class CommandService:
                     name=request.name.strip(),
                     command=request.command.strip(),
                     description=request.description.strip(),
-                    expected_response=request.expected_response.strip()
+                    expected_response=request.expected_response.strip(),
+                    send_as_hex=request.send_as_hex,
+                    show_notification=request.show_notification
                 )
 
                 session.add(new_command)
@@ -143,6 +147,10 @@ class CommandService:
                     db_command.description = request.description.strip()
                 if request.expected_response is not None:
                     db_command.expected_response = request.expected_response.strip()
+                if request.send_as_hex is not None:
+                    db_command.send_as_hex = request.send_as_hex
+                if request.show_notification is not None:
+                    db_command.show_notification = request.show_notification
 
                 session.add(db_command)
                 session.commit()
