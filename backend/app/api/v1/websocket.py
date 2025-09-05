@@ -15,6 +15,7 @@ from app.schemas.websocket import (
     WSCommandMessage, 
     WSResponseMessage, 
     WSErrorMessage, 
+    WSNotificationMessage,
     WSMessageType,
     SendMessageRequest,
     SendMessageResponse
@@ -90,6 +91,21 @@ class ConnectionManager:
         for client_id in disconnected_clients:
             self.disconnect(client_id)
     
+    async def send_notification(self, title: str, message: str, level: str = "info", 
+                               require_confirm: bool = False, notification_id: str = None):
+        """发送通知消息给所有连接的客户端"""
+        notification = WSNotificationMessage(
+            title=title,
+            message=message,
+            level=level,
+            requireConfirm=require_confirm,
+            timestamp=datetime.now().isoformat(),
+            id=notification_id
+        )
+        
+        await self.broadcast(notification.model_dump())
+        logger.info(f"发送通知消息: {title} - {message}")
+
     async def handle_command(self, websocket: WebSocket, data: dict):
         """处理命令消息"""
         try:
@@ -113,9 +129,29 @@ class ConnectionManager:
                 await self.send_personal_message(error_msg.model_dump(), websocket)
                 return
             
+            # 处理通知确认命令
+            if command_text == "NOTIFICATION_CONFIRM":
+                args = data.get("args", [])
+                if args:
+                    try:
+                        confirm_data = json.loads(args[0])
+                        notification_id = confirm_data.get("notification_id")
+                        logger.info(f"收到通知确认: {notification_id}")
+                        
+                        # 发送确认响应
+                        response_msg = WSResponseMessage(
+                            type=WSMessageType.RESPONSE,
+                            message=f"通知确认已收到: {notification_id}",
+                            timestamp=datetime.now().isoformat(),
+                            success=True
+                        )
+                        await self.send_personal_message(response_msg.model_dump(), websocket)
+                        return
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.error(f"解析通知确认数据失败: {e}")
+            
             # 执行AT指令通过串口服务
             try:
-
                 # 直接发送完整的指令字符串到串口
                 result = await serial_service.send_at_command(command_text)
                 
@@ -213,6 +249,54 @@ async def websocket_status():
 
 
 
+
+
+@router.post("/send-notification", response_model=APIResponse)
+async def send_notification_to_users(
+    title: str,
+    message: str,
+    level: str = "info",
+    require_confirm: bool = False,
+    notification_id: str = None
+):
+    """
+    向所有连接的用户发送通知消息
+
+    Args:
+        title: 通知标题
+        message: 通知内容
+        level: 通知级别 (info, warning, error, success)
+        require_confirm: 是否需要用户确认
+        notification_id: 通知ID（可选）
+
+    Returns:
+        APIResponse: 操作结果
+    """
+    try:
+        # 检查是否有活跃连接
+        if not manager.active_connections:
+            return APIResponse.error(code=404, msg="没有活跃的WebSocket连接")
+
+        # 发送通知消息
+        await manager.send_notification(
+            title=title,
+            message=message,
+            level=level,
+            require_confirm=require_confirm,
+            notification_id=notification_id
+        )
+        
+        return APIResponse.success(
+            data={
+                "sent_to_clients": len(manager.active_connections),
+                "notification_id": notification_id
+            },
+            msg="通知消息发送成功"
+        )
+    
+    except Exception as e:
+        logger.error(f"发送通知消息失败: {str(e)}")
+        return APIResponse.error(code=500, msg=f"发送通知失败: {str(e)}")
 
 
 @router.post("/send-message", response_model=APIResponse)

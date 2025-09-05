@@ -2,7 +2,15 @@
 
 ## 功能概述
 
-新增的通知消息功能允许后端通过 WebSocket 向前端发送需要用户确认的通知消息。这些消息会以对话框的形式显示，用户可以选择确认或关闭。
+基于现有的WebSocket架构，新增的通知消息功能允许后端通过 WebSocket 向前端发送需要用户确认的通知消息。这些消息会以对话框的形式显示，用户可以选择确认或关闭。
+
+## 架构说明
+
+该功能完全集成在现有的FastAPI + WebSocket架构中：
+
+- **后端**: 扩展了现有的 `ConnectionManager` 类和WebSocket路由
+- **前端**: 扩展了现有的 `handleWebSocketMessage` 函数和通信日志系统
+- **消息格式**: 遵循现有的WebSocket消息规范
 
 ## 消息类型
 
@@ -74,25 +82,37 @@ if (message.type === WSMessageType.NOTIFICATION) {
 
 ## 后端发送示例
 
-### Python WebSocket 发送
+### 方式1: 通过ConnectionManager直接发送
 
 ```python
-import json
-from datetime import datetime
+from app.api.v1.websocket import manager
 
-# 创建通知消息
-notification = {
-    "type": "notification",
-    "title": "设备警告",
-    "message": "检测到温度异常，请检查散热系统",
-    "level": "warning",
-    "requireConfirm": True,
-    "timestamp": datetime.now().isoformat(),
-    "id": "warning_001"
-}
+# 发送通知消息
+await manager.send_notification(
+    title="设备警告",
+    message="检测到温度异常，请检查散热系统",
+    level="warning",
+    require_confirm=True,
+    notification_id="warning_001"
+)
+```
 
-# 发送到WebSocket客户端
-await websocket.send(json.dumps(notification))
+### 方式2: 通过REST API发送
+
+```python
+import requests
+
+# 通过API发送通知
+response = requests.post(
+    "http://localhost:8000/api/v1/ws/send-notification",
+    params={
+        "title": "设备警告",
+        "message": "检测到温度异常，请检查散热系统",
+        "level": "warning",
+        "require_confirm": True,
+        "notification_id": "warning_001"
+    }
+)
 ```
 
 ### 不同类型的通知示例

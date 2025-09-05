@@ -25,6 +25,7 @@ class WSMessageType(str, Enum):
     CONNECT = "connect"
     DISCONNECT = "disconnect"
     AUTO_AT = "auto_at"
+    NOTIFICATION = "notification"
 
 
 class WSCommandMessage(BaseModel):
@@ -50,6 +51,17 @@ class WSErrorMessage(BaseModel):
     error: str
     code: int = 500
     timestamp: str
+
+
+class WSNotificationMessage(BaseModel):
+    """WebSocket通知消息"""
+    type: WSMessageType = WSMessageType.NOTIFICATION
+    title: str
+    message: str
+    level: str = "info"  # info, warning, error, success
+    requireConfirm: bool = False
+    timestamp: str
+    id: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):
