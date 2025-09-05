@@ -69,7 +69,25 @@ export const useCommunicationStore = defineStore('communication', () => {
   // 处理WebSocket消息
   const handleWebSocketMessage = (message: WSResponseMessage | WSErrorMessage) => {
     const isError = message.type === WSMessageType.ERROR
-    
+
+    if (message.type === WSMessageType.AUTO_AT) {
+      addLog({
+        type: 'at',
+        direction: 'sent',
+        description: isError ? '命令执行错误' : '命令执行结果',
+        data: (message as WSResponseMessage).message,
+        success: !isError
+      })
+      addLog({
+        type: 'at',
+        direction: 'received',
+        description: isError ? '命令执行错误' : '命令执行结果',
+        data: (message as WSResponseMessage).data?.received_data || "空回复或未回复",
+        success: !isError
+      })
+      return
+    }
+
     addLog({
       type: 'at',
       direction: 'received',
@@ -77,6 +95,7 @@ export const useCommunicationStore = defineStore('communication', () => {
       data: isError ? (message as WSErrorMessage).error : (message as WSResponseMessage).message,
       success: !isError
     })
+
   }
 
   // 断开WebSocket

@@ -193,6 +193,9 @@ export const useSessionStore = defineStore('session', () => {
       try {
         const result = await sessionAPI.sendHeartbeat()
         lastHeartbeat.value = new Date()
+        if (!result.active) {
+          await logout()
+        }
 
       } catch (error: any) {
         console.error('Heartbeat failed:', error)
@@ -209,8 +212,11 @@ export const useSessionStore = defineStore('session', () => {
     setTimeout(async () => {
       if (isLoggedIn.value) {
         try {
-          await sessionAPI.sendHeartbeat()
+          const result = await sessionAPI.sendHeartbeat()
           lastHeartbeat.value = new Date()
+          if (!result.active) {
+            await logout()
+          }
         } catch (error) {
           console.error('Initial heartbeat failed:', error)
         }

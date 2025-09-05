@@ -24,6 +24,7 @@ class WSMessageType(str, Enum):
     INFO = "info"
     CONNECT = "connect"
     DISCONNECT = "disconnect"
+    AUTO_AT = "auto_at"
 
 
 class WSCommandMessage(BaseModel):
