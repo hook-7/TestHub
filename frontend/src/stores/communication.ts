@@ -82,7 +82,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'received',
         description: isError ? '命令执行错误' : '命令执行结果',
-        data: (message as WSResponseMessage).data?.received_data || "空回复或未回复",
+        data: (message as WSResponseMessage).data?.received_data,
         success: !isError
       })
       return
