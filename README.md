@@ -6,6 +6,7 @@
 
 - 后端: FastAPI + Python
 - 前端: Vue3 + Element Plus + Vite
+- 数据库: PostgreSQL
 - 包管理: uv
 - 通信协议: AT指令 (串口通信)
 
@@ -21,26 +22,11 @@
 - 通信日志记录和导出
 - 现代化Web界面
 
-## 支持的AT指令
-
-系统预置了常用的AT指令快捷按钮：
-
-- `AT` - 测试连接
-- `AT+GMR` - 查询固件版本
-- `AT+CGMI` - 查询制造商
-- `AT+CGMM` - 查询模块型号
-- `AT+CGMR` - 查询软件版本
-- `AT+CGSN` - 查询IMEI
-- `AT+CIMI` - 查询IMSI
-- `AT+CCID` - 查询ICCID
-- `AT+CSQ` - 查询信号强度
-- `AT+CREG?` - 查询网络注册状态
-- `AT+CGATT?` - 查询GPRS附着状态
-- `AT+COPS?` - 查询运营商
 
 ## 环境要求
 
-- Python 3.8+
+- Python 3.9+
+- PostgreSQL 12+
 - uv (Python包管理器)
 - Node.js 16+ (仅开发模式需要)
 
@@ -48,9 +34,47 @@
 - Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Windows: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
 
+**安装PostgreSQL:**
+- Ubuntu/Debian: `sudo apt-get install postgresql postgresql-contrib`
+- CentOS/RHEL: `sudo yum install postgresql-server postgresql-contrib`
+- Windows: 下载并安装 [PostgreSQL官方安装包](https://www.postgresql.org/download/windows/)
+- macOS: `brew install postgresql`
+
 ## 快速开始
 
-### 跨平台启动 (推荐)
+### 1. 数据库配置
+
+首先需要创建PostgreSQL数据库：
+
+```sql
+-- 连接到PostgreSQL
+psql -U postgres
+
+-- 创建数据库
+CREATE DATABASE testhub;
+
+-- 创建用户（可选，也可以使用默认的postgres用户）
+CREATE USER testhub_user WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE testhub TO testhub_user;
+```
+
+### 2. 环境配置
+
+创建 `.env` 文件并配置数据库连接：
+
+```bash
+# 数据库配置
+HMI_DB_HOST=localhost
+HMI_DB_PORT=5432
+HMI_DB_NAME=testhub
+HMI_DB_USER=postgres
+HMI_DB_PASSWORD=postgres
+HMI_DB_ECHO=false
+
+# 其他配置...
+```
+
+### 3. 跨平台启动 (推荐)
 
 项目提供了Python启动脚本，支持Windows和Linux：
 

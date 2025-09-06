@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
+    # Database settings - 数据库配置
+    DB_HOST: str = Field(default="localhost", description="数据库主机")
+    DB_PORT: int = Field(default=5432, ge=1, le=65535, description="数据库端口")
+    DB_NAME: str = Field(default="testhub", description="数据库名称")
+    DB_USER: str = Field(default="postgres", description="数据库用户名")
+    DB_PASSWORD: str = Field(default="postgres", description="数据库密码")
+    DB_ECHO: bool = Field(default=False, description="是否显示SQL语句")
+    
     # Data storage settings - 数据存储配置
     @property
     def DATA_DIR(self) -> Path:
@@ -65,14 +73,9 @@ class Settings(BaseSettings):
         return data_dir
 
     @property
-    def DATABASE_FILE(self) -> Path:
-        """SQLite数据库文件路径"""
-        return self.DATA_DIR / "commands.db"
-
-    @property
     def DATABASE_URL(self) -> str:
         """数据库连接URL"""
-        return f"sqlite:///{self.DATABASE_FILE}"
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     model_config = {
         "env_file": ".env",
