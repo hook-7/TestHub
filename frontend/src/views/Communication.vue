@@ -746,7 +746,7 @@ const loadSavedCommands = async () => {
         expected_response: 'AT version:1.0.0',
         send_as_hex: false,
         show_notification: false,
-        target_serial_id: 2, // 指定串口2
+        target_serial_id: 2, // 指定串口2（演示：如果串口2不存在会复用ID）
         createdAt: Date.now()
       },
       {

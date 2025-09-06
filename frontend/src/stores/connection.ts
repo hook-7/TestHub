@@ -33,7 +33,7 @@ export const useConnectionStore = defineStore('connection', () => {
       }
     } catch (error) {
       console.error('Failed to check connection status:', error)
-      // 添加模拟数据用于演示多串口功能
+      // 添加模拟数据用于演示多串口功能和ID复用
       status.value = {
         connected_serials: [
           {
@@ -47,8 +47,8 @@ export const useConnectionStore = defineStore('connection', () => {
             is_connected: true
           },
           {
-            serial_id: 2,
-            port: '/dev/ttyUSB1',
+            serial_id: 3, // 演示ID复用：假设串口2已断开，这是后来连接的
+            port: '/dev/ttyUSB2',
             baudrate: 9600,
             bytesize: 8,
             parity: 'N',
@@ -129,11 +129,23 @@ export const useConnectionStore = defineStore('connection', () => {
       return response
     } catch (error) {
       console.error('Failed to connect:', error)
-      // 模拟连接成功响应
+      // 模拟连接成功响应 - 复用最小可用ID（从1开始）
+      const getNextSerialId = () => {
+        const usedIds = connectedSerials.value.map(s => s.serial_id)
+        // 从1开始寻找第一个未使用的ID
+        for (let id = 1; id <= usedIds.length + 1; id++) {
+          if (!usedIds.includes(id)) {
+            return id
+          }
+        }
+        return usedIds.length + 1
+      }
+      
+      const newSerialId = getNextSerialId()
       const mockResponse = {
-        serial_id: Math.max(...connectedSerials.value.map(s => s.serial_id), 0) + 1,
+        serial_id: newSerialId,
         port: config.port,
-        message: `串口连接成功，分配ID: ${Math.max(...connectedSerials.value.map(s => s.serial_id), 0) + 1}`
+        message: `串口连接成功，分配ID: ${newSerialId}`
       }
       
       // 添加到模拟连接列表

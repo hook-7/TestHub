@@ -23,7 +23,6 @@ class SerialDriver:
         self.port_configs: Dict[int, Dict[str, Any]] = {}  # serial_id -> config
         self.connected_ports: Dict[int, str] = {}  # serial_id -> port_path
         self.executor = ThreadPoolExecutor(max_workers=4)  # 支持多个串口并发
-        self._next_serial_id = 1  # 下一个可用的串口ID
         
         # 默认配置模板
         self.default_config = {
@@ -35,10 +34,19 @@ class SerialDriver:
         }
     
     def get_next_serial_id(self) -> int:
-        """获取下一个可用的串口ID（按连接顺序递增）"""
-        serial_id = self._next_serial_id
-        self._next_serial_id += 1
-        return serial_id
+        """获取下一个可用的串口ID（从1开始，复用断开的ID）"""
+        # 如果没有连接，从1开始
+        if not self.connections:
+            return 1
+            
+        # 寻找最小的未使用ID，从1开始
+        used_ids = set(self.connections.keys())
+        for serial_id in range(1, max(used_ids) + 2):
+            if serial_id not in used_ids:
+                return serial_id
+        
+        # 理论上不会到达这里，但为了安全起见
+        return max(used_ids) + 1
     
     def get_connected_serials(self) -> List[Dict[str, Any]]:
         """获取所有已连接串口的信息"""
