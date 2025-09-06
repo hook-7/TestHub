@@ -1,5 +1,19 @@
 <template>
   <div class="page-container">
+    <!-- 多串口功能提示 -->
+    <el-alert
+      title="多串口支持"
+      type="info"
+      :closable="false"
+      style="margin-bottom: 20px;"
+    >
+      <template #default>
+        <p>✨ 支持同时连接多个串口设备，每个串口分配唯一ID (按连接顺序递增)</p>
+        <p>🔗 可以为常用指令指定特定的目标串口，或使用当前选择的串口</p>
+        <p>📊 通信日志会显示每个操作关联的串口信息</p>
+      </template>
+    </el-alert>
+
     <!-- 串口配置卡片 -->
     <el-card>
       <template #header>
@@ -40,7 +54,7 @@
               @focus="loadPorts"
             >
               <el-option
-                v-for="port in connectionStore.availablePorts"
+                v-for="port in availableUnconnectedPorts"
                 :key="port.device"
                 :label="`${port.device} - ${port.description}`"
                 :value="port.device"
@@ -52,6 +66,12 @@
                   </span>
                 </div>
               </el-option>
+              <el-option
+                v-if="availableUnconnectedPorts.length === 0"
+                disabled
+                label="暂无可用串口 (所有串口已连接或无串口设备)"
+                value=""
+              />
             </el-select>
           </el-form-item>
           
@@ -123,11 +143,10 @@
               type="primary" 
               @click="connect"
               :loading="connecting"
-              :disabled="connectionStore.isConnected"
               size="large"
             >
               <el-icon><Connection /></el-icon>
-              连接串口
+              {{ connectionStore.isConnected ? '连接新串口' : '连接串口' }}
             </el-button>
             
             <el-button 
@@ -159,6 +178,17 @@
               <el-icon><Message /></el-icon>
               通信测试
             </el-button>
+            
+            <el-button 
+              @click="connectMultiplePorts"
+              type="info"
+              :loading="connectingMultiple"
+              size="large"
+              v-if="availableUnconnectedPorts.length >= 2"
+            >
+              <el-icon><Connection /></el-icon>
+              快速连接多个串口
+            </el-button>
           </div>
           
 
@@ -174,15 +204,26 @@
             <el-icon><InfoFilled /></el-icon>
             已连接串口 ({{ connectionStore.connectedSerials.length }})
           </h3>
-          <el-button 
-            type="danger" 
-            size="small" 
-            @click="disconnectAll"
-            :loading="disconnectingAll"
-          >
-            <el-icon><Close /></el-icon>
-            断开所有
-          </el-button>
+          <div class="header-actions">
+            <el-button 
+              type="success" 
+              size="small" 
+              @click="loadPorts"
+              :loading="loading"
+            >
+              <el-icon><Refresh /></el-icon>
+              刷新端口
+            </el-button>
+            <el-button 
+              type="danger" 
+              size="small" 
+              @click="disconnectAll"
+              :loading="disconnectingAll"
+            >
+              <el-icon><Close /></el-icon>
+              断开所有
+            </el-button>
+          </div>
         </div>
       </template>
       
@@ -236,9 +277,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 
@@ -249,6 +290,12 @@ const communicationStore = useCommunicationStore()
 // 表单引用
 const formRef = ref<FormInstance>()
 
+// 计算属性 - 过滤掉已连接的串口
+const availableUnconnectedPorts = computed(() => {
+  const connectedPorts = connectionStore.connectedSerials.map(s => s.port)
+  return connectionStore.availablePorts.filter(port => !connectedPorts.includes(port.device))
+})
+
 // 状态
 const loading = ref(false)
 const connecting = ref(false)
@@ -256,6 +303,7 @@ const disconnecting = ref(false)
 const disconnectingAll = ref(false)
 const disconnectingSerials = ref<Record<number, boolean>>({})
 const autoDetecting = ref(false)
+const connectingMultiple = ref(false)
 
 
 const form = reactive({
@@ -308,10 +356,21 @@ const connect = async () => {
   const valid = await formRef.value.validate()
   if (!valid) return
   
+  // 检查是否已经连接了相同的串口
+  const existingSerial = connectionStore.connectedSerials.find(s => s.port === form.port)
+  if (existingSerial) {
+    ElMessage.warning(`串口 ${form.port} 已经连接 (ID: ${existingSerial.serial_id})`)
+    return
+  }
+  
   connecting.value = true
   try {
     const response = await connectionStore.connect(form)
     ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
+    // 连接成功后清空端口选择，保持其他配置参数
+    form.port = ''
+    // 刷新端口列表以更新可用端口
+    await loadPorts()
   } catch (error: any) {
     ElMessage.error(error.message || '串口连接失败')
   } finally {
@@ -325,6 +384,8 @@ const disconnectSerial = async (serialId: number) => {
     const success = await connectionStore.disconnect(serialId)
     if (success) {
       ElMessage.success(`串口 ${serialId} 断开成功`)
+      // 刷新端口列表以更新可用端口
+      await loadPorts()
     }
   } catch (error: any) {
     ElMessage.error(error.message || '串口断开失败')
@@ -339,6 +400,8 @@ const disconnectAll = async () => {
     const success = await connectionStore.disconnect()
     if (success) {
       ElMessage.success('所有串口断开成功')
+      // 刷新端口列表以更新可用端口
+      await loadPorts()
     }
   } catch (error: any) {
     ElMessage.error(error.message || '断开串口失败')
@@ -359,6 +422,62 @@ const testConnection = async () => {
 
 const goToCommunication = () => {
   router.push('/communication')
+}
+
+const connectMultiplePorts = async () => {
+  const portsToConnect = availableUnconnectedPorts.value.slice(0, 3) // 最多连接3个串口
+  const portNames = portsToConnect.map(p => p.device).join(', ')
+  
+  try {
+    await ElMessageBox.confirm(
+      `将使用当前配置连接以下串口：\n${portNames}\n\n确定继续吗？`,
+      '批量连接串口',
+      {
+        confirmButtonText: '确定连接',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+  } catch {
+    return // 用户取消
+  }
+  
+  connectingMultiple.value = true
+  try {
+    let successCount = 0
+    
+    for (const port of portsToConnect) {
+      try {
+        const config = {
+          port: port.device,
+          baudrate: form.baudrate,
+          bytesize: form.bytesize,
+          parity: form.parity,
+          stopbits: form.stopbits,
+          timeout: form.timeout
+        }
+        
+        const response = await connectionStore.connect(config)
+        successCount++
+        ElMessage.success(`串口 ${port.device} 连接成功 (ID: ${response.serial_id})`)
+        
+        // 短暂延迟避免连接过快
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error: any) {
+        ElMessage.error(`串口 ${port.device} 连接失败: ${error.message}`)
+      }
+    }
+    
+    if (successCount > 0) {
+      ElMessage.success(`成功连接 ${successCount} 个串口`)
+      // 刷新端口列表
+      await loadPorts()
+    }
+  } catch (error: any) {
+    ElMessage.error('批量连接串口失败')
+  } finally {
+    connectingMultiple.value = false
+  }
 }
 
 

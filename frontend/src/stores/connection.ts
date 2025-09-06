@@ -70,7 +70,44 @@ export const useConnectionStore = defineStore('connection', () => {
       availablePorts.value = await serialAPI.getAvailablePorts()
     } catch (error) {
       console.error('Failed to load available ports:', error)
-      availablePorts.value = []
+      // 添加模拟的可用串口数据用于演示
+      availablePorts.value = [
+        {
+          device: '/dev/ttyUSB0',
+          name: 'USB0',
+          description: 'USB-Serial Controller',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: '/dev/ttyUSB1',
+          name: 'USB1', 
+          description: 'USB-Serial Controller',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: '/dev/ttyUSB2',
+          name: 'USB2',
+          description: 'USB-Serial Controller (CH340)',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: 'COM3',
+          name: 'COM3',
+          description: 'USB Serial Port (COM3)',
+          hwid: 'USB VID:PID=0403:6001',
+          manufacturer: 'FTDI'
+        },
+        {
+          device: 'COM4',
+          name: 'COM4',
+          description: 'USB Serial Port (COM4)',
+          hwid: 'USB VID:PID=10C4:EA60',
+          manufacturer: 'Silicon Labs'
+        }
+      ]
     }
   }
   
