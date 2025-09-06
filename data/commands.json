@@ -1,0 +1,93 @@
+[
+	{
+		"id": "1",
+		"name": "设置MAC",
+		"command": "AT+MAC=026501123456",
+		"description": "",
+		"created_at": "2025-09-04 16:39:01",
+		"expected_response": "",
+		"send_as_hex": false,
+		"show_notification": false,
+		"target_serial_id": 1
+	},
+	{
+		"id": "2",
+		"name": "获取MAC",
+		"command": "AT+MAC?",
+		"description": "123",
+		"created_at": "2025-09-04 16:39:18",
+		"expected_response": "",
+		"send_as_hex": false,
+		"show_notification": false,
+		"target_serial_id": 1
+	},
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd54",
+		"name": "测试 Eeprom",
+		"command": "Eeprom",
+		"description": "",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "EEPROM Test OK\r\n",
+		"send_as_hex": false,
+		"show_notification": false,
+		"target_serial_id": 1
+	},
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd55",
+		"name": "测试LED1",
+		"command": "ON1",
+		"description": "LED1 是否亮灯?",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "LED1OK\r\n",
+		"send_as_hex": false,
+		"show_notification": true,
+		"target_serial_id": 1
+	},
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd56",
+		"name": "测试LED2",
+		"command": "ON2",
+		"description": "LED2 是否亮灯?",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "LED2OK\r\n",
+		"send_as_hex": false,
+		"show_notification": true,
+		"target_serial_id": 1
+	},
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd57",
+		"name": "测试LED3",
+		"command": "ON1",
+		"description": "LED3 是否亮灯?",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "LED3OK\r\n",
+		"send_as_hex": false,
+		"show_notification": true,
+		"target_serial_id": 1
+	},
+
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd58",
+		"name": "测试 DPLCA",
+		"command": "DPLCA",
+		"description": "",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "",
+		"send_as_hex": false,
+		"show_notification": false,
+		"target_serial_id": 1
+	},
+
+	{
+		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd59",
+		"name": "测试 S485B",
+		"command": "S485B",
+		"description": "",
+		"created_at": "2025-09-06 10:42:26",
+		"expected_response": "485BOK\r\n",
+		"send_as_hex": false,
+		"show_notification": false,
+		"target_serial_id": 2
+	}
+
+]

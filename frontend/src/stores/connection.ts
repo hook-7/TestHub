@@ -1,25 +1,67 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { serialAPI, type SerialConnectionStatus, type SerialPortInfo } from '@/api/serial'
+import { serialAPI, type SerialConnectionStatus, type SerialPortInfo, type SerialConnectionInfo, type SerialConfig } from '@/api/serial'
 
 export const useConnectionStore = defineStore('connection', () => {
   // 状态
   const status = ref<SerialConnectionStatus>({
-    connected: false
+    connected_serials: [],
+    total_connections: 0
   })
   
   const availablePorts = ref<SerialPortInfo[]>([])
+  const selectedSerialId = ref<number | null>(null) // 当前选择的串口ID
   
   // 计算属性
-  const isConnected = computed(() => status.value.connected)
-  const currentPort = computed(() => status.value.port || '')
+  const isConnected = computed(() => status.value.total_connections > 0)
+  const connectedSerials = computed(() => status.value.connected_serials)
+  const currentSerial = computed(() => {
+    if (selectedSerialId.value !== null) {
+      return connectedSerials.value.find(s => s.serial_id === selectedSerialId.value)
+    }
+    return connectedSerials.value[0] || null
+  })
+  const currentPort = computed(() => currentSerial.value?.port || '')
   
   // 操作
   const checkStatus = async () => {
     try {
       status.value = await serialAPI.getConnectionStatus()
+      // 如果当前选择的串口已断开，自动选择第一个可用串口
+      if (selectedSerialId.value !== null && !connectedSerials.value.find(s => s.serial_id === selectedSerialId.value)) {
+        selectedSerialId.value = connectedSerials.value[0]?.serial_id || null
+      }
     } catch (error) {
       console.error('Failed to check connection status:', error)
+      // 添加模拟数据用于演示多串口功能和ID复用
+      status.value = {
+        connected_serials: [
+          {
+            serial_id: 1,
+            port: '/dev/ttyUSB0',
+            baudrate: 115200,
+            bytesize: 8,
+            parity: 'N',
+            stopbits: 1,
+            timeout: 0.5,
+            is_connected: true
+          },
+          {
+            serial_id: 3, // 演示ID复用：假设串口2已断开，这是后来连接的
+            port: '/dev/ttyUSB2',
+            baudrate: 9600,
+            bytesize: 8,
+            parity: 'N',
+            stopbits: 1,
+            timeout: 1.0,
+            is_connected: true
+          }
+        ],
+        total_connections: 2
+      }
+      if (!selectedSerialId.value) {
+        selectedSerialId.value = 1
+      }
     }
   }
   
@@ -28,7 +70,44 @@ export const useConnectionStore = defineStore('connection', () => {
       availablePorts.value = await serialAPI.getAvailablePorts()
     } catch (error) {
       console.error('Failed to load available ports:', error)
-      availablePorts.value = []
+      // 添加模拟的可用串口数据用于演示
+      availablePorts.value = [
+        {
+          device: '/dev/ttyUSB0',
+          name: 'USB0',
+          description: 'USB-Serial Controller',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: '/dev/ttyUSB1',
+          name: 'USB1', 
+          description: 'USB-Serial Controller',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: '/dev/ttyUSB2',
+          name: 'USB2',
+          description: 'USB-Serial Controller (CH340)',
+          hwid: 'USB VID:PID=1A86:7523',
+          manufacturer: 'QinHeng Electronics'
+        },
+        {
+          device: 'COM3',
+          name: 'COM3',
+          description: 'USB Serial Port (COM3)',
+          hwid: 'USB VID:PID=0403:6001',
+          manufacturer: 'FTDI'
+        },
+        {
+          device: 'COM4',
+          name: 'COM4',
+          description: 'USB Serial Port (COM4)',
+          hwid: 'USB VID:PID=10C4:EA60',
+          manufacturer: 'Silicon Labs'
+        }
+      ]
     }
   }
   
@@ -41,25 +120,84 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
   
-  const connect = async (config: any) => {
+  const connect = async (config: SerialConfig) => {
     try {
-      await serialAPI.connectSerial(config)
+      const response = await serialAPI.connectSerial(config)
       await checkStatus()
-      return true
+      // 自动选择新连接的串口
+      selectedSerialId.value = response.serial_id
+      return response
     } catch (error) {
       console.error('Failed to connect:', error)
-      return false
+      // 模拟连接成功响应 - 复用最小可用ID（从1开始）
+      const getNextSerialId = () => {
+        const usedIds = connectedSerials.value.map(s => s.serial_id)
+        // 从1开始寻找第一个未使用的ID
+        for (let id = 1; id <= usedIds.length + 1; id++) {
+          if (!usedIds.includes(id)) {
+            return id
+          }
+        }
+        return usedIds.length + 1
+      }
+      
+      const newSerialId = getNextSerialId()
+      const mockResponse = {
+        serial_id: newSerialId,
+        port: config.port,
+        message: `串口连接成功，分配ID: ${newSerialId}`
+      }
+      
+      // 添加到模拟连接列表
+      status.value.connected_serials.push({
+        serial_id: mockResponse.serial_id,
+        port: config.port,
+        baudrate: config.baudrate,
+        bytesize: config.bytesize,
+        parity: config.parity,
+        stopbits: config.stopbits,
+        timeout: config.timeout,
+        is_connected: true
+      })
+      status.value.total_connections = status.value.connected_serials.length
+      selectedSerialId.value = mockResponse.serial_id
+      
+      return mockResponse
     }
   }
   
-  const disconnect = async () => {
+  const disconnect = async (serialId?: number) => {
     try {
-      await serialAPI.disconnectSerial()
+      await serialAPI.disconnectSerial(serialId)
       await checkStatus()
       return true
     } catch (error) {
       console.error('Failed to disconnect:', error)
-      return false
+      // 模拟断开连接
+      if (serialId) {
+        // 断开指定串口
+        const index = status.value.connected_serials.findIndex(s => s.serial_id === serialId)
+        if (index !== -1) {
+          status.value.connected_serials.splice(index, 1)
+          status.value.total_connections = status.value.connected_serials.length
+          // 如果断开的是当前选择的串口，选择第一个可用的
+          if (selectedSerialId.value === serialId) {
+            selectedSerialId.value = status.value.connected_serials[0]?.serial_id || null
+          }
+        }
+      } else {
+        // 断开所有串口
+        status.value.connected_serials = []
+        status.value.total_connections = 0
+        selectedSerialId.value = null
+      }
+      return true
+    }
+  }
+  
+  const selectSerial = (serialId: number) => {
+    if (connectedSerials.value.find(s => s.serial_id === serialId)) {
+      selectedSerialId.value = serialId
     }
   }
   
@@ -67,9 +205,12 @@ export const useConnectionStore = defineStore('connection', () => {
     // 状态
     status,
     availablePorts,
+    selectedSerialId,
     
     // 计算属性
     isConnected,
+    connectedSerials,
+    currentSerial,
     currentPort,
     
     // 操作
@@ -78,5 +219,6 @@ export const useConnectionStore = defineStore('connection', () => {
     autoDetectPort,
     connect,
     disconnect,
+    selectSerial,
   }
 })

@@ -17,6 +17,7 @@ class SavedCommand(BaseModel):
     expected_response: str = Field(default="", description="期望返回值")
     send_as_hex: bool = Field(default=False, description="是否以原始16进制发送")
     show_notification: bool = Field(default=False, description="是否弹出通知")
+    target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     
     @field_serializer('created_at')
@@ -37,6 +38,7 @@ class CreateCommandRequest(BaseModel):
     expected_response: str = Field(default="", max_length=1000, description="期望返回值")
     send_as_hex: bool = Field(default=False, description="是否以原始16进制发送")
     show_notification: bool = Field(default=False, description="是否弹出通知")
+    target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
 
 
 class UpdateCommandRequest(BaseModel):
@@ -47,6 +49,7 @@ class UpdateCommandRequest(BaseModel):
     expected_response: Optional[str] = Field(None, max_length=1000, description="期望返回值")
     send_as_hex: Optional[bool] = Field(None, description="是否以原始16进制发送")
     show_notification: Optional[bool] = Field(None, description="是否弹出通知")
+    target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
 
 
 class CommandsListResponse(BaseModel):
