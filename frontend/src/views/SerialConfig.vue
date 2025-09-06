@@ -1,5 +1,20 @@
 <template>
   <div class="page-container">
+    <!-- 多串口功能提示 -->
+    <el-alert
+      title="多串口支持"
+      type="info"
+      :closable="false"
+      style="margin-bottom: 20px;"
+    >
+      <template #default>
+        <p>✨ 支持同时连接多个串口设备，串口ID从1开始分配</p>
+        <p>🔄 智能ID复用：断开串口后，新连接会优先填充最小的空闲ID位置</p>
+        <p>🔗 可以为常用指令指定特定的目标串口，或使用当前选择的串口</p>
+        <p>📊 通信日志会显示每个操作关联的串口信息</p>
+      </template>
+    </el-alert>
+
     <!-- 串口配置卡片 -->
     <el-card>
       <template #header>
@@ -40,7 +55,7 @@
               @focus="loadPorts"
             >
               <el-option
-                v-for="port in connectionStore.availablePorts"
+                v-for="port in availableUnconnectedPorts"
                 :key="port.device"
                 :label="`${port.device} - ${port.description}`"
                 :value="port.device"
@@ -52,6 +67,12 @@
                   </span>
                 </div>
               </el-option>
+              <el-option
+                v-if="availableUnconnectedPorts.length === 0"
+                disabled
+                label="暂无可用串口 (所有串口已连接或无串口设备)"
+                value=""
+              />
             </el-select>
           </el-form-item>
           
@@ -123,17 +144,16 @@
               type="primary" 
               @click="connect"
               :loading="connecting"
-              :disabled="connectionStore.isConnected"
               size="large"
             >
               <el-icon><Connection /></el-icon>
-              连接串口
+              {{ connectionStore.isConnected ? '连接新串口' : '连接串口' }}
             </el-button>
             
             <el-button 
               type="danger" 
-              @click="disconnect"
-              :loading="disconnecting"
+              @click="disconnectAll"
+              :loading="disconnectingAll"
               :disabled="!connectionStore.isConnected"
               size="large"
             >
@@ -159,6 +179,17 @@
               <el-icon><Message /></el-icon>
               通信测试
             </el-button>
+            
+            <el-button 
+              @click="connectMultiplePorts"
+              type="info"
+              :loading="connectingMultiple"
+              size="large"
+              v-if="availableUnconnectedPorts.length >= 2"
+            >
+              <el-icon><Connection /></el-icon>
+              快速连接多个串口
+            </el-button>
           </div>
           
 
@@ -166,31 +197,90 @@
       </el-form>
     </el-card>
 
-    <!-- 连接状态 -->
+    <!-- 已连接串口列表 -->
     <el-card style="margin-top: 20px;" v-if="connectionStore.isConnected">
       <template #header>
-        <h3>
-          <el-icon><InfoFilled /></el-icon>
-          连接信息
-        </h3>
+        <div class="card-header">
+          <h3>
+            <el-icon><InfoFilled /></el-icon>
+            已连接串口 ({{ connectionStore.connectedSerials.length }})
+          </h3>
+          <div class="header-actions">
+            <el-button 
+              type="success" 
+              size="small" 
+              @click="loadPorts"
+              :loading="loading"
+            >
+              <el-icon><Refresh /></el-icon>
+              刷新端口
+            </el-button>
+            <el-button 
+              type="danger" 
+              size="small" 
+              @click="disconnectAll"
+              :loading="disconnectingAll"
+            >
+              <el-icon><Close /></el-icon>
+              断开所有
+            </el-button>
+          </div>
+        </div>
       </template>
       
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="端口">{{ connectionStore.status.port }}</el-descriptions-item>
-        <el-descriptions-item label="波特率">{{ connectionStore.status.baudrate }}</el-descriptions-item>
-        <el-descriptions-item label="数据位">{{ connectionStore.status.bytesize }}</el-descriptions-item>
-        <el-descriptions-item label="校验位">{{ connectionStore.status.parity }}</el-descriptions-item>
-        <el-descriptions-item label="停止位">{{ connectionStore.status.stopbits }}</el-descriptions-item>
-        <el-descriptions-item label="超时">{{ connectionStore.status.timeout }}s</el-descriptions-item>
-      </el-descriptions>
+      <div class="connected-serials">
+        <div 
+          v-for="serial in connectionStore.connectedSerials" 
+          :key="serial.serial_id"
+          class="serial-card"
+          :class="{ active: connectionStore.selectedSerialId === serial.serial_id }"
+          @click="connectionStore.selectSerial(serial.serial_id)"
+        >
+          <div class="serial-header">
+            <div class="serial-info">
+              <div class="serial-id">串口 #{{ serial.serial_id }}</div>
+              <div class="serial-port">{{ serial.port }}</div>
+            </div>
+            <div class="serial-actions">
+              <el-tag 
+                v-if="connectionStore.selectedSerialId === serial.serial_id" 
+                type="success" 
+                size="small"
+              >
+                当前选择
+              </el-tag>
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click.stop="disconnectSerial(serial.serial_id)"
+                :loading="disconnectingSerials[serial.serial_id]"
+              >
+                <el-icon><Close /></el-icon>
+                断开
+              </el-button>
+            </div>
+          </div>
+          
+          <el-descriptions :column="3" size="small" class="serial-details">
+            <el-descriptions-item label="波特率">{{ serial.baudrate }}</el-descriptions-item>
+            <el-descriptions-item label="数据位">{{ serial.bytesize }}</el-descriptions-item>
+            <el-descriptions-item label="校验位">{{ serial.parity }}</el-descriptions-item>
+            <el-descriptions-item label="停止位">{{ serial.stopbits }}</el-descriptions-item>
+            <el-descriptions-item label="超时">{{ serial.timeout }}s</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag type="success" size="small">已连接</el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 
@@ -201,11 +291,20 @@ const communicationStore = useCommunicationStore()
 // 表单引用
 const formRef = ref<FormInstance>()
 
+// 计算属性 - 过滤掉已连接的串口
+const availableUnconnectedPorts = computed(() => {
+  const connectedPorts = connectionStore.connectedSerials.map(s => s.port)
+  return connectionStore.availablePorts.filter(port => !connectedPorts.includes(port.device))
+})
+
 // 状态
 const loading = ref(false)
 const connecting = ref(false)
 const disconnecting = ref(false)
+const disconnectingAll = ref(false)
+const disconnectingSerials = ref<Record<number, boolean>>({})
 const autoDetecting = ref(false)
+const connectingMultiple = ref(false)
 
 
 const form = reactive({
@@ -258,33 +357,64 @@ const connect = async () => {
   const valid = await formRef.value.validate()
   if (!valid) return
   
+  // 检查是否已经连接了相同的串口
+  const existingSerial = connectionStore.connectedSerials.find(s => s.port === form.port)
+  if (existingSerial) {
+    ElMessage.warning(`串口 ${form.port} 已经连接 (ID: ${existingSerial.serial_id})`)
+    return
+  }
+  
   connecting.value = true
   try {
-    const success = await connectionStore.connect(form)
-    if (success) {
-      ElMessage.success('串口连接成功')
-    }
+    const response = await connectionStore.connect(form)
+    ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
+    // 连接成功后清空端口选择，保持其他配置参数
+    form.port = ''
+    // 刷新端口列表以更新可用端口
+    await loadPorts()
+  } catch (error: any) {
+    ElMessage.error(error.message || '串口连接失败')
   } finally {
     connecting.value = false
   }
 }
 
-const disconnect = async () => {
-  disconnecting.value = true
+const disconnectSerial = async (serialId: number) => {
+  disconnectingSerials.value[serialId] = true
+  try {
+    const success = await connectionStore.disconnect(serialId)
+    if (success) {
+      ElMessage.success(`串口 ${serialId} 断开成功`)
+      // 刷新端口列表以更新可用端口
+      await loadPorts()
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '串口断开失败')
+  } finally {
+    disconnectingSerials.value[serialId] = false
+  }
+}
+
+const disconnectAll = async () => {
+  disconnectingAll.value = true
   try {
     const success = await connectionStore.disconnect()
     if (success) {
-      ElMessage.success('串口断开成功')
+      ElMessage.success('所有串口断开成功')
+      // 刷新端口列表以更新可用端口
+      await loadPorts()
     }
+  } catch (error: any) {
+    ElMessage.error(error.message || '断开串口失败')
   } finally {
-    disconnecting.value = false
+    disconnectingAll.value = false
   }
 }
 
 const testConnection = async () => {
   try {
-    // 简单的指令测试
-    await communicationStore.sendATCommand('AT\r\n')
+    // 简单的指令测试，使用当前选择的串口
+    await communicationStore.sendATCommand('AT\r\n', connectionStore.selectedSerialId || undefined)
     ElMessage.success('连接测试成功')
   } catch (error) {
     ElMessage.warning('连接测试失败，请检查设备连接')
@@ -293,6 +423,62 @@ const testConnection = async () => {
 
 const goToCommunication = () => {
   router.push('/communication')
+}
+
+const connectMultiplePorts = async () => {
+  const portsToConnect = availableUnconnectedPorts.value.slice(0, 3) // 最多连接3个串口
+  const portNames = portsToConnect.map(p => p.device).join(', ')
+  
+  try {
+    await ElMessageBox.confirm(
+      `将使用当前配置连接以下串口：\n${portNames}\n\n确定继续吗？`,
+      '批量连接串口',
+      {
+        confirmButtonText: '确定连接',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+  } catch {
+    return // 用户取消
+  }
+  
+  connectingMultiple.value = true
+  try {
+    let successCount = 0
+    
+    for (const port of portsToConnect) {
+      try {
+        const config = {
+          port: port.device,
+          baudrate: form.baudrate,
+          bytesize: form.bytesize,
+          parity: form.parity,
+          stopbits: form.stopbits,
+          timeout: form.timeout
+        }
+        
+        const response = await connectionStore.connect(config)
+        successCount++
+        ElMessage.success(`串口 ${port.device} 连接成功 (ID: ${response.serial_id})`)
+        
+        // 短暂延迟避免连接过快
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error: any) {
+        ElMessage.error(`串口 ${port.device} 连接失败: ${error.message}`)
+      }
+    }
+    
+    if (successCount > 0) {
+      ElMessage.success(`成功连接 ${successCount} 个串口`)
+      // 刷新端口列表
+      await loadPorts()
+    }
+  } catch (error: any) {
+    ElMessage.error('批量连接串口失败')
+  } finally {
+    connectingMultiple.value = false
+  }
 }
 
 
@@ -341,6 +527,80 @@ onMounted(() => {
   
   .header-actions {
     justify-content: center;
+  }
+}
+
+/* 多串口连接列表样式 */
+.connected-serials {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.serial-card {
+  border: 2px solid #e0e6ed;
+  border-radius: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.serial-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+}
+
+.serial-card.active {
+  border-color: #409eff;
+  background: #f0f8ff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+}
+
+.serial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.serial-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.serial-id {
+  font-weight: 600;
+  color: #409eff;
+  font-size: 16px;
+}
+
+.serial-port {
+  color: #666;
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.serial-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serial-details {
+  margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+  .serial-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .serial-actions {
+    justify-content: space-between;
   }
 }
 </style>
