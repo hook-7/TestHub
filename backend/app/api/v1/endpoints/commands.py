@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends
 from typing import Optional, List
 
 from app.core.response import APIResponse
-from app.core.dependencies import get_session_id_from_header
 from app.services.command_service import command_service
 from app.schemas.command_schemas import (
     SavedCommand, 
@@ -45,8 +44,7 @@ async def get_all_commands():
 
 @router.post("/", response_model=APIResponse[SavedCommand])
 async def create_command(
-    request: CreateCommandRequest,
-    session_id: Optional[str] = Depends(get_session_id_from_header)
+    request: CreateCommandRequest
 ):
     """创建新的常用指令"""
     try:
@@ -89,8 +87,7 @@ async def get_command(command_id: str):
 @router.put("/{command_id}", response_model=APIResponse[SavedCommand])
 async def update_command(
     command_id: str,
-    request: UpdateCommandRequest,
-    session_id: Optional[str] = Depends(get_session_id_from_header)
+    request: UpdateCommandRequest
 ):
     """更新指令"""
     try:
@@ -111,8 +108,7 @@ async def update_command(
 
 @router.delete("/{command_id}", response_model=APIResponse)
 async def delete_command(
-    command_id: str,
-    session_id: Optional[str] = Depends(get_session_id_from_header)
+    command_id: str
 ):
     """删除指令"""
     try:

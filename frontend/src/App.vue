@@ -18,7 +18,7 @@
           
           <div class="header-right">
             <!-- 连接状态 -->
-            <div class="status-section" v-if="sessionStore.isLoggedIn">
+            <div class="status-section">
               <div class="status-item">
                 <span class="status-label">连接状态</span>
                 <el-tag 
@@ -32,43 +32,6 @@
                   {{ connectionStore.isConnected ? '已连接' : '未连接' }}
                 </el-tag>
               </div>
-              
-              <div class="status-item">
-                <span class="status-label">会话状态</span>
-                <el-tag 
-                  type="success" 
-                  size="default"
-                  class="status-tag"
-                >
-                  <el-icon><User /></el-icon>
-                  已登录
-                  <span v-if="sessionStore.isHeartbeatActive" class="heartbeat-indicator">
-                    ♥
-                  </span>
-                </el-tag>
-              </div>
-            </div>
-            
-            <!-- 用户操作 -->
-            <div class="user-section">
-              <template v-if="sessionStore.isLoggedIn">
-                <el-button 
-                  type="danger" 
-                  @click="handleLogout"
-                  :loading="sessionStore.isLoading"
-                  size="default"
-                  class="logout-btn"
-                >
-                  <el-icon><SwitchButton /></el-icon>
-                  登出
-                </el-button>
-              </template>
-              <template v-else>
-                <el-tag type="info" size="default" class="status-tag">
-                  <el-icon><User /></el-icon>
-                  未登录
-                </el-tag>
-              </template>
             </div>
           </div>
         </div>
@@ -77,7 +40,7 @@
       <!-- Content Container -->
       <el-container class="content-container">
         <!-- Sidebar -->
-        <el-aside class="sidebar" width="200px" v-if="sessionStore.isLoggedIn">
+        <el-aside class="sidebar" width="200px">
           <el-menu 
             :default-active="$route.path" 
             mode="vertical" 
@@ -110,55 +73,19 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Connection, 
   Setting, 
   ChatLineRound,
-  Operation,
-  User,
-  SwitchButton
+  Operation
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
-import { useSessionStore } from '@/stores/session'
 
-const router = useRouter()
 const connectionStore = useConnectionStore()
-const sessionStore = useSessionStore()
-
-// 处理登出
-const handleLogout = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要登出吗？登出后将无法进行串口操作。',
-      '确认登出',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-    
-    await sessionStore.logout()
-    ElMessage.success('登出成功')
-    await router.push('/login')
-  } catch (error) {
-    // 用户取消操作
-    if (error !== 'cancel') {
-      console.error('Logout failed:', error)
-    }
-  }
-}
 
 onMounted(async () => {
   // 初始化时检查连接状态（异步执行，不阻塞界面）
   connectionStore.checkStatus()
-  
-  // 只在必要时初始化会话状态
-  if (!sessionStore.sessionStatus) {
-    sessionStore.init() // 不等待，让它在后台执行
-  }
 })
 </script>
 
@@ -267,40 +194,6 @@ onMounted(async () => {
   font-weight: 500;
   padding: 6px 12px;
   border-radius: 6px;
-}
-
-.user-section {
-  display: flex;
-  align-items: center;
-}
-
-.logout-btn {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  font-weight: 500;
-  padding: 8px 16px;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.logout-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-1px);
-}
-
-.heartbeat-indicator {
-  color: #f56c6c;
-  animation: heartbeat 2s ease-in-out infinite;
-  margin-left: 6px;
-  font-size: 12px;
-}
-
-@keyframes heartbeat {
-  0% { opacity: 1; }
-  50% { opacity: 0.5; }
-  100% { opacity: 1; }
 }
 
 .content-container {

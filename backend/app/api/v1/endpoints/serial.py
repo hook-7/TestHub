@@ -7,7 +7,6 @@ from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 
 from app.core.response import APIResponse
-from app.core.dependencies import validate_session_dependency
 from app.services.serial_service import serial_service
 from app.schemas.serial_schemas import (
     SerialConfig, RawDataRequest, SerialConnectRequest, SerialConnectResponse, SerialDisconnectRequest
@@ -41,12 +40,11 @@ async def auto_detect_port():
 @router.post("/connect", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def connect_serial(
     config: SerialConfig,
-    request: Request,
-    session_id: str = Depends(validate_session_dependency)
+    request: Request
 ):
-    """连接串口（需要有效会话）"""
+    """连接串口"""
     serial_id = await serial_service.connect_serial(config)
-    logger.info(f"Serial connected by session: {session_id}, assigned serial_id: {serial_id}")
+    logger.info(f"Serial connected, assigned serial_id: {serial_id}")
     
     response_data = SerialConnectResponse(
         serial_id=serial_id,
@@ -59,16 +57,15 @@ async def connect_serial(
 @router.post("/disconnect", response_model=APIResponse)
 async def disconnect_serial(
     disconnect_request: SerialDisconnectRequest,
-    request: Request,
-    session_id: str = Depends(validate_session_dependency)
+    request: Request
 ):
-    """断开串口连接（需要有效会话）"""
+    """断开串口连接"""
     await serial_service.disconnect_serial(disconnect_request.serial_id)
     if disconnect_request.serial_id is None:
-        logger.info(f"All serials disconnected by session: {session_id}")
+        logger.info("All serials disconnected")
         return APIResponse.success(msg="所有串口断开成功")
     else:
-        logger.info(f"Serial {disconnect_request.serial_id} disconnected by session: {session_id}")
+        logger.info(f"Serial {disconnect_request.serial_id} disconnected")
         return APIResponse.success(msg=f"串口 {disconnect_request.serial_id} 断开成功")
 
 
@@ -82,10 +79,9 @@ async def get_connection_status():
 @router.post("/send-at", response_model=APIResponse)
 async def send_at_command(
     request_data: RawDataRequest,
-    request: Request,
-    session_id: str = Depends(validate_session_dependency)
+    request: Request
 ):
-    """发送指令（支持AT指令和其他自定义指令）（需要有效会话）- 模拟返回期望值内容"""
+    """发送指令（支持AT指令和其他自定义指令）- 模拟返回期望值内容"""
     import time
     
     # 注释掉原有的服务调用
@@ -166,9 +162,8 @@ async def send_at_command(
 @router.post("/raw-data", response_model=APIResponse)
 async def send_raw_data(
     request_data: RawDataRequest,
-    request: Request,
-    session_id: str = Depends(validate_session_dependency)
+    request: Request
 ):
-    """发送原始数据（需要有效会话）"""
+    """发送原始数据"""
     result = await serial_service.send_raw_data(request_data.data, request_data.serial_id)
     return APIResponse.success(data=result, msg="发送原始数据成功")

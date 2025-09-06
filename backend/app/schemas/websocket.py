@@ -67,5 +67,4 @@ class SendMessageResponse(BaseModel):
     """发送WebSocket消息响应"""
     success: bool
     message: str
-    sent_to_session: Optional[str] = None
     serial_id: Optional[int] = None  # 消息发送到的串口ID

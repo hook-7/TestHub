@@ -21,6 +21,6 @@ def mock_session_id():
 
 
 @pytest.fixture
-def auth_headers(mock_session_id):
-    """认证请求头"""
-    return {"X-Session-Id": mock_session_id}
+def headers():
+    """请求头"""
+    return {}
