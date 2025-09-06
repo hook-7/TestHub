@@ -70,6 +70,7 @@ export const useCommunicationStore = defineStore('communication', () => {
   // 处理WebSocket消息
   const handleWebSocketMessage = (message: WSResponseMessage | WSErrorMessage) => {
     const isError = message.type === WSMessageType.ERROR
+    const serialId = message.serial_id
 
     if (message.type === WSMessageType.AUTO_AT) {
       addLog({
@@ -77,14 +78,16 @@ export const useCommunicationStore = defineStore('communication', () => {
         direction: 'sent',
         description: isError ? '命令执行错误' : '命令执行结果',
         data: (message as WSResponseMessage).message,
-        success: !isError
+        success: !isError,
+        serial_id: serialId
       })
       addLog({
         type: 'at',
         direction: 'received',
         description: isError ? '命令执行错误' : '命令执行结果',
         data: (message as WSResponseMessage).data?.received_data,
-        success: !isError
+        success: !isError,
+        serial_id: serialId
       })
       return
     }
@@ -94,7 +97,8 @@ export const useCommunicationStore = defineStore('communication', () => {
       direction: 'received',
       description: isError ? '命令执行错误' : '命令执行结果',
       data: isError ? (message as WSErrorMessage).error : (message as WSResponseMessage).message,
-      success: !isError
+      success: !isError,
+      serial_id: serialId
     })
 
   }
@@ -147,7 +151,7 @@ export const useCommunicationStore = defineStore('communication', () => {
 
       // 使用WebSocket发送指令
       if (wsClient.value && wsClient.value.isConnected()) {
-        const success = await wsClient.value.sendCommand(command)
+        const success = await wsClient.value.sendCommand(command, serialId)
         if (!success) {
           throw new Error('WebSocket发送失败')
         }

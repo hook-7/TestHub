@@ -58,18 +58,11 @@ class Settings(BaseSettings):
     # Data storage settings - 数据存储配置
     @property
     def DATA_DIR(self) -> Path:
-        """获取数据存储目录，跨平台兼容"""
-        # 使用项目根目录下的 data 文件夹
-        # 获取项目根目录（backend的上级目录）
-        project_root = Path(__file__).parent.parent.parent.parent
-        data_dir = project_root / "data"
-        data_dir.mkdir(exist_ok=True)  # 确保目录存在
+        """获取数据存储目录（工作目录下的 data 文件夹）"""
+        work_dir = Path.cwd()
+        data_dir = work_dir / "data"
+        data_dir.mkdir(exist_ok=True)
         return data_dir
-    
-    @property
-    def COMMANDS_FILE(self) -> Path:
-        """常用指令存储文件路径（向后兼容）"""
-        return self.DATA_DIR / "saved_commands.json"
 
     @property
     def DATABASE_FILE(self) -> Path:

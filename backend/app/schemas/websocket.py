@@ -31,6 +31,7 @@ class WSCommandMessage(BaseModel):
     """WebSocket命令消息"""
     type: WSMessageType = WSMessageType.COMMAND
     command: str
+    serial_id: Optional[int] = None  # 目标串口ID，不指定则使用默认串口
     args: Optional[list] = []
     timestamp: Optional[str] = None
 
@@ -39,6 +40,7 @@ class WSResponseMessage(BaseModel):
     """WebSocket响应消息"""
     type: WSMessageType
     message: str
+    serial_id: Optional[int] = None  # 响应来源的串口ID
     data: Optional[Dict[str, Any]] = None
     timestamp: str
     success: bool = True
@@ -49,12 +51,14 @@ class WSErrorMessage(BaseModel):
     type: WSMessageType = WSMessageType.ERROR
     error: str
     code: int = 500
+    serial_id: Optional[int] = None  # 错误相关的串口ID
     timestamp: str
 
 
 class SendMessageRequest(BaseModel):
     """发送WebSocket消息请求"""
     message: str
+    serial_id: Optional[int] = None  # 目标串口ID
     message_type: WSMessageType = WSMessageType.INFO
     data: Optional[Dict[str, Any]] = None
 
@@ -64,3 +68,4 @@ class SendMessageResponse(BaseModel):
     success: bool
     message: str
     sent_to_session: Optional[str] = None
+    serial_id: Optional[int] = None  # 消息发送到的串口ID
