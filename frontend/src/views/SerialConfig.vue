@@ -270,7 +270,7 @@
           <!-- 无连接状态提示 -->
           <div v-else class="no-connection-hint">
             <el-empty description="暂无已连接串口">
-              <el-button type="primary" @click="goToCommunication" :disabled="!connectionStore.isConnected">
+              <el-button type="primary" @click="() => router.push('/communication')" :disabled="!connectionStore.isConnected">
                 前往通信页面
               </el-button>
             </el-empty>
@@ -284,7 +284,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { 
   Setting, 
   Refresh, 
@@ -292,18 +292,17 @@ import {
   Connection, 
   Close, 
   CircleCheck, 
-  Message, 
   InfoFilled, 
   Monitor, 
   Operation, 
   Check 
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
-import { useCommunicationStore } from '@/stores/communication'
+
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
-const communicationStore = useCommunicationStore()
+
 
 // 表单引用
 const formRef = ref<FormInstance>()
@@ -320,7 +319,6 @@ const connecting = ref(false)
 const disconnectingAll = ref(false)
 const disconnectingSerials = ref<Record<number, boolean>>({})
 const autoDetecting = ref(false)
-const connectingMultiple = ref(false)
 
 
 const form = reactive({
@@ -427,75 +425,6 @@ const disconnectAll = async () => {
   }
 }
 
-const testConnection = async () => {
-  try {
-    // 简单的指令测试，使用当前选择的串口
-    await communicationStore.sendATCommand('AT\r\n', connectionStore.selectedSerialId || undefined)
-    ElMessage.success('连接测试成功')
-  } catch (error) {
-    ElMessage.warning('连接测试失败，请检查设备连接')
-  }
-}
-
-const goToCommunication = () => {
-  router.push('/communication')
-}
-
-const connectMultiplePorts = async () => {
-  const portsToConnect = availableUnconnectedPorts.value.slice(0, 3) // 最多连接3个串口
-  const portNames = portsToConnect.map(p => p.device).join(', ')
-  
-  try {
-    await ElMessageBox.confirm(
-      `将使用当前配置连接以下串口：\n${portNames}\n\n确定继续吗？`,
-      '批量连接串口',
-      {
-        confirmButtonText: '确定连接',
-        cancelButtonText: '取消',
-        type: 'info',
-      }
-    )
-  } catch {
-    return // 用户取消
-  }
-  
-  connectingMultiple.value = true
-  try {
-    let successCount = 0
-    
-    for (const port of portsToConnect) {
-      try {
-        const config = {
-          port: port.device,
-          baudrate: form.baudrate,
-          bytesize: form.bytesize,
-          parity: form.parity,
-          stopbits: form.stopbits,
-          timeout: form.timeout
-        }
-        
-        const response = await connectionStore.connect(config)
-        successCount++
-        ElMessage.success(`串口 ${port.device} 连接成功 (ID: ${response.serial_id})`)
-        
-        // 短暂延迟避免连接过快
-        await new Promise(resolve => setTimeout(resolve, 500))
-      } catch (error: any) {
-        ElMessage.error(`串口 ${port.device} 连接失败: ${error.message}`)
-      }
-    }
-    
-    if (successCount > 0) {
-      ElMessage.success(`成功连接 ${successCount} 个串口`)
-      // 刷新端口列表
-      await loadPorts()
-    }
-  } catch (error: any) {
-    ElMessage.error('批量连接串口失败')
-  } finally {
-    connectingMultiple.value = false
-  }
-}
 
 
 

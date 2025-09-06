@@ -168,7 +168,6 @@
                 :key="cmd.id"
                 class="quick-command-btn"
                 @click="sendQuickCommand(cmd)"
-                @contextmenu.prevent="handleCommandRightClick($event, cmd)"
                 :class="{ disabled: !connectionStore.isConnected }"
                 :title="cmd.description"
               >
@@ -456,14 +455,10 @@ const communicationStore = useCommunicationStore()
 // 状态
 const commandLoading = ref(false)
 const rawLoading = ref(false)
-const batchLoading = ref(false)
 const showHistory = ref(false)
-const showBatchSend = ref(false)
 const showAddCommand = ref(false)
 const showEditCommand = ref(false)
 const commandHistory = ref<string[]>([])
-const batchCommands = ref('')
-const batchDelay = ref(1000)
 
 // 表单数据
 const commandForm = reactive({
@@ -865,11 +860,6 @@ const handleCloseEditCommand = () => {
   showEditCommand.value = false
 }
 
-const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
-  // 右键点击指令时，显示上下文菜单或执行特定操作
-  // TODO: 实现右键菜单功能，可以快速编辑或删除指令
-  console.log('Right click on command:', cmd.name)
-}
 
 const sendRawData = async () => {
   if (!rawForm.data.trim()) {

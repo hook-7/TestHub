@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { serialAPI, type SerialConnectionStatus, type SerialPortInfo, type SerialConnectionInfo, type SerialConfig } from '@/api/serial'
+import { serialAPI, type SerialConnectionStatus, type SerialPortInfo, type SerialConfig } from '@/api/serial'
 
 export const useConnectionStore = defineStore('connection', () => {
   // 状态
@@ -15,13 +15,6 @@ export const useConnectionStore = defineStore('connection', () => {
   // 计算属性
   const isConnected = computed(() => status.value.total_connections > 0)
   const connectedSerials = computed(() => status.value.connected_serials)
-  const currentSerial = computed(() => {
-    if (selectedSerialId.value !== null) {
-      return connectedSerials.value.find(s => s.serial_id === selectedSerialId.value)
-    }
-    return connectedSerials.value[0] || null
-  })
-  const currentPort = computed(() => currentSerial.value?.port || '')
   
   // 操作
   const checkStatus = async () => {
@@ -214,8 +207,6 @@ export const useConnectionStore = defineStore('connection', () => {
     // 计算属性
     isConnected,
     connectedSerials,
-    currentSerial,
-    currentPort,
     
     // 操作
     checkStatus,
