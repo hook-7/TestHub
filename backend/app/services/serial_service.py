@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from app.drivers.serial_driver import serial_driver
 from app.core.exceptions import SerialException, ErrorCode
 from app.schemas.serial_schemas import (
-    SerialPortInfo, SerialConfig, SerialConnectionStatus, RawDataResponse
+    SerialPortInfo, SerialConfig, SerialConnectionStatus, SerialConnectionInfo, RawDataResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -43,15 +43,15 @@ class SerialService:
             logger.error(f"Error auto-detecting port: {e}")
             raise SerialException(ErrorCode.SYSTEM_ERROR, "自动检测串口失败")
     
-    async def connect_serial(self, config: SerialConfig) -> bool:
-        """连接串口"""
+    async def connect_serial(self, config: SerialConfig) -> int:
+        """连接串口，返回串口ID"""
         try:
             # 记录前端传来的配置信息以便调试
             logger.info(f"Received serial config from frontend: port={config.port}, "
                        f"baudrate={config.baudrate}, bytesize={config.bytesize}, "
                        f"parity={config.parity}, stopbits={config.stopbits}, timeout={config.timeout}")
             
-            success = await serial_driver.connect(
+            serial_id = await serial_driver.connect(
                 port=config.port,
                 baudrate=config.baudrate,
                 bytesize=config.bytesize,
@@ -60,46 +60,56 @@ class SerialService:
                 timeout=config.timeout
             )
             
-            if not success:
-                raise SerialException(ErrorCode.SERIAL_CONNECT_FAILED, f"无法连接到串口 {config.port}")
+            logger.info(f"Successfully connected to serial port: {config.port} at {config.baudrate} baud with serial_id {serial_id}")
+            return serial_id
             
-            logger.info(f"Successfully connected to serial port: {config.port} at {config.baudrate} baud")
-            return True
-            
-        except SerialException:
-            raise
         except Exception as e:
             logger.error(f"Error connecting to serial port: {e}")
             raise SerialException(ErrorCode.SERIAL_CONNECT_FAILED, f"串口连接异常: {str(e)}")
     
-    async def disconnect_serial(self) -> bool:
+    async def disconnect_serial(self, serial_id: int = None) -> bool:
         """断开串口连接"""
         try:
-            await serial_driver.disconnect()
-            logger.info("Serial port disconnected")
-            
-            # 串口断开时，清理会话（可选：也可以保留会话让用户重连）
-            # 这里我们选择保留会话，让用户可以重新连接串口
+            await serial_driver.disconnect(serial_id)
+            if serial_id is None:
+                logger.info("All serial ports disconnected")
+            else:
+                logger.info(f"Serial port {serial_id} disconnected")
             
             return True
         except Exception as e:
-            logger.error(f"Error disconnecting serial port: {e}")
+            logger.error(f"Error disconnecting serial port {serial_id}: {e}")
             raise SerialException(ErrorCode.SERIAL_DISCONNECT_FAILED, f"断开串口连接失败: {str(e)}")
     
     async def get_connection_status(self) -> SerialConnectionStatus:
         """获取连接状态"""
         try:
             info = serial_driver.get_connection_info()
-            return SerialConnectionStatus(**info)
+            # 转换为SerialConnectionInfo对象
+            connected_serials = []
+            for serial_info in info.get("connected_serials", []):
+                connected_serials.append(SerialConnectionInfo(**serial_info))
+            
+            return SerialConnectionStatus(
+                connected_serials=connected_serials,
+                total_connections=info.get("total_connections", 0)
+            )
         except Exception as e:
             logger.error(f"Error getting connection status: {e}")
             raise SerialException(ErrorCode.SYSTEM_ERROR, "获取连接状态失败")
     
-    async def send_at_command(self, command: str) -> RawDataResponse:
+    async def send_at_command(self, command: str, serial_id: int = None) -> RawDataResponse:
         """发送指令（支持AT指令和其他自定义指令）- 由前端完全控制格式"""
         try:
-            if not serial_driver.is_connected:
-                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
+            # 如果没有指定串口ID，使用第一个可用的串口
+            if serial_id is None:
+                connected_serials = serial_driver.get_connected_serials()
+                if not connected_serials:
+                    raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "没有连接的串口")
+                serial_id = connected_serials[0]["serial_id"]
+            
+            if not serial_driver.is_serial_connected(serial_id):
+                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, f"串口 {serial_id} 未连接")
             
             timestamp = time.time()
             
@@ -113,7 +123,7 @@ class SerialService:
             for terminator in terminators:
                 try:
                     response = await serial_driver.write_read_until(
-                        data, terminator=terminator, read_timeout=2.0, write_delay=0.02
+                        serial_id, data, terminator=terminator, read_timeout=2.0, write_delay=0.02
                     )
                     if response:
                         break
@@ -122,12 +132,13 @@ class SerialService:
             
             # 如果所有终止符都失败，使用默认方法
             if not response:
-                response = await serial_driver.write_read(data, read_timeout=3.0, write_delay=0.02)
+                response = await serial_driver.write_read(serial_id, data, read_timeout=3.0, write_delay=0.02)
             
             # 解析响应
             response_text = response.decode('utf-8', errors='ignore')
             
             return RawDataResponse(
+                serial_id=serial_id,
                 sent_data=command,
                 received_data=response_text,
                 timestamp=timestamp
@@ -139,11 +150,18 @@ class SerialService:
             logger.error(f"Error sending command: {e}")
             raise SerialException(ErrorCode.SERIAL_WRITE_FAILED, f"发送指令失败: {str(e)}")
     
-    async def send_raw_data(self, hex_data: str) -> RawDataResponse:
+    async def send_raw_data(self, hex_data: str, serial_id: int = None) -> RawDataResponse:
         """发送原始数据"""
         try:
-            if not serial_driver.is_connected:
-                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "串口未连接")
+            # 如果没有指定串口ID，使用第一个可用的串口
+            if serial_id is None:
+                connected_serials = serial_driver.get_connected_serials()
+                if not connected_serials:
+                    raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, "没有连接的串口")
+                serial_id = connected_serials[0]["serial_id"]
+            
+            if not serial_driver.is_serial_connected(serial_id):
+                raise SerialException(ErrorCode.SERIAL_NOT_CONNECTED, f"串口 {serial_id} 未连接")
             
             # 转换十六进制字符串为字节
             try:
@@ -154,9 +172,10 @@ class SerialService:
             timestamp = time.time()
             
             # 发送数据并读取响应，使用优化的延迟设置
-            response = await serial_driver.write_read(data, read_timeout=2.0, write_delay=0.02)
+            response = await serial_driver.write_read(serial_id, data, read_timeout=2.0, write_delay=0.02)
             
             return RawDataResponse(
+                serial_id=serial_id,
                 sent_data=data.hex().upper(),
                 received_data=response.hex().upper(),
                 timestamp=timestamp

@@ -166,23 +166,71 @@
       </el-form>
     </el-card>
 
-    <!-- 连接状态 -->
+    <!-- 已连接串口列表 -->
     <el-card style="margin-top: 20px;" v-if="connectionStore.isConnected">
       <template #header>
-        <h3>
-          <el-icon><InfoFilled /></el-icon>
-          连接信息
-        </h3>
+        <div class="card-header">
+          <h3>
+            <el-icon><InfoFilled /></el-icon>
+            已连接串口 ({{ connectionStore.connectedSerials.length }})
+          </h3>
+          <el-button 
+            type="danger" 
+            size="small" 
+            @click="disconnectAll"
+            :loading="disconnectingAll"
+          >
+            <el-icon><Close /></el-icon>
+            断开所有
+          </el-button>
+        </div>
       </template>
       
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="端口">{{ connectionStore.status.port }}</el-descriptions-item>
-        <el-descriptions-item label="波特率">{{ connectionStore.status.baudrate }}</el-descriptions-item>
-        <el-descriptions-item label="数据位">{{ connectionStore.status.bytesize }}</el-descriptions-item>
-        <el-descriptions-item label="校验位">{{ connectionStore.status.parity }}</el-descriptions-item>
-        <el-descriptions-item label="停止位">{{ connectionStore.status.stopbits }}</el-descriptions-item>
-        <el-descriptions-item label="超时">{{ connectionStore.status.timeout }}s</el-descriptions-item>
-      </el-descriptions>
+      <div class="connected-serials">
+        <div 
+          v-for="serial in connectionStore.connectedSerials" 
+          :key="serial.serial_id"
+          class="serial-card"
+          :class="{ active: connectionStore.selectedSerialId === serial.serial_id }"
+          @click="connectionStore.selectSerial(serial.serial_id)"
+        >
+          <div class="serial-header">
+            <div class="serial-info">
+              <div class="serial-id">串口 #{{ serial.serial_id }}</div>
+              <div class="serial-port">{{ serial.port }}</div>
+            </div>
+            <div class="serial-actions">
+              <el-tag 
+                v-if="connectionStore.selectedSerialId === serial.serial_id" 
+                type="success" 
+                size="small"
+              >
+                当前选择
+              </el-tag>
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click.stop="disconnectSerial(serial.serial_id)"
+                :loading="disconnectingSerials[serial.serial_id]"
+              >
+                <el-icon><Close /></el-icon>
+                断开
+              </el-button>
+            </div>
+          </div>
+          
+          <el-descriptions :column="3" size="small" class="serial-details">
+            <el-descriptions-item label="波特率">{{ serial.baudrate }}</el-descriptions-item>
+            <el-descriptions-item label="数据位">{{ serial.bytesize }}</el-descriptions-item>
+            <el-descriptions-item label="校验位">{{ serial.parity }}</el-descriptions-item>
+            <el-descriptions-item label="停止位">{{ serial.stopbits }}</el-descriptions-item>
+            <el-descriptions-item label="超时">{{ serial.timeout }}s</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag type="success" size="small">已连接</el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
@@ -205,6 +253,8 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const connecting = ref(false)
 const disconnecting = ref(false)
+const disconnectingAll = ref(false)
+const disconnectingSerials = ref<Record<number, boolean>>({})
 const autoDetecting = ref(false)
 
 
@@ -260,31 +310,47 @@ const connect = async () => {
   
   connecting.value = true
   try {
-    const success = await connectionStore.connect(form)
-    if (success) {
-      ElMessage.success('串口连接成功')
-    }
+    const response = await connectionStore.connect(form)
+    ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
+  } catch (error: any) {
+    ElMessage.error(error.message || '串口连接失败')
   } finally {
     connecting.value = false
   }
 }
 
-const disconnect = async () => {
-  disconnecting.value = true
+const disconnectSerial = async (serialId: number) => {
+  disconnectingSerials.value[serialId] = true
+  try {
+    const success = await connectionStore.disconnect(serialId)
+    if (success) {
+      ElMessage.success(`串口 ${serialId} 断开成功`)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '串口断开失败')
+  } finally {
+    disconnectingSerials.value[serialId] = false
+  }
+}
+
+const disconnectAll = async () => {
+  disconnectingAll.value = true
   try {
     const success = await connectionStore.disconnect()
     if (success) {
-      ElMessage.success('串口断开成功')
+      ElMessage.success('所有串口断开成功')
     }
+  } catch (error: any) {
+    ElMessage.error(error.message || '断开串口失败')
   } finally {
-    disconnecting.value = false
+    disconnectingAll.value = false
   }
 }
 
 const testConnection = async () => {
   try {
-    // 简单的指令测试
-    await communicationStore.sendATCommand('AT\r\n')
+    // 简单的指令测试，使用当前选择的串口
+    await communicationStore.sendATCommand('AT\r\n', connectionStore.selectedSerialId || undefined)
     ElMessage.success('连接测试成功')
   } catch (error) {
     ElMessage.warning('连接测试失败，请检查设备连接')
@@ -341,6 +407,80 @@ onMounted(() => {
   
   .header-actions {
     justify-content: center;
+  }
+}
+
+/* 多串口连接列表样式 */
+.connected-serials {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.serial-card {
+  border: 2px solid #e0e6ed;
+  border-radius: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.serial-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+}
+
+.serial-card.active {
+  border-color: #409eff;
+  background: #f0f8ff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+}
+
+.serial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.serial-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.serial-id {
+  font-weight: 600;
+  color: #409eff;
+  font-size: 16px;
+}
+
+.serial-port {
+  color: #666;
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.serial-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serial-details {
+  margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+  .serial-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .serial-actions {
+    justify-content: space-between;
   }
 }
 </style>
