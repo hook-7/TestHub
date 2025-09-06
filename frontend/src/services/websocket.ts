@@ -20,6 +20,7 @@ export enum WSMessageType {
 export interface WSCommandMessage {
   type: WSMessageType.COMMAND
   command: string
+  serial_id?: number  // 目标串口ID
   args?: string[]
   timestamp?: string
 }
@@ -27,6 +28,7 @@ export interface WSCommandMessage {
 export interface WSResponseMessage {
   type: WSMessageType
   message: string
+  serial_id?: number  // 响应来源的串口ID
   data?: any
   timestamp: string
   success: boolean
@@ -36,6 +38,7 @@ export interface WSErrorMessage {
   type: WSMessageType.ERROR
   error: string
   code: number
+  serial_id?: number  // 错误相关的串口ID
   timestamp: string
 }
 
@@ -187,7 +190,7 @@ export class WebSocketClient {
   /**
    * 发送命令
    */
-  async sendCommand(command: string, args: string[] = []): Promise<boolean> {
+  async sendCommand(command: string, serialId?: number, args: string[] = []): Promise<boolean> {
     if (!this.isConnected()) {
       ElMessage.error('WebSocket未连接，正在尝试重连...')
       await this.connect()
@@ -199,7 +202,8 @@ export class WebSocketClient {
     try {
       const message: WSCommandMessage = {
         type: WSMessageType.COMMAND,
-        command: command, 
+        command: command,
+        serial_id: serialId,  // 包含串口ID
         args,
         timestamp: new Date().toISOString()
       }

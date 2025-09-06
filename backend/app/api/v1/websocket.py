@@ -104,10 +104,12 @@ class ConnectionManager:
                 return
             
             command_text = data.get("command", "")
+            serial_id = data.get("serial_id")  # 获取目标串口ID
             if not command_text:
                 error_msg = WSErrorMessage(
                     error="命令不能为空",
                     code=400,
+                    serial_id=serial_id,
                     timestamp=datetime.now().isoformat()
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
@@ -115,18 +117,19 @@ class ConnectionManager:
             
             # 执行AT指令通过串口服务
             try:
-
-                # 直接发送完整的指令字符串到串口
-                result = await serial_service.send_at_command(command_text)
+                # 发送完整的指令字符串到指定串口
+                result = await serial_service.send_at_command(command_text, serial_id)
                 
                 # 构造成功响应
                 response_msg = WSResponseMessage(
                     type=WSMessageType.RESPONSE,
                     message=result.received_data,
+                    serial_id=result.serial_id,  # 包含串口ID信息
                     data={
                         "sent_data": result.sent_data,
                         "received_data": result.received_data,
-                        "timestamp": result.timestamp
+                        "timestamp": result.timestamp,
+                        "serial_id": result.serial_id
                     },
                     timestamp=datetime.now().isoformat(),
                     success=True
@@ -139,6 +142,7 @@ class ConnectionManager:
                 error_msg = WSErrorMessage(
                     error=f"指令执行失败: {str(serial_error)}",
                     code=500,
+                    serial_id=serial_id,
                     timestamp=datetime.now().isoformat()
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
@@ -239,12 +243,13 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
         connection_status = await serial_service.get_connection_status()
         logger.info(f"Serial connection status before send: {connection_status}")
 
-        result = await serial_service.send_at_command(message_request.message)
+        result = await serial_service.send_at_command(message_request.message, message_request.serial_id)
         logger.info(f"Serial command result: {result}")
         # 构造WebSocket消息
         ws_message = WSResponseMessage(
             type=message_request.message_type,
             message=message_request.message,
+            serial_id=result.serial_id,
             data=result.model_dump(),
             timestamp=datetime.now().isoformat(),
             success=True
@@ -260,7 +265,8 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
                 data=SendMessageResponse(
                     success=True,
                     message="消息发送成功",
-                    sent_to_session=target_session_id
+                    sent_to_session=target_session_id,
+                    serial_id=result.serial_id
                 ).model_dump(),
                 msg="WebSocket消息发送成功"
             )
