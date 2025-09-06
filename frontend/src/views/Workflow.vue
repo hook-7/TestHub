@@ -10,8 +10,39 @@
         </template>
         
         <div class="workflow-content">
+          <!-- 加载状态提示 -->
+          <div v-if="isLoadingCommands" class="loading-section">
+            <el-alert
+              title="正在加载测试命令..."
+              type="info"
+              :closable="false"
+              show-icon
+            >
+              <template #default>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  从服务器加载测试命令配置
+                </div>
+              </template>
+            </el-alert>
+          </div>
+
+          <!-- 无命令提示 -->
+          <div v-else-if="cmds.length === 0" class="empty-section">
+            <el-alert
+              title="暂无测试命令"
+              type="warning"
+              :closable="false"
+              show-icon
+            >
+              <template #default>
+                请先在"串口通信"页面添加测试命令，或检查服务器连接状态
+              </template>
+            </el-alert>
+          </div>
+
           <!-- MAC地址输入区域 -->
-          <div class="input-section">
+          <div v-else class="input-section">
             <el-form :model="form" label-width="120px" class="mac-form">
               <el-form-item label="MAC地址" required>
                 <el-input
@@ -165,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Link, 
@@ -178,10 +209,14 @@ import {
   Clock
 } from '@element-plus/icons-vue'
 import { serialAPI } from '@/api/serial'
-import type { SavedCommand } from '@/api/commands'
+import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
 
-// 命令数据
+// 命令数据 - 从常用命令接口动态获取
+const cmds = ref<SavedCommand[]>([])
+
+// 硬编码的测试项（已注释，现在从API获取）
+/*
 const cmds = ref<SavedCommand[]>([
 	{
 		"id": "1",
@@ -272,11 +307,15 @@ const cmds = ref<SavedCommand[]>([
 		"target_serial_id": 2
 	}
 ])
+*/
 
 // 表单数据
 const form = ref({
   macAddress: ''
 })
+
+// 加载状态
+const isLoadingCommands = ref(false)
 
 // 执行状态
 const isExecuting = ref(false)
@@ -357,6 +396,21 @@ const getLogIcon = (status: string) => {
 
 const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
+}
+
+// 加载常用命令
+const loadCommands = async () => {
+  try {
+    isLoadingCommands.value = true
+    const response = await getAllCommands()
+    cmds.value = response.commands
+    console.log(`已加载 ${response.commands.length} 个测试命令`)
+  } catch (error) {
+    console.error('加载命令失败:', error)
+    ElMessage.error('加载测试命令失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    isLoadingCommands.value = false
+  }
 }
 
 // 替换命令中的MAC地址占位符
@@ -691,6 +745,11 @@ const getResultStatusClass = () => {
   }
 }
 
+// 组件挂载时加载命令
+onMounted(() => {
+  loadCommands()
+})
+
 </script>
 
 <style scoped>
@@ -717,6 +776,23 @@ const getResultStatusClass = () => {
 /* 卡片头部 */
 .card-header {
   text-align: center;
+}
+
+/* 加载和空状态样式 */
+.loading-section,
+.empty-section {
+  margin: 20px 0;
+  padding: 0 20px;
+}
+
+.loading-section .el-alert {
+  background: #f0f9ff;
+  border: 1px solid #bfdbfe;
+}
+
+.empty-section .el-alert {
+  background: #fffbeb;
+  border: 1px solid #fed7aa;
 }
 
 .page-title {
