@@ -713,9 +713,65 @@ const loadSavedCommands = async () => {
     }))
   } catch (error) {
     console.error('Failed to load saved commands:', error)
-    ElMessage.error('加载常用指令失败')
-    // 出错时也初始化为空数组
-    savedCommands.value = []
+    ElMessage.warning('无法连接到后端，使用示例指令演示多串口功能')
+    // 提供示例指令数据来演示多串口功能
+    savedCommands.value = [
+      {
+        id: '1',
+        name: '设置MAC',
+        command: 'AT+MAC=026501123456',
+        description: '设置设备MAC地址',
+        expected_response: 'OK',
+        send_as_hex: false,
+        show_notification: false,
+        target_serial_id: 1, // 指定串口1
+        createdAt: Date.now()
+      },
+      {
+        id: '2',
+        name: '获取MAC',
+        command: 'AT+MAC?',
+        description: '查询设备MAC地址',
+        expected_response: '+MAC:026501123456',
+        send_as_hex: false,
+        show_notification: true,
+        target_serial_id: null, // 使用当前选择的串口
+        createdAt: Date.now()
+      },
+      {
+        id: '3',
+        name: '查询版本',
+        command: 'AT+GMR',
+        description: '查询固件版本信息',
+        expected_response: 'AT version:1.0.0',
+        send_as_hex: false,
+        show_notification: false,
+        target_serial_id: 2, // 指定串口2
+        createdAt: Date.now()
+      },
+      {
+        id: '4',
+        name: '重启设备',
+        command: 'AT+RST',
+        description: '重启设备',
+        expected_response: 'OK',
+        send_as_hex: false,
+        show_notification: true,
+        target_serial_id: null,
+        createdAt: Date.now()
+      },
+      {
+        id: '5',
+        name: '发送16进制',
+        command: '41540D0A',
+        description: '发送AT\\r\\n的16进制格式',
+        expected_response: '4F4B0D0A',
+        send_as_hex: true,
+        show_notification: false,
+        target_serial_id: 1,
+        createdAt: Date.now()
+      }
+    ]
   }
 }
 
