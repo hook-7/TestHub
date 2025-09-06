@@ -27,7 +27,6 @@ export const useCommunicationStore = defineStore('communication', () => {
   const wsConnected = ref(false)
 
   // 计算属性
-  const logCount = computed(() => logs.value.length)
   const isRealTimeConnected = computed(() => wsConnected.value)
 
   // 初始化WebSocket
@@ -243,7 +242,6 @@ export const useCommunicationStore = defineStore('communication', () => {
     wsConnected,
     
     // 计算属性
-    logCount,
     isRealTimeConnected,
     
     // 操作

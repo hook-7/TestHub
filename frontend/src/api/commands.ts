@@ -65,14 +65,6 @@ export const createCommand = async (data: CreateCommandRequest): Promise<SavedCo
   return response
 }
 
-/**
- * 根据ID获取指令详情
- */
-export const getCommandById = async (id: string): Promise<SavedCommand> => {
-  const response = await api.get<SavedCommand>(`/commands/${id}`)
-  // 由于拦截器已经处理了错误检查和数据提取，这里直接返回
-  return response
-}
 
 /**
  * 更新指令
@@ -91,11 +83,3 @@ export const deleteCommand = async (id: string): Promise<void> => {
   // 由于拦截器已经处理了错误检查，这里无需额外处理
 }
 
-/**
- * 获取指令总数
- */
-export const getCommandsCount = async (): Promise<number> => {
-  const response = await api.get<number>('/commands/count/total')
-  // 由于拦截器已经处理了错误检查和数据提取，这里直接返回
-  return response
-}

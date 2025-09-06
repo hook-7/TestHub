@@ -246,20 +246,6 @@ export class WebSocketClient {
     return this.ws?.readyState === WebSocket.OPEN
   }
 
-  /**
-   * 获取连接状态
-   */
-  getConnectionState(): string {
-    if (!this.ws) return 'CLOSED'
-    
-    switch (this.ws.readyState) {
-      case WebSocket.CONNECTING: return 'CONNECTING'
-      case WebSocket.OPEN: return 'OPEN'
-      case WebSocket.CLOSING: return 'CLOSING'
-      case WebSocket.CLOSED: return 'CLOSED'
-      default: return 'UNKNOWN'
-    }
-  }
 
   /**
    * 设置消息回调
@@ -275,10 +261,4 @@ export class WebSocketClient {
     this.onConnectionChangeCallback = callback
   }
 
-  /**
-   * 获取客户端ID
-   */
-  getClientId(): string {
-    return this.clientId
-  }
 }
