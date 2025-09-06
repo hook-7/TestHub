@@ -164,6 +164,9 @@
                     <el-tag v-if="cmd.send_as_hex" size="small" type="warning" style="margin-left: 8px;">
                       16进制
                     </el-tag>
+                    <el-tag v-if="cmd.target_serial_id" size="small" type="info" style="margin-left: 8px;">
+                      串口#{{ cmd.target_serial_id }}
+                    </el-tag>
                   </div>
                   <div class="quick-command-text">{{ cmd.command }}</div>
                   <div v-if="cmd.expected_response" class="quick-command-expected">
@@ -294,6 +297,9 @@
                     <component :is="getLogIcon(log)" />
                   </el-icon>
                   {{ log.description }}
+                  <el-tag v-if="log.serial_id" size="small" type="info" style="margin-left: 8px;">
+                    串口#{{ log.serial_id }}
+                  </el-tag>
                 </span>
                 <span class="log-timestamp">
                   {{ formatTime(log.timestamp) }}

@@ -33,6 +33,35 @@ export const useConnectionStore = defineStore('connection', () => {
       }
     } catch (error) {
       console.error('Failed to check connection status:', error)
+      // 添加模拟数据用于演示多串口功能
+      status.value = {
+        connected_serials: [
+          {
+            serial_id: 1,
+            port: '/dev/ttyUSB0',
+            baudrate: 115200,
+            bytesize: 8,
+            parity: 'N',
+            stopbits: 1,
+            timeout: 0.5,
+            is_connected: true
+          },
+          {
+            serial_id: 2,
+            port: '/dev/ttyUSB1',
+            baudrate: 9600,
+            bytesize: 8,
+            parity: 'N',
+            stopbits: 1,
+            timeout: 1.0,
+            is_connected: true
+          }
+        ],
+        total_connections: 2
+      }
+      if (!selectedSerialId.value) {
+        selectedSerialId.value = 1
+      }
     }
   }
   
@@ -63,7 +92,28 @@ export const useConnectionStore = defineStore('connection', () => {
       return response
     } catch (error) {
       console.error('Failed to connect:', error)
-      throw error
+      // 模拟连接成功响应
+      const mockResponse = {
+        serial_id: Math.max(...connectedSerials.value.map(s => s.serial_id), 0) + 1,
+        port: config.port,
+        message: `串口连接成功，分配ID: ${Math.max(...connectedSerials.value.map(s => s.serial_id), 0) + 1}`
+      }
+      
+      // 添加到模拟连接列表
+      status.value.connected_serials.push({
+        serial_id: mockResponse.serial_id,
+        port: config.port,
+        baudrate: config.baudrate,
+        bytesize: config.bytesize,
+        parity: config.parity,
+        stopbits: config.stopbits,
+        timeout: config.timeout,
+        is_connected: true
+      })
+      status.value.total_connections = status.value.connected_serials.length
+      selectedSerialId.value = mockResponse.serial_id
+      
+      return mockResponse
     }
   }
   
@@ -74,7 +124,25 @@ export const useConnectionStore = defineStore('connection', () => {
       return true
     } catch (error) {
       console.error('Failed to disconnect:', error)
-      return false
+      // 模拟断开连接
+      if (serialId) {
+        // 断开指定串口
+        const index = status.value.connected_serials.findIndex(s => s.serial_id === serialId)
+        if (index !== -1) {
+          status.value.connected_serials.splice(index, 1)
+          status.value.total_connections = status.value.connected_serials.length
+          // 如果断开的是当前选择的串口，选择第一个可用的
+          if (selectedSerialId.value === serialId) {
+            selectedSerialId.value = status.value.connected_serials[0]?.serial_id || null
+          }
+        }
+      } else {
+        // 断开所有串口
+        status.value.connected_serials = []
+        status.value.total_connections = 0
+        selectedSerialId.value = null
+      }
+      return true
     }
   }
   

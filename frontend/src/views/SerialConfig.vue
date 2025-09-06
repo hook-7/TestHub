@@ -138,7 +138,7 @@
               size="large"
             >
               <el-icon><Close /></el-icon>
-              断开所有连接
+              断开连接
             </el-button>
             
             <el-button 
