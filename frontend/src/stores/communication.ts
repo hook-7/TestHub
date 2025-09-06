@@ -76,7 +76,7 @@ export const useCommunicationStore = defineStore('communication', () => {
       addLog({
         type: 'at',
         direction: 'sent',
-        description: isError ? '命令执行错误' : '命令执行结果',
+        description: isError ? '命令执行错误' : '接收报文',
         data: (message as WSResponseMessage).message,
         success: !isError,
         serial_id: serialId
@@ -84,7 +84,7 @@ export const useCommunicationStore = defineStore('communication', () => {
       addLog({
         type: 'at',
         direction: 'received',
-        description: isError ? '命令执行错误' : '命令执行结果',
+        description: isError ? '命令执行错误' : '接收报文',
         data: (message as WSResponseMessage).data?.received_data,
         success: !isError,
         serial_id: serialId
@@ -95,7 +95,7 @@ export const useCommunicationStore = defineStore('communication', () => {
     addLog({
       type: 'at',
       direction: 'received',
-      description: isError ? '命令执行错误' : '命令执行结果',
+      description: isError ? '命令执行错误' : '接收报文',
       data: isError ? (message as WSErrorMessage).error : (message as WSResponseMessage).message,
       success: !isError,
       serial_id: serialId
@@ -139,7 +139,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'sent',
         data: command,
-        description: serialId ? `发送指令到串口${serialId}` : '发送指令',
+        description: '发送指令',
         success: true,
         serial_id: serialId
       })

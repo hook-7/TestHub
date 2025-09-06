@@ -31,6 +31,10 @@ export const useConnectionStore = defineStore('connection', () => {
       if (selectedSerialId.value !== null && !connectedSerials.value.find(s => s.serial_id === selectedSerialId.value)) {
         selectedSerialId.value = connectedSerials.value[0]?.serial_id || null
       }
+      // 如果有连接但没有选择串口，自动选择第一个
+      if (selectedSerialId.value === null && connectedSerials.value.length > 0) {
+        selectedSerialId.value = connectedSerials.value[0].serial_id
+      }
     } catch (error) {
       console.error('Failed to check connection status:', error)
       // 添加模拟数据用于演示多串口功能和ID复用

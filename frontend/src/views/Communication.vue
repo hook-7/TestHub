@@ -2,23 +2,52 @@
   <div class="page-container">
     <!-- 状态栏 -->
     <div class="status-bar">
-      <div class="status-info">
-        <div class="connection-badge" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
-          <el-icon class="status-icon">
-            <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
-          </el-icon>
-          <span class="status-text">
-            {{ connectionStore.isConnected ? `已连接 ${connectionStore.connectedSerials.length} 个串口` : '未连接' }}
-          </span>
+      <div class="status-left">
+        <!-- 串口连接状态 -->
+        <div class="status-item">
+          <div class="status-label">
+            <el-icon class="label-icon"><Connection /></el-icon>
+            串口状态
+          </div>
+          <div class="connection-badge" :class="{ connected: connectionStore.isConnected, disconnected: !connectionStore.isConnected }">
+            <el-icon class="status-icon">
+              <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
+            </el-icon>
+            <span class="status-text">
+              {{ connectionStore.isConnected ? `已连接 ${connectionStore.connectedSerials.length} 个串口` : '未连接' }}
+            </span>
+          </div>
         </div>
-        
-        <!-- 串口选择器 -->
-        <div v-if="connectionStore.isConnected" class="serial-selector">
+
+        <!-- WebSocket连接状态 -->
+        <div class="status-item">
+          <div class="status-label">
+            <el-icon class="label-icon"><Monitor /></el-icon>
+            实时通信
+          </div>
+          <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected, disconnected: !communicationStore.isRealTimeConnected }">
+            <el-icon class="status-icon">
+              <span v-if="communicationStore.isRealTimeConnected" class="connected-icon">●</span>
+              <span v-else class="disconnected-icon">●</span>
+            </el-icon>
+            <span class="status-text">
+              {{ communicationStore.isRealTimeConnected ? '已连接' : '连接中' }}
+            </span>
+          </div>
+        </div>
+      </div>
+              
+      <!-- 串口选择器 -->
+      <div v-if="connectionStore.isConnected" class="status-right">
+        <div class="serial-selector">
+          <div class="selector-label">
+            <el-icon><Setting /></el-icon>
+            选择串口
+          </div>
           <el-select 
             v-model="connectionStore.selectedSerialId" 
             placeholder="选择串口"
-            size="small"
-            style="width: 200px;"
+            class="serial-select"
             @change="onSerialChange"
           >
             <el-option
@@ -28,17 +57,6 @@
               :value="serial.serial_id"
             />
           </el-select>
-        </div>
-        
-        <!-- WebSocket连接状态 -->
-        <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected, disconnected: !communicationStore.isRealTimeConnected }">
-          <el-icon class="status-icon">
-            <span v-if="communicationStore.isRealTimeConnected" class="connected-icon">●</span>
-            <span v-else class="disconnected-icon">●</span>
-          </el-icon>
-          <span class="status-text">
-            WebSocket {{ communicationStore.isRealTimeConnected ? '已连接' : '连接中' }}
-          </span>
         </div>
       </div>
     </div>
@@ -134,17 +152,13 @@
             <div class="command-header">
               <h4 class="command-title">常用指令</h4>
               <div class="command-actions">
-                <el-button size="small" @click="showAddCommand = true">
+                <el-button size="small" @click="showAddCommand = true" class="action-btn">
                   <el-icon><Plus /></el-icon>
-                  添加指令
+                  添加
                 </el-button>
-                <el-button size="small" @click="showHistory = !showHistory">
+                <el-button size="small" @click="showHistory = !showHistory" class="action-btn">
                   <el-icon><Clock /></el-icon>
-                  历史记录
-                </el-button>
-                <el-button size="small" @click="showBatchSend = !showBatchSend">
-                  <el-icon><List /></el-icon>
-                  批量发送
+                  历史
                 </el-button>
               </div>
             </div>
@@ -159,42 +173,38 @@
                 :title="cmd.description"
               >
                 <div class="command-content">
-                  <div class="quick-command-name">
-                    {{ cmd.name }}
-                    <el-tag v-if="cmd.send_as_hex" size="small" type="warning" style="margin-left: 8px;">
-                      16进制
-                    </el-tag>
-                    <el-tag v-if="cmd.target_serial_id" size="small" type="info" style="margin-left: 8px;">
-                      串口#{{ cmd.target_serial_id }}
-                    </el-tag>
+                  <div class="command-header-row">
+                    <span class="command-name">{{ cmd.name }}</span>
+                    <div class="command-tags">
+                      <el-tag v-if="cmd.send_as_hex" size="small" type="warning">HEX</el-tag>
+                      <el-tag v-if="cmd.show_notification" size="small" type="success">通知</el-tag>
+                      <el-tag v-if="cmd.target_serial_id" size="small" type="primary">
+                        #{{ cmd.target_serial_id }}
+                      </el-tag>
+                    </div>
                   </div>
-                  <div class="quick-command-text">{{ cmd.command }}</div>
-                  <div v-if="cmd.expected_response" class="quick-command-expected">
-                    期望: {{ cmd.expected_response }}
-                  </div>
+                  <div class="command-text">{{ cmd.command }}</div>
+                  <div v-if="cmd.description" class="command-desc">{{ cmd.description }}</div>
                 </div>
                 <div class="command-actions">
-                  <el-icon
-                    class="edit-icon"
-                    @click.stop="openEditCommand(cmd)"
-                    :title="`编辑指令: ${cmd.name}`"
-                  >
-                    <Edit />
-                  </el-icon>
-                  <el-icon
-                    class="delete-icon"
-                    @click.stop="deleteCommand(cmd)"
-                    :title="`删除指令: ${cmd.name}`"
-                  >
-                    <Delete />
-                  </el-icon>
+                  <div v-if="cmd.expected_response" class="expected-response">
+                    期望: {{ cmd.expected_response }}
+                  </div>
+                  <div class="action-icons">
+                    <el-icon class="edit-icon" @click.stop="openEditCommand(cmd)" title="编辑">
+                      <Edit />
+                    </el-icon>
+                    <el-icon class="delete-icon" @click.stop="deleteCommand(cmd)" title="删除">
+                      <Delete />
+                    </el-icon>
+                  </div>
                 </div>
               </div>
               
               <!-- 当没有常用指令时显示提示 -->
               <div v-if="savedCommands.length === 0" class="no-commands-hint">
                 <el-text type="info" size="small">
-                  暂无常用指令，点击"添加指令"来创建您的第一个常用指令
+                  暂无常用指令，点击"添加"来创建
                 </el-text>
               </div>
             </div>
@@ -222,39 +232,6 @@
             </div>
           </el-collapse-transition>
 
-          <!-- 批量发送 -->
-          <el-collapse-transition>
-            <div v-show="showBatchSend" style="margin-top: 16px;">
-              <h4>批量发送</h4>
-              <el-input
-                v-model="batchCommands"
-                type="textarea"
-                :rows="4"
-                placeholder="每行一个指令，例如:&#10;AT&#10;AT+GMR&#10;AT+CSQ"
-                style="font-family: monospace;"
-              />
-              <div style="margin-top: 8px;">
-                <el-button 
-                  type="primary" 
-                  size="small"
-                  @click="sendBatchCommands"
-                  :disabled="!connectionStore.isConnected"
-                  :loading="batchLoading"
-                >
-                  批量发送
-                </el-button>
-                <el-input-number 
-                  v-model="batchDelay"
-                  :min="100"
-                  :max="10000"
-                  :step="100"
-                  size="small"
-                  style="width: 120px; margin-left: 8px;"
-                />
-                <span style="margin-left: 4px; font-size: 12px; color: #666;">ms间隔</span>
-              </div>
-            </div>
-          </el-collapse-transition>
           </div>
         </el-card>
       </el-col>
@@ -466,7 +443,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Edit } from '@element-plus/icons-vue'
+import { Delete, Download, Edit, Connection, Monitor, Setting } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import type { CommunicationLog } from '@/stores/communication'
@@ -640,58 +617,6 @@ const sendQuickCommand = async (cmd: SavedCommand) => {
   }
 }
 
-const sendBatchCommands = async () => {
-  if (!batchCommands.value.trim()) {
-    ElMessage.error('请输入要批量发送的指令')
-    return
-  }
-  
-  if (!connectionStore.selectedSerialId) {
-    ElMessage.error('请先选择一个串口')
-    return
-  }
-  
-  const commands = batchCommands.value
-    .split('\n')
-    .map(cmd => cmd.trim())
-    .filter(cmd => cmd.length > 0)
-  
-  if (commands.length === 0) {
-    ElMessage.error('没有有效的指令')
-    return
-  }
-  
-  batchLoading.value = true
-  
-  try {
-    for (let i = 0; i < commands.length; i++) {
-      const command = commands[i]
-      const formattedCommand = formatCommand(command)
-      
-      ElMessage.info(`发送第${i + 1}/${commands.length}个指令: ${command} (串口 #${connectionStore.selectedSerialId})`)
-      
-      try {
-        await communicationStore.sendATCommand(formattedCommand, connectionStore.selectedSerialId)
-        addToHistory(command)
-      } catch (error) {
-        console.error(`Command ${i + 1} failed:`, error)
-        ElMessage.error(`第${i + 1}个指令发送失败: ${command}`)
-      }
-      
-      // 如果不是最后一个指令，等待指定间隔
-      if (i < commands.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, batchDelay.value))
-      }
-    }
-    
-    ElMessage.success(`批量发送完成，共发送${commands.length}个指令`)
-  } catch (error) {
-    console.error('Batch send error:', error)
-    ElMessage.error('批量发送过程中出现错误')
-  } finally {
-    batchLoading.value = false
-  }
-}
 
 // API相关方法
 const loadSavedCommands = async () => {
@@ -1080,6 +1005,11 @@ onMounted(async () => {
     return
   }
   
+  // 自动选择第一个已连接的串口
+  if (!connectionStore.selectedSerialId && connectionStore.connectedSerials.length > 0) {
+    connectionStore.selectSerial(connectionStore.connectedSerials[0].serial_id)
+  }
+  
   // 加载保存的指令
   await loadSavedCommands()
   
@@ -1106,90 +1036,118 @@ onMounted(async () => {
 }
 
 .status-bar {
-  background: #ffffff;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   border: 1px solid #e0e6ed;
   border-radius: 16px;
-  padding: 20px 28px;
+  padding: 24px 32px;
   margin-bottom: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
 }
 
-.status-info {
+.status-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 32px;
   flex-wrap: wrap;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.label-icon {
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.status-right {
+  display: flex;
+  align-items: center;
 }
 
 .serial-selector {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  padding: 8px 16px;
-  background: #f0f8ff;
-  border: 2px solid #409eff;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #409eff;
+  align-items: flex-end;
 }
 
-.connection-badge {
+.selector-label {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
-  border-radius: 12px;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
-  font-size: 14px;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.connection-badge:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+.serial-select {
+  width: 200px;
 }
 
-.connection-badge.connected {
-  background: #f0f9f0;
-  color: #2e7d32;
-  border: 2px solid #4caf50;
-}
-
-.connection-badge.disconnected {
-  background: #fef7f7;
-  color: #c62828;
-  border: 2px solid #f44336;
-}
-
+.connection-badge,
 .realtime-badge {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 14px;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 13px;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid;
+  min-width: 120px;
+  justify-content: center;
 }
 
+.connection-badge:hover,
 .realtime-badge:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.connection-badge.connected {
+  background: linear-gradient(135deg, #f0f9f0 0%, #e8f5e8 100%);
+  color: #2e7d32;
+  border-color: #4caf50;
+}
+
+.connection-badge.disconnected {
+  background: linear-gradient(135deg, #fef7f7 0%, #ffebee 100%);
+  color: #c62828;
+  border-color: #f44336;
 }
 
 .realtime-badge.connected {
-  background: #f3f5ff;
+  background: linear-gradient(135deg, #f3f5ff 0%, #e3f2fd 100%);
   color: #1976d2;
-  border: 2px solid #2196f3;
+  border-color: #2196f3;
 }
 
 .realtime-badge.disconnected {
-  background: #fffbf0;
+  background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
   color: #f57c00;
-  border: 2px solid #ff9800;
+  border-color: #ff9800;
 }
 
 .connected-icon {
@@ -1687,26 +1645,26 @@ onMounted(async () => {
 
 /* 常用指令区域美化 */
 .quick-commands {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-height: 300px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  max-height: 400px;
   overflow-y: auto;
   padding: 8px 4px 8px 0;
 }
 
 .quick-commands::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .quick-commands::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.05);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .quick-commands::-webkit-scrollbar-thumb {
   background: #bdbdbd;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .quick-commands::-webkit-scrollbar-thumb:hover {
@@ -1715,32 +1673,89 @@ onMounted(async () => {
 
 .quick-command-btn {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
+  flex-direction: column;
+  padding: 12px 16px;
   text-align: left;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: all 0.2s ease;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   position: relative;
-  overflow: hidden;
-  min-height: 80px;
+  min-height: auto;
 }
 
 .command-content {
   flex: 1;
-  min-width: 0;
-  margin-right: 16px;
+  margin-bottom: 8px;
+}
+
+.command-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.command-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.command-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.command-text {
+  font-size: 12px;
+  color: #6b7280;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: #f8f9fa;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  margin-bottom: 4px;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.3;
+}
+
+.command-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 4px;
 }
 
 .command-actions {
   display: flex;
-  gap: 8px;
-  margin-left: 12px;
-  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.action-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.expected-response {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  flex: 1;
+  margin-right: 8px;
 }
 
 .quick-command-btn::before {
@@ -1757,32 +1772,34 @@ onMounted(async () => {
 }
 
 .quick-command-btn:hover {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f8fafc;
   border-color: #3b82f6;
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
-.quick-command-btn:hover::before {
-  transform: scaleX(1);
+.quick-command-btn:hover .command-text {
+  background: #e0f2fe;
+  border-color: #81d4fa;
+  color: #0277bd;
 }
 
 .quick-command-btn:active {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
 }
 
 .quick-command-btn.disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
 }
 
 .quick-command-btn.disabled:hover {
   transform: none;
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  background: #ffffff;
   border-color: #e5e7eb;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .quick-command-name {
@@ -1836,44 +1853,32 @@ onMounted(async () => {
 
 .edit-icon,
 .delete-icon {
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  padding: 8px;
-  border-radius: 12px;
-  font-size: 16px;
-  border: 1px solid transparent;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  opacity: 0.6;
 }
 
 .edit-icon {
   color: #3b82f6;
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.2);
 }
 
 .delete-icon {
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.quick-command-btn:hover .edit-icon,
-.quick-command-btn:hover .delete-icon {
-  opacity: 1;
 }
 
 .edit-icon:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+  background: rgba(59, 130, 246, 0.1);
+  opacity: 1;
   transform: scale(1.1);
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 
 .delete-icon:hover {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
-  transform: scale(1.1) rotate(5deg);
-  border-color: rgba(239, 68, 68, 0.3);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.1);
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .command-controls {
@@ -1974,5 +1979,65 @@ onMounted(async () => {
   align-items: center;
 }
 
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .status-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px;
+  }
+  
+  .status-left {
+    justify-content: center;
+    gap: 20px;
+  }
+  
+  .status-right {
+    justify-content: center;
+  }
+  
+  .serial-selector {
+    align-items: center;
+  }
+  
+  .serial-select {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-left {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .status-item {
+    align-items: center;
+  }
+  
+  .connection-badge,
+  .realtime-badge {
+    min-width: 100px;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  .quick-commands {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .command-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .command-tags {
+    align-self: flex-end;
+  }
+}
 
 </style>
