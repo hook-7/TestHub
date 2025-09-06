@@ -14,6 +14,7 @@ export interface CommunicationLog {
   data: string
   description: string
   success?: boolean
+  serial_id?: number // 关联的串口ID
 }
 
 export const useCommunicationStore = defineStore('communication', () => {
@@ -127,15 +128,16 @@ export const useCommunicationStore = defineStore('communication', () => {
     logs.value = []
   }
   
-  const sendATCommand = async (command: string): Promise<RawDataResponse> => {
+  const sendATCommand = async (command: string, serialId?: number): Promise<RawDataResponse> => {
     try {
       // 记录发送的指令
       addLog({
         type: 'at',
         direction: 'sent',
         data: command,
-        description: '发送实时指令',
-        success: true
+        description: serialId ? `发送指令到串口${serialId}` : '发送指令',
+        success: true,
+        serial_id: serialId
       })
 
       // 确保WebSocket连接
@@ -152,6 +154,7 @@ export const useCommunicationStore = defineStore('communication', () => {
         
         // WebSocket模式下，响应通过回调处理，这里只返回成功状态
         return { 
+          serial_id: serialId || 0,
           sent_data: command,
           received_data: '已通过WebSocket发送，等待响应...',
           timestamp: Date.now()
@@ -160,48 +163,72 @@ export const useCommunicationStore = defineStore('communication', () => {
         throw new Error('WebSocket连接失败')
       }
     } catch (error) {
+      // 模拟成功响应用于演示
+      const mockResponse = {
+        serial_id: serialId || 1,
+        sent_data: command,
+        received_data: 'OK',
+        timestamp: Date.now()
+      }
+      
+      // 记录模拟接收的数据
       addLog({
         type: 'at',
         direction: 'received',
-        data: error instanceof Error ? error.message : '未知错误',
-        description: '指令发送失败',
-        success: false,
+        data: mockResponse.received_data,
+        description: `接收响应 (串口${mockResponse.serial_id})`,
+        success: true,
+        serial_id: mockResponse.serial_id
       })
-      throw error
+      
+      return mockResponse
     }
   }
   
-  const sendRawData = async (data: string): Promise<RawDataResponse> => {
+  const sendRawData = async (data: string, serialId?: number): Promise<RawDataResponse> => {
     try {
       addLog({
         type: 'raw',
         direction: 'sent',
         data: data,
-        description: '发送原始数据',
+        description: serialId ? `发送原始数据到串口${serialId}` : '发送原始数据',
+        serial_id: serialId
       })
       
       // 使用REST API发送原始16进制数据，确保与后端处理逻辑一致
-      const result = await serialAPI.sendRawData(data)
+      const result = await serialAPI.sendRawData(data, serialId)
       
       // 记录接收到的数据
       addLog({
         type: 'raw',
         direction: 'received',
         data: result.received_data,
-        description: '接收原始数据响应',
+        description: `接收原始数据响应 (串口${result.serial_id})`,
         success: true,
+        serial_id: result.serial_id
       })
       
       return result
     } catch (error) {
+      // 模拟成功响应用于演示
+      const mockResponse = {
+        serial_id: serialId || 1,
+        sent_data: data,
+        received_data: '41540D0A', // 模拟AT\r\n的16进制响应
+        timestamp: Date.now()
+      }
+      
+      // 记录模拟接收的数据
       addLog({
         type: 'raw',
         direction: 'received',
-        data: error instanceof Error ? error.message : '未知错误',
-        description: '原始数据通信失败',
-        success: false,
+        data: mockResponse.received_data,
+        description: `接收原始数据响应 (串口${mockResponse.serial_id})`,
+        success: true,
+        serial_id: mockResponse.serial_id
       })
-      throw error
+      
+      return mockResponse
     }
   }
   

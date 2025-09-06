@@ -12,6 +12,7 @@ export interface SavedCommand {
   expected_response: string
   send_as_hex: boolean
   show_notification: boolean
+  target_serial_id?: number // 目标串口ID，null表示使用当前选择的串口
   created_at: number // 毫秒时间戳
 }
 
@@ -22,6 +23,7 @@ export interface CreateCommandRequest {
   expected_response?: string
   send_as_hex?: boolean
   show_notification?: boolean
+  target_serial_id?: number
 }
 
 export interface UpdateCommandRequest {
@@ -31,6 +33,7 @@ export interface UpdateCommandRequest {
   expected_response?: string
   send_as_hex?: boolean
   show_notification?: boolean
+  target_serial_id?: number
 }
 
 export interface CommandsListResponse {
