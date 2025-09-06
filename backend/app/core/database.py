@@ -17,8 +17,7 @@ logger = logging.getLogger(__name__)
 # 创建数据库引擎
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,  # 在开发模式下显示SQL语句
-    connect_args={"check_same_thread": False},  # SQLite需要这个参数
+    echo=settings.DB_ECHO,  # 是否显示SQL语句
 )
 
 
