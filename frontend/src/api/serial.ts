@@ -17,21 +17,35 @@ export interface SerialConfig {
   timeout: number
 }
 
+export interface SerialConnectionInfo {
+  serial_id: number
+  port: string
+  baudrate: number
+  bytesize: number
+  parity: string
+  stopbits: number
+  timeout: number
+  is_connected: boolean
+}
+
 export interface SerialConnectionStatus {
-  connected: boolean
-  port?: string
-  baudrate?: number
-  bytesize?: number
-  parity?: string
-  stopbits?: number
-  timeout?: number
+  connected_serials: SerialConnectionInfo[]
+  total_connections: number
+}
+
+export interface SerialConnectResponse {
+  serial_id: number
+  port: string
+  message: string
 }
 
 export interface RawDataRequest {
   data: string
+  serial_id?: number
 }
 
 export interface RawDataResponse {
+  serial_id: number
   sent_data: string
   received_data: string
   timestamp: number
@@ -52,13 +66,14 @@ export const serialAPI = {
   },
 
   // 连接串口
-  async connectSerial(config: SerialConfig): Promise<void> {
-    await api.post('/serial/connect', config)
+  async connectSerial(config: SerialConfig): Promise<SerialConnectResponse> {
+    const response = await api.post<SerialConnectResponse>('/serial/connect', config)
+    return response
   },
 
   // 断开串口连接
-  async disconnectSerial(): Promise<void> {
-    await api.post('/serial/disconnect')
+  async disconnectSerial(serialId?: number): Promise<void> {
+    await api.post('/serial/disconnect', { serial_id: serialId })
   },
 
   // 获取连接状态
@@ -68,14 +83,20 @@ export const serialAPI = {
   },
 
   // 发送指令（支持AT指令和其他自定义指令）
-  async sendATCommand(command: string): Promise<RawDataResponse> {
-    const response = await api.post<RawDataResponse>('/serial/send-at', { data: command })
+  async sendATCommand(command: string, serialId?: number): Promise<RawDataResponse> {
+    const response = await api.post<RawDataResponse>('/serial/send-at', { 
+      data: command, 
+      serial_id: serialId 
+    })
     return response
   },
 
   // 发送原始数据
-  async sendRawData(data: string): Promise<RawDataResponse> {
-    const response = await api.post<RawDataResponse>('/serial/raw-data', { data })
+  async sendRawData(data: string, serialId?: number): Promise<RawDataResponse> {
+    const response = await api.post<RawDataResponse>('/serial/raw-data', { 
+      data, 
+      serial_id: serialId 
+    })
     return response
   },
 }

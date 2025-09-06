@@ -59,8 +59,10 @@ class Settings(BaseSettings):
     @property
     def DATA_DIR(self) -> Path:
         """获取数据存储目录，跨平台兼容"""
-        # 使用当前工作目录下的 data 文件夹
-        data_dir = Path.cwd() / "data"
+        # 使用项目根目录下的 data 文件夹
+        # 获取项目根目录（backend的上级目录）
+        project_root = Path(__file__).parent.parent.parent.parent
+        data_dir = project_root / "data"
         data_dir.mkdir(exist_ok=True)  # 确保目录存在
         return data_dir
     

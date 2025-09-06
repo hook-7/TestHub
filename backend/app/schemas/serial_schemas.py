@@ -25,20 +25,28 @@ class SerialConfig(BaseModel):
     timeout: float = Field(default=0.5, description="超时时间(秒)")  # 优化后的默认值
 
 
+class SerialConnectionInfo(BaseModel):
+    """单个串口连接信息"""
+    serial_id: int = Field(..., description="串口ID")
+    port: str = Field(..., description="端口路径")
+    baudrate: int = Field(..., description="波特率")
+    bytesize: int = Field(..., description="数据位")
+    parity: str = Field(..., description="校验位")
+    stopbits: int = Field(..., description="停止位")
+    timeout: float = Field(..., description="超时时间")
+    is_connected: bool = Field(..., description="是否连接")
+
+
 class SerialConnectionStatus(BaseModel):
     """串口连接状态"""
-    connected: bool = Field(..., description="是否连接")
-    port: Optional[str] = Field(None, description="当前端口")
-    baudrate: Optional[int] = Field(None, description="波特率")
-    bytesize: Optional[int] = Field(None, description="数据位")
-    parity: Optional[str] = Field(None, description="校验位")
-    stopbits: Optional[int] = Field(None, description="停止位")
-    timeout: Optional[float] = Field(None, description="超时时间")
+    connected_serials: List[SerialConnectionInfo] = Field(default=[], description="已连接串口列表")
+    total_connections: int = Field(default=0, description="总连接数")
 
 
 class RawDataRequest(BaseModel):
     """原始数据请求"""
     data: str = Field(..., min_length=1, max_length=1000, description="数据字符串(AT指令或十六进制)")
+    serial_id: Optional[int] = Field(None, description="串口ID，如果不指定则使用第一个连接的串口")
     
     @field_validator('data')
     @classmethod
@@ -57,8 +65,26 @@ class RawDataRequest(BaseModel):
         return v.strip()
 
 
+class SerialConnectRequest(BaseModel):
+    """串口连接请求"""
+    config: SerialConfig = Field(..., description="串口配置")
+
+
+class SerialConnectResponse(BaseModel):
+    """串口连接响应"""
+    serial_id: int = Field(..., description="分配的串口ID")
+    port: str = Field(..., description="连接的端口")
+    message: str = Field(..., description="连接结果消息")
+
+
+class SerialDisconnectRequest(BaseModel):
+    """串口断开请求"""
+    serial_id: Optional[int] = Field(None, description="串口ID，如果不指定则断开所有串口")
+
+
 class RawDataResponse(BaseModel):
     """原始数据响应"""
+    serial_id: int = Field(..., description="使用的串口ID")
     sent_data: str = Field(..., description="发送的数据")
     received_data: str = Field(..., description="接收的数据")
     timestamp: float = Field(..., description="时间戳")

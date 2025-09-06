@@ -8,8 +8,26 @@
             <component :is="connectionStore.isConnected ? 'CircleCheckFilled' : 'CircleCloseFilled'" />
           </el-icon>
           <span class="status-text">
-            {{ connectionStore.isConnected ? `已连接 (${connectionStore.currentPort})` : '未连接' }}
+            {{ connectionStore.isConnected ? `已连接 ${connectionStore.connectedSerials.length} 个串口` : '未连接' }}
           </span>
+        </div>
+        
+        <!-- 串口选择器 -->
+        <div v-if="connectionStore.isConnected" class="serial-selector">
+          <el-select 
+            v-model="connectionStore.selectedSerialId" 
+            placeholder="选择串口"
+            size="small"
+            style="width: 200px;"
+            @change="onSerialChange"
+          >
+            <el-option
+              v-for="serial in connectionStore.connectedSerials"
+              :key="serial.serial_id"
+              :label="`串口 #${serial.serial_id} (${serial.port})`"
+              :value="serial.serial_id"
+            />
+          </el-select>
         </div>
         
         <!-- WebSocket连接状态 -->
@@ -146,6 +164,9 @@
                     <el-tag v-if="cmd.send_as_hex" size="small" type="warning" style="margin-left: 8px;">
                       16进制
                     </el-tag>
+                    <el-tag v-if="cmd.target_serial_id" size="small" type="info" style="margin-left: 8px;">
+                      串口#{{ cmd.target_serial_id }}
+                    </el-tag>
                   </div>
                   <div class="quick-command-text">{{ cmd.command }}</div>
                   <div v-if="cmd.expected_response" class="quick-command-expected">
@@ -276,6 +297,9 @@
                     <component :is="getLogIcon(log)" />
                   </el-icon>
                   {{ log.description }}
+                  <el-tag v-if="log.serial_id" size="small" type="info" style="margin-left: 8px;">
+                    串口#{{ log.serial_id }}
+                  </el-tag>
                 </span>
                 <span class="log-timestamp">
                   {{ formatTime(log.timestamp) }}
@@ -337,6 +361,19 @@
             <el-radio :value="true">16进制发送</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="目标串口">
+          <el-select v-model="newCommand.target_serial_id" placeholder="选择目标串口（可选）" clearable>
+            <el-option
+              v-for="serial in connectionStore.connectedSerials"
+              :key="serial.serial_id"
+              :label="`串口 #${serial.serial_id} (${serial.port})`"
+              :value="serial.serial_id"
+            />
+          </el-select>
+          <div style="font-size: 12px; color: #666; margin-top: 4px;">
+            不选择则使用当前选择的串口
+          </div>
+        </el-form-item>
         <el-form-item label="通知设置">
           <el-checkbox v-model="newCommand.show_notification">
             执行后弹出通知
@@ -395,6 +432,19 @@
             <el-radio :value="false">文本发送</el-radio>
             <el-radio :value="true">16进制发送</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item label="目标串口">
+          <el-select v-model="editCommand.target_serial_id" placeholder="选择目标串口（可选）" clearable>
+            <el-option
+              v-for="serial in connectionStore.connectedSerials"
+              :key="serial.serial_id"
+              :label="`串口 #${serial.serial_id} (${serial.port})`"
+              :value="serial.serial_id"
+            />
+          </el-select>
+          <div style="font-size: 12px; color: #666; margin-top: 4px;">
+            不选择则使用当前选择的串口
+          </div>
         </el-form-item>
         <el-form-item label="通知设置">
           <el-checkbox v-model="editCommand.show_notification">
@@ -455,6 +505,7 @@ const newCommand = reactive({
   expected_response: '',
   send_as_hex: false,
   show_notification: false,
+  target_serial_id: undefined as number | undefined,
 })
 
 // 编辑指令表单
@@ -466,6 +517,7 @@ const editCommand = reactive({
   expected_response: '',
   send_as_hex: false,
   show_notification: false,
+  target_serial_id: undefined as number | undefined,
 })
 
 const rawForm = reactive({
@@ -481,6 +533,7 @@ interface SavedCommand {
   expected_response: string
   send_as_hex: boolean
   show_notification: boolean
+  target_serial_id?: number
   createdAt: number
 }
 
@@ -532,11 +585,16 @@ const sendCommand = async () => {
     return
   }
   
+  if (!connectionStore.selectedSerialId) {
+    ElMessage.error('请先选择一个串口')
+    return
+  }
+  
   commandLoading.value = true
   try {
     const formattedCommand = formatCommand(commandForm.command)
-    await communicationStore.sendATCommand(formattedCommand)
-    ElMessage.success('指令发送成功')
+    await communicationStore.sendATCommand(formattedCommand, connectionStore.selectedSerialId)
+    ElMessage.success(`指令发送成功 (串口 #${connectionStore.selectedSerialId})`)
     // 添加到历史记录
     addToHistory(commandForm.command)
   } catch (error) {
@@ -551,18 +609,25 @@ const clearCommandInput = () => {
 }
 
 const sendQuickCommand = async (cmd: SavedCommand) => {
-  // 应用用户设置的控制选项（自动添加终止符等）
+  // 确定要使用的串口ID
+  const targetSerialId = cmd.target_serial_id || connectionStore.selectedSerialId
+  
+  if (!targetSerialId) {
+    ElMessage.error('请先选择一个串口或为指令设置目标串口')
+    return
+  }
+  
   commandLoading.value = true
   try {
     if (cmd.send_as_hex) {
       // 16进制发送
-      await communicationStore.sendRawData(cmd.command)
-      ElMessage.success('16进制指令发送成功')
+      await communicationStore.sendRawData(cmd.command, targetSerialId)
+      ElMessage.success(`16进制指令发送成功 (串口 #${targetSerialId})`)
     } else {
       // 文本发送
       const formattedCommand = formatCommand(cmd.command)
-      await communicationStore.sendATCommand(formattedCommand)
-      ElMessage.success('指令发送成功')
+      await communicationStore.sendATCommand(formattedCommand, targetSerialId)
+      ElMessage.success(`指令发送成功 (串口 #${targetSerialId})`)
     }
     
     // 同时更新输入框显示（显示原始指令，不显示终止符）
@@ -583,6 +648,11 @@ const sendBatchCommands = async () => {
     return
   }
   
+  if (!connectionStore.selectedSerialId) {
+    ElMessage.error('请先选择一个串口')
+    return
+  }
+  
   const commands = batchCommands.value
     .split('\n')
     .map(cmd => cmd.trim())
@@ -600,10 +670,10 @@ const sendBatchCommands = async () => {
       const command = commands[i]
       const formattedCommand = formatCommand(command)
       
-      ElMessage.info(`发送第${i + 1}/${commands.length}个指令: ${command}`)
+      ElMessage.info(`发送第${i + 1}/${commands.length}个指令: ${command} (串口 #${connectionStore.selectedSerialId})`)
       
       try {
-        await communicationStore.sendATCommand(formattedCommand)
+        await communicationStore.sendATCommand(formattedCommand, connectionStore.selectedSerialId)
         addToHistory(command)
       } catch (error) {
         console.error(`Command ${i + 1} failed:`, error)
@@ -638,13 +708,70 @@ const loadSavedCommands = async () => {
       expected_response: cmd.expected_response,
       send_as_hex: cmd.send_as_hex,
       show_notification: cmd.show_notification,
+      target_serial_id: cmd.target_serial_id,
       createdAt: cmd.created_at // API返回毫秒时间戳
     }))
   } catch (error) {
     console.error('Failed to load saved commands:', error)
-    ElMessage.error('加载常用指令失败')
-    // 出错时也初始化为空数组
-    savedCommands.value = []
+    ElMessage.warning('无法连接到后端，使用示例指令演示多串口功能')
+    // 提供示例指令数据来演示多串口功能
+    savedCommands.value = [
+      {
+        id: '1',
+        name: '设置MAC',
+        command: 'AT+MAC=026501123456',
+        description: '设置设备MAC地址',
+        expected_response: 'OK',
+        send_as_hex: false,
+        show_notification: false,
+        target_serial_id: 1, // 指定串口1
+        createdAt: Date.now()
+      },
+      {
+        id: '2',
+        name: '获取MAC',
+        command: 'AT+MAC?',
+        description: '查询设备MAC地址',
+        expected_response: '+MAC:026501123456',
+        send_as_hex: false,
+        show_notification: true,
+        target_serial_id: 1, // 使用当前选择的串口
+        createdAt: Date.now()
+      },
+      {
+        id: '3',
+        name: '查询版本',
+        command: 'AT+GMR',
+        description: '查询固件版本信息',
+        expected_response: 'AT version:1.0.0',
+        send_as_hex: false,
+        show_notification: false,
+        target_serial_id: 2, // 指定串口2（演示：如果串口2不存在会复用ID）
+        createdAt: Date.now()
+      },
+      {
+        id: '4',
+        name: '重启设备',
+        command: 'AT+RST',
+        description: '重启设备',
+        expected_response: 'OK',
+        send_as_hex: false,
+        show_notification: true,
+        target_serial_id: 2,
+        createdAt: Date.now()
+      },
+      {
+        id: '5',
+        name: '发送16进制',
+        command: '41540D0A',
+        description: '发送AT\\r\\n的16进制格式',
+        expected_response: '4F4B0D0A',
+        send_as_hex: true,
+        show_notification: false,
+        target_serial_id: 1,
+        createdAt: Date.now()
+      }
+    ]
   }
 }
 
@@ -661,7 +788,8 @@ const addNewCommand = async () => {
       description: newCommand.description.trim(),
       expected_response: newCommand.expected_response.trim(),
       send_as_hex: newCommand.send_as_hex,
-      show_notification: newCommand.show_notification
+      show_notification: newCommand.show_notification,
+      target_serial_id: newCommand.target_serial_id
     }
     
     const createdCommand = await commandsAPI.createCommand(createRequest)
@@ -675,6 +803,7 @@ const addNewCommand = async () => {
       expected_response: createdCommand.expected_response,
       send_as_hex: createdCommand.send_as_hex,
       show_notification: createdCommand.show_notification,
+      target_serial_id: createdCommand.target_serial_id,
       createdAt: createdCommand.created_at
     }
     
@@ -687,6 +816,7 @@ const addNewCommand = async () => {
     newCommand.expected_response = ''
     newCommand.send_as_hex = false
     newCommand.show_notification = false
+    newCommand.target_serial_id = undefined
     showAddCommand.value = false
     
     ElMessage.success('常用指令添加成功')
@@ -703,7 +833,8 @@ const handleCloseAddCommand = () => {
   newCommand.description = ''
   newCommand.expected_response = ''
   newCommand.send_as_hex = false
-  newCommand.show_notification = true
+  newCommand.show_notification = false
+  newCommand.target_serial_id = undefined
   showAddCommand.value = false
 }
 
@@ -741,6 +872,7 @@ const openEditCommand = (cmd: SavedCommand) => {
   editCommand.expected_response = cmd.expected_response
   editCommand.send_as_hex = cmd.send_as_hex
   editCommand.show_notification = cmd.show_notification
+  editCommand.target_serial_id = cmd.target_serial_id
   showEditCommand.value = true
 }
 
@@ -757,7 +889,8 @@ const updateCommand = async () => {
       description: editCommand.description.trim(),
       expected_response: editCommand.expected_response.trim(),
       send_as_hex: editCommand.send_as_hex,
-      show_notification: editCommand.show_notification
+      show_notification: editCommand.show_notification,
+      target_serial_id: editCommand.target_serial_id
     }
 
     const updatedCommand = await commandsAPI.updateCommand(editCommand.id, updateRequest)
@@ -773,6 +906,7 @@ const updateCommand = async () => {
         expected_response: updatedCommand.expected_response,
         send_as_hex: updatedCommand.send_as_hex,
         show_notification: updatedCommand.show_notification,
+        target_serial_id: updatedCommand.target_serial_id,
         createdAt: updatedCommand.created_at
       }
     }
@@ -785,6 +919,7 @@ const updateCommand = async () => {
     editCommand.expected_response = ''
     editCommand.send_as_hex = false
     editCommand.show_notification = false
+    editCommand.target_serial_id = undefined
     showEditCommand.value = false
 
     ElMessage.success('常用指令修改成功')
@@ -802,7 +937,8 @@ const handleCloseEditCommand = () => {
   editCommand.description = ''
   editCommand.expected_response = ''
   editCommand.send_as_hex = false
-  editCommand.show_notification = true
+  editCommand.show_notification = false
+  editCommand.target_serial_id = undefined
   showEditCommand.value = false
 }
 
@@ -815,6 +951,11 @@ const handleCommandRightClick = (_event: MouseEvent, cmd: SavedCommand) => {
 const sendRawData = async () => {
   if (!rawForm.data.trim()) {
     ElMessage.error('请输入十六进制数据')
+    return
+  }
+  
+  if (!connectionStore.selectedSerialId) {
+    ElMessage.error('请先选择一个串口')
     return
   }
   
@@ -834,8 +975,8 @@ const sendRawData = async () => {
   
   rawLoading.value = true
   try {
-    await communicationStore.sendRawData(rawForm.data)
-    ElMessage.success('原始数据发送成功')
+    await communicationStore.sendRawData(rawForm.data, connectionStore.selectedSerialId)
+    ElMessage.success(`原始数据发送成功 (串口 #${connectionStore.selectedSerialId})`)
   } catch (error) {
     console.error('Send raw data error:', error)
   } finally {
@@ -927,6 +1068,10 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
+const onSerialChange = (serialId: number) => {
+  ElMessage.info(`切换到串口 #${serialId}`)
+}
+
 // 生命周期
 onMounted(async () => {
   // 初始化会话管理
@@ -984,6 +1129,19 @@ onMounted(async () => {
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+}
+
+.serial-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f0f8ff;
+  border: 2px solid #409eff;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #409eff;
 }
 
 .connection-badge {
@@ -1541,10 +1699,10 @@ onMounted(async () => {
 .quick-commands {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 240px;
+  gap: 16px;
+  max-height: 300px;
   overflow-y: auto;
-  padding-right: 8px;
+  padding: 8px 4px 8px 0;
 }
 
 .quick-commands::-webkit-scrollbar {
@@ -1569,27 +1727,30 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 20px 24px;
   text-align: left;
   border: 2px solid #e5e7eb;
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   position: relative;
   overflow: hidden;
+  min-height: 80px;
 }
 
 .command-content {
   flex: 1;
   min-width: 0;
+  margin-right: 16px;
 }
 
 .command-actions {
   display: flex;
   gap: 8px;
   margin-left: 12px;
+  flex-shrink: 0;
 }
 
 .quick-command-btn::before {
@@ -1637,35 +1798,43 @@ onMounted(async () => {
 .quick-command-name {
   font-weight: 700;
   color: #1f2937;
-  margin-bottom: 6px;
-  font-size: 15px;
+  margin-bottom: 8px;
+  font-size: 16px;
   letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .quick-command-text {
   font-size: 13px;
   color: #6b7280;
   font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  padding: 8px 12px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 10px 14px;
   border-radius: 8px;
   display: inline-block;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e2e8f0;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
+  margin-bottom: 6px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .quick-command-expected {
   font-size: 12px;
   color: #059669;
   font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  padding: 6px 10px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  padding: 6px 12px;
   border-radius: 6px;
   display: inline-block;
-  border: 1px solid #a7f3d0;
+  border: 1px solid #bbf7d0;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
   margin-top: 6px;
+  border-left: 3px solid #10b981;
   font-weight: 500;
 }
 
@@ -1752,27 +1921,49 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .command-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: #374151;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-title::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 2px;
 }
 
 .command-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .command-actions .el-button {
   font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.command-actions .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 修复小按钮的内部对齐 */

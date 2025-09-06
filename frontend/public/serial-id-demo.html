@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>串口ID复用演示</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .demo-section {
+            margin: 20px 0;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #409eff;
+        }
+        .serial-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .serial-item {
+            padding: 8px 12px;
+            background: #409eff;
+            color: white;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        .serial-item.disconnected {
+            background: #f56c6c;
+            text-decoration: line-through;
+        }
+        button {
+            background: #409eff;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #66b1ff;
+        }
+        button:disabled {
+            background: #c0c4cc;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .highlight {
+            color: #f39c12;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 串口ID复用机制演示</h1>
+        
+        <div class="demo-section">
+            <h3>当前连接状态:</h3>
+            <div class="serial-list" id="serialList"></div>
+            <p><strong>下一个可用ID:</strong> <span id="nextId" class="highlight">1</span></p>
+        </div>
+        
+        <div class="demo-section">
+            <h3>操作控制:</h3>
+            <button onclick="connectSerial()">连接新串口</button>
+            <button onclick="disconnectSerial(1)">断开串口#1</button>
+            <button onclick="disconnectSerial(2)">断开串口#2</button>
+            <button onclick="disconnectSerial(3)">断开串口#3</button>
+            <button onclick="disconnectAll()">断开所有</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let connectedSerials = []
+        let portCounter = 0
+        
+        function getNextSerialId() {
+            const usedIds = connectedSerials.map(s => s.serial_id)
+            // 从1开始寻找第一个未使用的ID
+            for (let id = 1; id <= usedIds.length + 1; id++) {
+                if (!usedIds.includes(id)) {
+                    return id
+                }
+            }
+            return usedIds.length + 1
+        }
+        
+        function updateDisplay() {
+            // 更新串口列表显示
+            const serialList = document.getElementById('serialList')
+            serialList.innerHTML = ''
+            
+            if (connectedSerials.length === 0) {
+                serialList.innerHTML = '<span style="color: #666;">暂无连接的串口</span>'
+            } else {
+                connectedSerials.sort((a, b) => a.serial_id - b.serial_id).forEach(serial => {
+                    const div = document.createElement('div')
+                    div.className = 'serial-item'
+                    div.textContent = `串口#${serial.serial_id} (${serial.port})`
+                    serialList.appendChild(div)
+                })
+            }
+            
+            // 更新下一个可用ID
+            document.getElementById('nextId').textContent = getNextSerialId()
+        }
+        
+        function log(message) {
+            const logElement = document.getElementById('log')
+            const timestamp = new Date().toLocaleTimeString()
+            logElement.innerHTML += `<div>[${timestamp}] ${message}</div>`
+            logElement.scrollTop = logElement.scrollHeight
+        }
+        
+        function connectSerial() {
+            const nextId = getNextSerialId()
+            portCounter++
+            const newSerial = {
+                serial_id: nextId,
+                port: `/dev/ttyUSB${portCounter}`
+            }
+            
+            connectedSerials.push(newSerial)
+            log(`<span class="highlight">连接串口:</span> 分配ID=${nextId}, 端口=${newSerial.port}`)
+            updateDisplay()
+        }
+        
+        function disconnectSerial(serialId) {
+            const index = connectedSerials.findIndex(s => s.serial_id === serialId)
+            if (index !== -1) {
+                const serial = connectedSerials[index]
+                connectedSerials.splice(index, 1)
+                log(`<span class="highlight">断开串口:</span> ID=${serialId}, 端口=${serial.port}`)
+                updateDisplay()
+            } else {
+                log(`<span style="color: #f56c6c;">错误:</span> 串口#${serialId}不存在`)
+            }
+        }
+        
+        function disconnectAll() {
+            if (connectedSerials.length > 0) {
+                log(`<span class="highlight">断开所有串口:</span> 共${connectedSerials.length}个`)
+                connectedSerials = []
+                updateDisplay()
+            }
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = ''
+        }
+        
+        // 初始化
+        log('<span class="highlight">串口ID复用机制演示启动</span>')
+        log('规则: ID从1开始分配，断开后的ID会被新连接复用')
+        log('操作: 点击按钮测试连接和断开操作，观察ID分配规律')
+        log('=' * 60)
+        updateDisplay()
+    </script>
+</body>
+</html>
