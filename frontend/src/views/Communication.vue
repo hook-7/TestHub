@@ -735,7 +735,7 @@ const loadSavedCommands = async () => {
         expected_response: '+MAC:026501123456',
         send_as_hex: false,
         show_notification: true,
-        target_serial_id: null, // 使用当前选择的串口
+        target_serial_id: 1, // 使用当前选择的串口
         createdAt: Date.now()
       },
       {
@@ -757,7 +757,7 @@ const loadSavedCommands = async () => {
         expected_response: 'OK',
         send_as_hex: false,
         show_notification: true,
-        target_serial_id: null,
+        target_serial_id: 2,
         createdAt: Date.now()
       },
       {
@@ -1699,10 +1699,10 @@ onMounted(async () => {
 .quick-commands {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 240px;
+  gap: 16px;
+  max-height: 300px;
   overflow-y: auto;
-  padding-right: 8px;
+  padding: 8px 4px 8px 0;
 }
 
 .quick-commands::-webkit-scrollbar {
@@ -1727,27 +1727,30 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 20px 24px;
   text-align: left;
   border: 2px solid #e5e7eb;
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   position: relative;
   overflow: hidden;
+  min-height: 80px;
 }
 
 .command-content {
   flex: 1;
   min-width: 0;
+  margin-right: 16px;
 }
 
 .command-actions {
   display: flex;
   gap: 8px;
   margin-left: 12px;
+  flex-shrink: 0;
 }
 
 .quick-command-btn::before {
@@ -1795,35 +1798,43 @@ onMounted(async () => {
 .quick-command-name {
   font-weight: 700;
   color: #1f2937;
-  margin-bottom: 6px;
-  font-size: 15px;
+  margin-bottom: 8px;
+  font-size: 16px;
   letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .quick-command-text {
   font-size: 13px;
   color: #6b7280;
   font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  padding: 8px 12px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 10px 14px;
   border-radius: 8px;
   display: inline-block;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e2e8f0;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
+  margin-bottom: 6px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .quick-command-expected {
   font-size: 12px;
   color: #059669;
   font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  padding: 6px 10px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  padding: 6px 12px;
   border-radius: 6px;
   display: inline-block;
-  border: 1px solid #a7f3d0;
+  border: 1px solid #bbf7d0;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
   margin-top: 6px;
+  border-left: 3px solid #10b981;
   font-weight: 500;
 }
 
@@ -1910,27 +1921,49 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .command-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: #374151;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-title::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 2px;
 }
 
 .command-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .command-actions .el-button {
   font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.command-actions .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 修复小按钮的内部对齐 */
