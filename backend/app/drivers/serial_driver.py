@@ -45,10 +45,15 @@ class SerialDriver:
         connected = []
         for serial_id, connection in self.connections.items():
             if connection and connection.is_open:
+                config = self.port_configs.get(serial_id, {})
                 connected.append({
                     "serial_id": serial_id,
-                    "port": self.connected_ports.get(serial_id),
-                    "config": self.port_configs.get(serial_id, {}),
+                    "port": self.connected_ports.get(serial_id, ""),
+                    "baudrate": config.get("baudrate", 115200),
+                    "bytesize": config.get("bytesize", 8),
+                    "parity": config.get("parity", "N"),
+                    "stopbits": config.get("stopbits", 1),
+                    "timeout": config.get("timeout", 0.5),
                     "is_connected": True
                 })
         return connected

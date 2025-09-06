@@ -132,13 +132,13 @@
             
             <el-button 
               type="danger" 
-              @click="disconnect"
-              :loading="disconnecting"
+              @click="disconnectAll"
+              :loading="disconnectingAll"
               :disabled="!connectionStore.isConnected"
               size="large"
             >
               <el-icon><Close /></el-icon>
-              断开连接
+              断开所有连接
             </el-button>
             
             <el-button 
