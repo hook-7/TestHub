@@ -469,14 +469,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Edit } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
-import { useSessionStore } from '@/stores/session'
 import type { CommunicationLog } from '@/stores/communication'
 import * as commandsAPI from '@/api/commands'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
 const communicationStore = useCommunicationStore()
-const sessionStore = useSessionStore()
 
 // 状态
 const commandLoading = ref(false)
@@ -1074,15 +1072,7 @@ const onSerialChange = (serialId: number) => {
 
 // 生命周期
 onMounted(async () => {
-  // 初始化会话管理
-  await sessionStore.init()
-  
-  // 检查登录状态
-  if (!sessionStore.isLoggedIn) {
-    ElMessage.warning('请先登录')
-    router.push('/serial-config')
-    return
-  }
+  // 初始化通信状态
   
   if (!connectionStore.isConnected) {
     ElMessage.warning('请先连接串口')

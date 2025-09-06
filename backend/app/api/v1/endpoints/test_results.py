@@ -10,7 +10,6 @@ from typing import Optional
 from datetime import datetime
 
 from app.core.response import APIResponse
-from app.core.dependencies import get_session_id_from_header
 from app.core.database import get_session
 from app.services.test_result_service import test_result_service
 from app.schemas.test_result_schemas import (

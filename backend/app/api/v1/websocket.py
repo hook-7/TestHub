@@ -20,8 +20,6 @@ from app.schemas.websocket import (
     SendMessageResponse
 )
 from app.services.serial_service import serial_service
-from app.services.session_service import session_service
-from app.core.dependencies import get_session_id_from_header, validate_session_dependency
 from app.core.response import APIResponse
 
 logger = logging.getLogger(__name__)
@@ -63,11 +61,10 @@ class ConnectionManager:
         except Exception as e:
             logger.error(f"发送WebSocket消息失败: {str(e)}")
     
-    async def send_message_to_session(self, message: dict):
-        """向指定会话发送消息"""
+    async def send_message_to_all(self, message: dict):
+        """向所有连接发送消息"""
         logger.info(f"当前活跃连接: {list(self.active_connections.keys())}")
         
-  
         for websocket in self.active_connections.values():
             await websocket.send_text(json.dumps(message, ensure_ascii=False))
         return True
@@ -169,7 +166,6 @@ async def websocket_terminal(websocket: WebSocket, client_id: str):
     Args:
         websocket: WebSocket连接
         client_id: 客户端ID
-        session_id: 会话ID (可选，用于关联已登录用户)
     """
     logger.info(f"WebSocket连接请求 - client_id: {client_id}")
     await manager.connect(websocket, client_id)
@@ -222,7 +218,7 @@ async def websocket_status():
 @router.post("/send-message", response_model=APIResponse)
 async def send_message_to_user(message_request: SendMessageRequest):# 做测试使用
     """
-    向已登录用户发送WebSocket消息
+    向所有连接的客户端发送WebSocket消息
 
     Args:
         message_request: 消息请求数据
@@ -231,20 +227,13 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
         APIResponse: 操作结果
     """
     try:
-        # 获取当前活跃会话状态
-        session_status = await session_service.get_session_status()
-        if not session_status.has_active_session or not session_status.current_session:
-            return APIResponse.error(code=404, msg="没有活跃的用户会话")
-
-        # 获取目标会话ID（当前系统只支持单用户）
-        target_session_id = session_status.current_session.session_id
-
         # 检查串口连接状态
         connection_status = await serial_service.get_connection_status()
         logger.info(f"Serial connection status before send: {connection_status}")
 
         result = await serial_service.send_at_command(message_request.message, message_request.serial_id)
         logger.info(f"Serial command result: {result}")
+        
         # 构造WebSocket消息
         ws_message = WSResponseMessage(
             type=message_request.message_type,
@@ -256,7 +245,7 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
         )
     
         # 发送消息到WebSocket
-        success = await manager.send_message_to_session(
+        success = await manager.send_message_to_all(
             ws_message.model_dump()
         )
         
@@ -265,7 +254,6 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
                 data=SendMessageResponse(
                     success=True,
                     message="消息发送成功",
-                    sent_to_session=target_session_id,
                     serial_id=result.serial_id
                 ).model_dump(),
                 msg="WebSocket消息发送成功"
