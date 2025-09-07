@@ -323,9 +323,9 @@ const autoDetecting = ref(false)
 
 const form = reactive({
   port: '',
-  baudrate: 115200,  
+  baudrate: 9600,  
   bytesize: 8,
-  parity: 'E',
+  parity: 'N',
   stopbits: 1,
   timeout: 0.5,  
 })
@@ -521,6 +521,17 @@ onMounted(() => {
 
 .connection-badge {
   margin-left: 8px;
+}
+
+.connection-badge :deep(.el-badge__content) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 20px;
+  height: 20px;
+  line-height: 16px;
 }
 
 .header-actions {
