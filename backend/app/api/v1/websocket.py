@@ -20,6 +20,7 @@ from app.schemas.websocket import (
     SendMessageResponse
 )
 from app.services.serial_service import serial_service
+from app.drivers.serial_driver import serial_driver
 from app.core.response import APIResponse
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,41 @@ class ConnectionManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
+        self._setup_serial_data_callback()
+    
+    def _setup_serial_data_callback(self):
+        """设置串口数据回调函数"""
+        async def serial_data_callback(serial_id: int, data: bytes):
+            """串口数据回调函数，将数据推送给所有WebSocket客户端"""
+            try:
+                # 将字节数据转换为可读格式
+                data_text = data.decode('utf-8', errors='ignore')
+                data_hex = data.hex().upper()
+                
+                # 构造实时数据消息
+                realtime_msg = WSResponseMessage(
+                    type=WSMessageType.REALTIME_DATA,
+                    message=data_text,
+                    serial_id=serial_id,
+                    data={
+                        "raw_data": data_text,
+                        "hex_data": data_hex,
+                        "timestamp": datetime.now().isoformat(),
+                        "serial_id": serial_id
+                    },
+                    timestamp=datetime.now().isoformat(),
+                    success=True
+                )
+                
+                # 广播给所有连接的客户端
+                await self.broadcast(realtime_msg.model_dump())
+                
+            except Exception as e:
+                logger.error(f"Error processing serial data callback: {e}")
+        
+        # 设置回调函数
+        serial_driver.set_data_callback(serial_data_callback)
+        logger.info("Serial data callback configured for real-time WebSocket broadcasting")
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """接受WebSocket连接"""
@@ -213,6 +249,34 @@ async def websocket_status():
 
 
 
+
+
+@router.post("/start-realtime-reading/{serial_id}", response_model=APIResponse)
+async def start_realtime_reading(serial_id: int):
+    """启动指定串口的实时数据读取"""
+    try:
+        await serial_driver.start_realtime_reading(serial_id)
+        return APIResponse.success(
+            data={"serial_id": serial_id, "status": "started"},
+            msg=f"串口 {serial_id} 实时读取已启动"
+        )
+    except Exception as e:
+        logger.error(f"启动实时读取失败: {e}")
+        return APIResponse.error(code=500, msg=f"启动实时读取失败: {str(e)}")
+
+
+@router.post("/stop-realtime-reading/{serial_id}", response_model=APIResponse)
+async def stop_realtime_reading(serial_id: int):
+    """停止指定串口的实时数据读取"""
+    try:
+        await serial_driver.stop_realtime_reading(serial_id)
+        return APIResponse.success(
+            data={"serial_id": serial_id, "status": "stopped"},
+            msg=f"串口 {serial_id} 实时读取已停止"
+        )
+    except Exception as e:
+        logger.error(f"停止实时读取失败: {e}")
+        return APIResponse.error(code=500, msg=f"停止实时读取失败: {str(e)}")
 
 
 @router.post("/send-message", response_model=APIResponse)
