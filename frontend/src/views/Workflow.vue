@@ -840,11 +840,9 @@ const writeSerialNumber = async () => {
     // 发送16进制命令到串口（假设使用串口ID 1）
     const response = await serialAPI.sendRawData(finalCommand, 1)
     
-    ElMessage.success(`SN序列号写入成功: ${snForm.value.serialNumber}`)
+    ElMessage.success(`SN序列号写入成功: ${snForm.value.serialNumber} => ${response.received_data}`)
     console.log('SN写入响应:', response.received_data)
     
-    // 清空输入框
-    snForm.value.serialNumber = ''
     
   } catch (error) {
     console.error('写入SN失败:', error)
