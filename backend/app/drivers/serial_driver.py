@@ -5,7 +5,7 @@ Serial Communication Driver for AT Commands
 import asyncio
 import logging
 import time
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 import serial
 import serial.tools.list_ports
 from concurrent.futures import ThreadPoolExecutor
@@ -23,6 +23,10 @@ class SerialDriver:
         self.port_configs: Dict[int, Dict[str, Any]] = {}  # serial_id -> config
         self.connected_ports: Dict[int, str] = {}  # serial_id -> port_path
         self.executor = ThreadPoolExecutor(max_workers=4)  # 支持多个串口并发
+        
+        # 实时读取任务管理
+        self.reading_tasks: Dict[int, asyncio.Task] = {}  # serial_id -> reading task
+        self.data_callback: Optional[Callable[[int, bytes], None]] = None  # 数据回调函数
         
         # 默认配置模板
         self.default_config = {
@@ -47,6 +51,91 @@ class SerialDriver:
         
         # 理论上不会到达这里，但为了安全起见
         return max(used_ids) + 1
+    
+    def set_data_callback(self, callback: Callable[[int, bytes], None]):
+        """设置数据回调函数，用于实时数据推送"""
+        self.data_callback = callback
+        logger.info("Data callback function set for real-time serial data")
+    
+    async def start_realtime_reading(self, serial_id: int):
+        """启动指定串口的实时读取任务"""
+        if serial_id in self.reading_tasks:
+            logger.warning(f"Reading task for serial {serial_id} already running")
+            return
+        
+        if not self.is_serial_connected(serial_id):
+            logger.error(f"Cannot start reading task: serial {serial_id} not connected")
+            return
+        
+        # 创建读取任务
+        task = asyncio.create_task(self._realtime_read_loop(serial_id))
+        self.reading_tasks[serial_id] = task
+        logger.info(f"Started real-time reading for serial {serial_id}")
+    
+    async def stop_realtime_reading(self, serial_id: int):
+        """停止指定串口的实时读取任务"""
+        if serial_id in self.reading_tasks:
+            task = self.reading_tasks[serial_id]
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            del self.reading_tasks[serial_id]
+            logger.info(f"Stopped real-time reading for serial {serial_id}")
+    
+    async def _realtime_read_loop(self, serial_id: int):
+        """实时读取循环"""
+        connection = self.connections.get(serial_id)
+        if not connection:
+            logger.error(f"No connection found for serial {serial_id}")
+            return
+        
+        try:
+            while True:
+                try:
+                    # 检查连接状态
+                    if not connection.is_open:
+                        logger.warning(f"Serial {serial_id} connection closed, stopping read loop")
+                        break
+                    
+                    # 异步读取数据
+                    loop = asyncio.get_event_loop()
+                    data = await loop.run_in_executor(
+                        self.executor, 
+                        lambda: self._read_available_data(connection)
+                    )
+                    
+                    # 如果有数据且设置了回调函数，则发送数据
+                    if data and self.data_callback:
+                        await self.data_callback(serial_id, data)
+                    
+                    # 短暂休眠避免过度占用CPU
+                    await asyncio.sleep(0.01)
+                    
+                except Exception as e:
+                    logger.error(f"Error in read loop for serial {serial_id}: {e}")
+                    await asyncio.sleep(0.1)  # 出错时稍长休眠
+                    
+        except asyncio.CancelledError:
+            logger.info(f"Read loop for serial {serial_id} cancelled")
+        except Exception as e:
+            logger.error(f"Unexpected error in read loop for serial {serial_id}: {e}")
+        finally:
+            # 清理任务
+            if serial_id in self.reading_tasks:
+                del self.reading_tasks[serial_id]
+    
+    def _read_available_data(self, connection: serial.Serial) -> bytes:
+        """读取串口缓冲区中可用的数据"""
+        try:
+            # 检查是否有数据可读
+            if connection.in_waiting > 0:
+                return connection.read(connection.in_waiting)
+            return b""
+        except Exception as e:
+            logger.error(f"Error reading available data: {e}")
+            return b""
     
     def get_connected_serials(self) -> List[Dict[str, Any]]:
         """获取所有已连接串口的信息"""
@@ -211,6 +300,9 @@ class SerialDriver:
             self.port_configs[serial_id] = config
             self.connected_ports[serial_id] = port
             
+            # 自动启动实时读取任务
+            await self.start_realtime_reading(serial_id)
+            
             logger.info(f"Connected to serial port: {port} at {config['baudrate']} baud with serial_id {serial_id}")
             return serial_id
             
@@ -230,6 +322,9 @@ class SerialDriver:
                 for sid in list(self.connections.keys()):
                     await self.disconnect(sid)
                 return
+            
+            # 先停止实时读取任务
+            await self.stop_realtime_reading(serial_id)
             
             connection = self.connections.get(serial_id)
             if connection and connection.is_open:
