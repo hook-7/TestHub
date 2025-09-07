@@ -106,7 +106,7 @@ class CrossPlatformRunner:
     def setup_frontend(self):
         """设置前端环境"""
         frontend_dir = self.project_root / "frontend"
-        dist_dir = frontend_dir / "dist"
+        dist_dir = self.project_root / "data" / "dist"
         node_modules = frontend_dir / "node_modules"
         
         # 如果已经构建过，跳过

@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.error_handler import setup_exception_handlers
 from app.core.middleware import RequestLoggingMiddleware
+from app.core.config import settings
 
 # Setup logging
 setup_logging()
@@ -131,25 +132,7 @@ setup_exception_handlers(app)
 # API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Static files for frontend (production)
-frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
-    logger.info(f"Serving frontend from: {frontend_dist}")
-else:
-    # 尝试从打包程序同级目录的 dist 文件夹中查找
-    import sys
-    if getattr(sys, 'frozen', False):
-        # 打包环境：从可执行文件同级的 dist 目录查找
-        executable_dir = Path(sys.executable).parent
-        frontend_dist_fallback = executable_dir / "dist"
-        if frontend_dist_fallback.exists():
-            app.mount("/", StaticFiles(directory=str(frontend_dist_fallback), html=True), name="frontend")
-            logger.info(f"Serving frontend from fallback location: {frontend_dist_fallback}")
-        else:
-            logger.warning(f"Frontend dist directory not found in fallback location: {frontend_dist_fallback}")
-    else:
-        logger.warning(f"Frontend dist directory not found: {frontend_dist}")
+app.mount("/", StaticFiles(directory=str(settings.DATA_DIR/"dist"), html=True), name="frontend")
 
 
 
