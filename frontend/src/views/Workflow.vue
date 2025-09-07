@@ -212,7 +212,7 @@
                   <el-form-item label="SN序列号" required>
                     <el-input
                       v-model="snForm.serialNumber"
-                      placeholder="请输入12位SN序列号，如：123456789ABC"
+                      placeholder="请输入SN序列号，如：25990000001"
                       clearable
                       :disabled="isExecuting"
                       class="sn-input"
