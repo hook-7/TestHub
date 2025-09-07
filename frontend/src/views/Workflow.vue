@@ -191,6 +191,71 @@
           </div>
         </div>
       </el-card>
+
+          <!-- 写入SN卡片 -->
+          <div v-if="cmds.length > 0" class="sn-card-section">
+            <el-card class="sn-card" shadow="hover">
+              <template #header>
+                <div class="sn-card-header">
+                  <div class="sn-header-content">
+                    <el-icon class="sn-icon"><Edit /></el-icon>
+                    <div class="sn-title-section">
+                      <h3 class="sn-title">写入SN序列号</h3>
+                      <p class="sn-description">输入SN序列号，系统将自动写入设备</p>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              
+              <div class="sn-content">
+                <el-form :model="snForm" label-width="120px" class="sn-form">
+                  <el-form-item label="SN序列号" required>
+                    <el-input
+                      v-model="snForm.serialNumber"
+                      placeholder="请输入12位SN序列号，如：123456789ABC"
+                      clearable
+                      :disabled="isExecuting"
+                      class="sn-input"
+                      maxlength="12"
+                      show-word-limit
+                    >
+                      <template #prepend>
+                        <el-icon><Key /></el-icon>
+                      </template>
+                    </el-input>
+                  </el-form-item>
+                  
+                  <el-form-item>
+                    <div class="sn-button-group">
+                      <el-button 
+                        type="success" 
+                        :loading="isWritingSN"
+                        :disabled="!snForm.serialNumber || isExecuting"
+                        @click="writeSerialNumber"
+                        class="write-sn-btn"
+                        size="large"
+                      >
+                        <el-icon><Edit /></el-icon>
+                        {{ isWritingSN ? '写入中...' : '写入SN序列号' }}
+                      </el-button>
+                      
+                      <el-button 
+                        v-if="snForm.serialNumber"
+                        type="info"
+                        @click="snForm.serialNumber = ''"
+                        class="clear-sn-btn"
+                        size="large"
+                        plain
+                      >
+                        <el-icon><RefreshLeft /></el-icon>
+                        清空
+                      </el-button>
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-card>
+          </div>
     </div>
   </div>
 </template>
@@ -206,7 +271,10 @@ import {
   Close, 
   Warning, 
   Loading,
-  Clock
+  Clock,
+  Edit,
+  Key,
+  RefreshLeft
 } from '@element-plus/icons-vue'
 import { serialAPI } from '@/api/serial'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
@@ -314,8 +382,16 @@ const form = ref({
   macAddress: ''
 })
 
+// SN表单数据
+const snForm = ref({
+  serialNumber: ''
+})
+
 // 加载状态
 const isLoadingCommands = ref(false)
+
+// SN写入状态
+const isWritingSN = ref(false)
 
 // 执行状态
 const isExecuting = ref(false)
@@ -711,6 +787,73 @@ const stopExecution = () => {
   ElMessage.info('正在停止执行...')
 }
 
+// 写入SN序列号
+const writeSerialNumber = async () => {
+  if (!snForm.value.serialNumber.trim()) {
+    ElMessage.warning('请输入SN序列号')
+    return
+  }
+
+  try {
+    isWritingSN.value = true
+    
+    // 将SN转换为小端序的16进制字符串，然后每个字节+33
+    const snToLittleEndian = (sn: string) => {
+      // 确保SN长度为12位（6字节）
+      const paddedSN = sn.padStart(12, '0')
+      const bytes = []
+      
+      // 先按字节分割
+      for (let i = 0; i < paddedSN.length; i += 2) {
+        const byteValue = parseInt(paddedSN.substr(i, 2), 16)
+        bytes.push(byteValue)
+      }
+      
+      // 转换为小端序（字节顺序反转）
+      bytes.reverse()
+      
+      // 然后每个字节+33（0x33）
+      const adjustedBytes = bytes.map(byteValue => {
+        const adjustedValue = (byteValue + 0x33) & 0xFF
+        return adjustedValue.toString(16).padStart(2, '0').toUpperCase()
+      })
+      
+      return adjustedBytes.join('')
+    }
+    
+    // 计算校验和 - 和取低位字节
+    const calculateChecksum = (hexString: string) => {
+      let sum = 0
+      for (let i = 0; i < hexString.length; i += 2) {
+        sum += parseInt(hexString.substr(i, 2), 16)
+      }
+      // 和取低位字节（只取最低8位）
+      return (sum & 0xFF).toString(16).padStart(2, '0').toUpperCase()
+    }
+    
+    // 构建协议数据
+    const snLittleEndian = snToLittleEndian(snForm.value.serialNumber)
+    const protocolData = `02AAAAAAAAAAAA68040C34C033444444${snLittleEndian}`
+    const checksum = calculateChecksum(protocolData)
+    const finalCommand = protocolData + checksum + '03'
+    
+    // 发送16进制命令到串口（假设使用串口ID 1）
+    const response = await serialAPI.sendRawData(finalCommand, 1)
+    
+    ElMessage.success(`SN序列号写入成功: ${snForm.value.serialNumber}`)
+    console.log('SN写入响应:', response.received_data)
+    
+    // 清空输入框
+    snForm.value.serialNumber = ''
+    
+  } catch (error) {
+    console.error('写入SN失败:', error)
+    ElMessage.error('写入SN失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    isWritingSN.value = false
+  }
+}
+
 // 获取测试结果状态文本
 const getResultStatusText = () => {
   if (!testResult.value) return '测试结果'
@@ -816,6 +959,144 @@ onMounted(() => {
 /* 输入区域 */
 .input-section {
   margin-bottom: 32px;
+}
+
+/* SN卡片区域 */
+.sn-card-section {
+  margin-top: 32px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sn-card {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.sn-card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.sn-card-header {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-bottom: 1px solid #bbf7d0;
+  padding: 0;
+}
+
+.sn-header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.sn-icon {
+  color: #16a34a;
+  font-size: 24px;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
+}
+
+.sn-title-section {
+  flex: 1;
+}
+
+.sn-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.sn-description {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.sn-content {
+  padding: 24px;
+  background: #fafbfc;
+}
+
+.sn-form {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.sn-input {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.sn-input :deep(.el-input__inner) {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.sn-input :deep(.el-input__inner):focus {
+  border-color: #67c23a;
+  box-shadow: 0 0 0 3px rgba(103, 194, 58, 0.1);
+}
+
+.sn-input :deep(.el-input-group__prepend) {
+  background: #f0fdf4;
+  border: 2px solid #e2e8f0;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.sn-button-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.write-sn-btn {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+  min-width: 160px;
+}
+
+.write-sn-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(103, 194, 58, 0.4);
+}
+
+.write-sn-btn:active {
+  transform: translateY(0);
+}
+
+.clear-sn-btn {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  min-width: 100px;
+}
+
+.clear-sn-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .mac-form {
@@ -1187,6 +1468,49 @@ onMounted(() => {
   .logs-container {
     max-height: 300px;
   }
+  
+  /* SN卡片响应式 */
+  .sn-card-section {
+    margin-top: 24px;
+  }
+  
+  .sn-header-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+    padding: 16px 20px;
+  }
+  
+  .sn-icon {
+    font-size: 20px;
+    padding: 10px;
+  }
+  
+  .sn-title {
+    font-size: 18px;
+  }
+  
+  .sn-description {
+    font-size: 13px;
+  }
+  
+  .sn-content {
+    padding: 20px 16px;
+  }
+  
+  .sn-form {
+    max-width: 100%;
+  }
+  
+  .sn-button-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .write-sn-btn, .clear-sn-btn {
+    width: 100%;
+    margin: 0;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1199,6 +1523,33 @@ onMounted(() => {
   }
   
   .execute-btn, .stop-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+  
+  /* SN卡片小屏幕优化 */
+  .sn-header-content {
+    padding: 12px 16px;
+  }
+  
+  .sn-icon {
+    font-size: 18px;
+    padding: 8px;
+  }
+  
+  .sn-title {
+    font-size: 16px;
+  }
+  
+  .sn-description {
+    font-size: 12px;
+  }
+  
+  .sn-content {
+    padding: 16px 12px;
+  }
+  
+  .write-sn-btn, .clear-sn-btn {
     padding: 10px 20px;
     font-size: 14px;
   }
