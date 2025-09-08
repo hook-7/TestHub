@@ -44,9 +44,9 @@ class CommandService:
         """获取所有常用指令"""
         try:
             with self._get_session() as session:
-                # 查询所有指令，按创建时间降序排序
+                # 查询所有指令，按ID升序排序
                 db_commands = session.exec(
-                    select(Command).order_by(Command.created_at.desc())
+                    select(Command).order_by(Command.id.asc())
                 ).all()
 
                 commands = [self._command_to_schema(cmd) for cmd in db_commands]

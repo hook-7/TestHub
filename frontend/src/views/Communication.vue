@@ -1844,8 +1844,8 @@ onMounted(async () => {
 .edit-icon,
 .delete-icon {
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 0px;
+  border-radius: 0px;
   font-size: 14px;
   transition: all 0.2s ease;
   opacity: 0.6;

@@ -73,7 +73,8 @@ export const serialAPI = {
 
   // 断开串口连接
   async disconnectSerial(serialId?: number): Promise<void> {
-    await api.post('/serial/disconnect', { serial_id: serialId })
+    const requestData = serialId !== undefined ? { serial_id: serialId } : {}
+    await api.post('/serial/disconnect', requestData)
   },
 
   // 获取连接状态
