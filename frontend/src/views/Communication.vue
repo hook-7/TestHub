@@ -19,19 +19,19 @@
           </div>
         </div>
 
-        <!-- WebSocket连接状态 -->
+        <!-- 通信模式状态 -->
         <div class="status-item">
           <div class="status-label">
             <el-icon class="label-icon"><Monitor /></el-icon>
-            实时通信
+            {{ connectionStore.useFrontendSerial ? '前端串口' : '实时通信' }}
           </div>
-          <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected, disconnected: !communicationStore.isRealTimeConnected }">
+          <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected || connectionStore.useFrontendSerial, disconnected: !communicationStore.isRealTimeConnected && !connectionStore.useFrontendSerial }">
             <el-icon class="status-icon">
-              <span v-if="communicationStore.isRealTimeConnected" class="connected-icon">●</span>
+              <span v-if="communicationStore.isRealTimeConnected || connectionStore.useFrontendSerial" class="connected-icon">●</span>
               <span v-else class="disconnected-icon">●</span>
             </el-icon>
             <span class="status-text">
-              {{ communicationStore.isRealTimeConnected ? '已连接' : '连接中' }}
+              {{ connectionStore.useFrontendSerial ? '前端模式' : (communicationStore.isRealTimeConnected ? '已连接' : '连接中') }}
             </span>
           </div>
         </div>
@@ -1018,8 +1018,10 @@ const onSerialChange = (serialId: number) => {
 
 // 生命周期
 onMounted(async () => {
-  // 初始化通信状态
+  // 检查前端串口支持
+  connectionStore.checkFrontendSerialSupport()
   
+  // 初始化通信状态
   if (!connectionStore.isConnected) {
     ElMessage.warning('请先连接串口')
     router.push('/serial-config')
@@ -1034,12 +1036,23 @@ onMounted(async () => {
   // 加载保存的指令
   await loadSavedCommands()
   
-  // 初始化WebSocket连接
-  try {
-    await communicationStore.initializeWebSocket()
-  } catch (error) {
-    console.error('WebSocket初始化失败:', error)
-    ElMessage.error('实时连接初始化失败')
+  // 根据模式初始化通信
+  if (connectionStore.useFrontendSerial) {
+    // 前端串口模式
+    try {
+      await communicationStore.initializeFrontendSerial()
+    } catch (error) {
+      console.error('前端串口初始化失败:', error)
+      ElMessage.error('前端串口初始化失败')
+    }
+  } else {
+    // 后端WebSocket模式
+    try {
+      await communicationStore.initializeWebSocket()
+    } catch (error) {
+      console.error('WebSocket初始化失败:', error)
+      ElMessage.error('实时连接初始化失败')
+    }
   }
 })
 

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { serialAPI, type SerialConnectionStatus, type SerialPortInfo, type SerialConfig } from '@/api/serial'
+import { frontendSerialAPI } from '@/services/serial'
 
 export const useConnectionStore = defineStore('connection', () => {
   // 状态
@@ -12,17 +13,50 @@ export const useConnectionStore = defineStore('connection', () => {
   const availablePorts = ref<SerialPortInfo[]>([])
   const selectedSerialId = ref<number | null>(null) // 当前选择的串口ID
   
+  // 前端串口相关状态
+  const useFrontendSerial = ref(false) // 是否使用前端串口
+  const frontendSerialSupported = ref(false) // 浏览器是否支持Web Serial API
+  
   // 计算属性
   const isConnected = computed(() => status.value.total_connections > 0)
   const connectedSerials = computed(() => status.value.connected_serials)
+  
+  // 检查前端串口支持
+  const checkFrontendSerialSupport = () => {
+    frontendSerialSupported.value = frontendSerialAPI.isSupported()
+    return frontendSerialSupported.value
+  }
+  
+  // 切换到前端串口模式
+  const switchToFrontendSerial = () => {
+    if (!checkFrontendSerialSupport()) {
+      throw new Error('当前浏览器不支持 Web Serial API')
+    }
+    useFrontendSerial.value = true
+  }
+  
+  // 切换到后端串口模式
+  const switchToBackendSerial = () => {
+    useFrontendSerial.value = false
+  }
   
   // 操作
   const checkStatus = async () => {
     try {
       console.log('Checking connection status...')
-      const newStatus = await serialAPI.getConnectionStatus()
-      console.log('Received status from API:', newStatus)
-      status.value = newStatus
+      
+      if (useFrontendSerial.value) {
+        // 使用前端串口
+        const newStatus = await frontendSerialAPI.getConnectionStatus()
+        console.log('Received frontend status:', newStatus)
+        status.value = newStatus
+      } else {
+        // 使用后端串口
+        const newStatus = await serialAPI.getConnectionStatus()
+        console.log('Received backend status from API:', newStatus)
+        status.value = newStatus
+      }
+      
       console.log('Updated local status:', status.value)
       
       // 如果当前选择的串口已断开，自动选择第一个可用串口
@@ -46,7 +80,12 @@ export const useConnectionStore = defineStore('connection', () => {
   
   const loadAvailablePorts = async () => {
     try {
-      availablePorts.value = await serialAPI.getAvailablePorts()
+      if (useFrontendSerial.value) {
+        // 前端串口模式下，端口列表需要用户交互获取
+        availablePorts.value = []
+      } else {
+        availablePorts.value = await serialAPI.getAvailablePorts()
+      }
     } catch (error) {
       console.error('Failed to load available ports:', error)
       // 清空端口列表，避免显示错误数据
@@ -65,7 +104,16 @@ export const useConnectionStore = defineStore('connection', () => {
   
   const connect = async (config: SerialConfig) => {
     try {
-      const response = await serialAPI.connectSerial(config)
+      let response
+      
+      if (useFrontendSerial.value) {
+        // 使用前端串口连接
+        response = await frontendSerialAPI.connectSerial(config)
+      } else {
+        // 使用后端串口连接
+        response = await serialAPI.connectSerial(config)
+      }
+      
       // 先更新状态，再选择串口
       await checkStatus()
       // 自动选择新连接的串口
@@ -81,7 +129,15 @@ export const useConnectionStore = defineStore('connection', () => {
   const disconnect = async (serialId?: number) => {
     try {
       console.log('Disconnecting serial:', serialId)
-      await serialAPI.disconnectSerial(serialId)
+      
+      if (useFrontendSerial.value) {
+        // 使用前端串口断开
+        await frontendSerialAPI.disconnectSerial(serialId)
+      } else {
+        // 使用后端串口断开
+        await serialAPI.disconnectSerial(serialId)
+      }
+      
       console.log('Disconnect API call completed, checking status...')
       // 更新状态
       await checkStatus()
@@ -105,6 +161,8 @@ export const useConnectionStore = defineStore('connection', () => {
     status,
     availablePorts,
     selectedSerialId,
+    useFrontendSerial,
+    frontendSerialSupported,
     
     // 计算属性
     isConnected,
@@ -117,5 +175,8 @@ export const useConnectionStore = defineStore('connection', () => {
     connect,
     disconnect,
     selectSerial,
+    checkFrontendSerialSupport,
+    switchToFrontendSerial,
+    switchToBackendSerial,
   }
 })

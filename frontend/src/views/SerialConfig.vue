@@ -14,6 +14,25 @@
               </h3>
               <div class="header-actions">
                 <el-button 
+                  v-if="!connectionStore.useFrontendSerial"
+                  type="success" 
+                  @click="switchToFrontendSerial"
+                  :disabled="!connectionStore.frontendSerialSupported"
+                  size="small"
+                >
+                  <el-icon><Monitor /></el-icon>
+                  前端串口
+                </el-button>
+                <el-button 
+                  v-if="connectionStore.useFrontendSerial"
+                  type="primary" 
+                  @click="switchToBackendSerial"
+                  size="small"
+                >
+                  <el-icon><Connection /></el-icon>
+                  后端串口
+                </el-button>
+                <el-button 
                   type="primary" 
                   @click="loadPorts"
                   :loading="loading"
@@ -39,7 +58,26 @@
               <h4 class="section-title">
                 <el-icon><Connection /></el-icon>
                 串口选择
+                <el-tag v-if="connectionStore.useFrontendSerial" type="success" size="small" style="margin-left: 8px;">
+                  前端模式
+                </el-tag>
               </h4>
+              
+              <!-- 前端串口模式提示 -->
+              <div v-if="connectionStore.useFrontendSerial" class="frontend-serial-hint">
+                <el-alert
+                  title="前端串口模式"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                >
+                  <template #default>
+                    <p>在前端串口模式下，点击"连接串口"按钮时会弹出浏览器串口选择对话框。</p>
+                    <p>请确保您的浏览器支持 Web Serial API（Chrome 89+ 或 Edge 89+）。</p>
+                  </template>
+                </el-alert>
+              </div>
+              
               <div class="form-row">
                 <el-form-item label="串口" prop="port">
                   <el-select 
@@ -47,6 +85,7 @@
                     placeholder="选择串口"
                     style="width: 100%"
                     @focus="loadPorts"
+                    :disabled="connectionStore.useFrontendSerial"
                   >
                     <el-option
                       v-for="port in availableUnconnectedPorts"
@@ -62,9 +101,15 @@
                       </div>
                     </el-option>
                     <el-option
-                      v-if="availableUnconnectedPorts.length === 0"
+                      v-if="availableUnconnectedPorts.length === 0 && !connectionStore.useFrontendSerial"
                       disabled
                       label="暂无可用串口 (所有串口已连接或无串口设备)"
+                      value=""
+                    />
+                    <el-option
+                      v-if="connectionStore.useFrontendSerial"
+                      disabled
+                      label="前端模式下将弹出浏览器串口选择对话框"
                       value=""
                     />
                   </el-select>
@@ -76,6 +121,7 @@
                     :loading="autoDetecting"
                     type="success"
                     plain
+                    :disabled="connectionStore.useFrontendSerial"
                   >
                     <el-icon><Search /></el-icon>
                     自动检测
@@ -494,8 +540,26 @@ const syncState = async () => {
   }
 }
 
+// 切换串口模式
+const switchToFrontendSerial = () => {
+  try {
+    connectionStore.switchToFrontendSerial()
+    ElMessage.success('已切换到前端串口模式')
+  } catch (error: any) {
+    ElMessage.error(error.message || '切换失败')
+  }
+}
+
+const switchToBackendSerial = () => {
+  connectionStore.switchToBackendSerial()
+  ElMessage.info('已切换到后端串口模式')
+}
+
 // 生命周期
 onMounted(async () => {
+  // 检查前端串口支持
+  connectionStore.checkFrontendSerialSupport()
+  
   // 确保按顺序执行，避免竞态条件
   await syncState()
 })
@@ -884,6 +948,29 @@ onUnmounted(() => {
 .no-connection-hint {
   padding: 40px 20px;
   text-align: center;
+}
+
+/* 前端串口模式提示 */
+.frontend-serial-hint {
+  margin-bottom: 16px;
+}
+
+.frontend-serial-hint .el-alert {
+  border-radius: 8px;
+  border: 1px solid #e1f5fe;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.frontend-serial-hint .el-alert__title {
+  color: #0277bd;
+  font-weight: 600;
+}
+
+.frontend-serial-hint .el-alert__content p {
+  margin: 4px 0;
+  color: #01579b;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 /* 响应式设计 */

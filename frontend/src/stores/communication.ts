@@ -5,6 +5,7 @@ import { serialAPI } from '@/api/serial'
 import { ElMessage } from 'element-plus'
 import { WebSocketClient, WSMessageType } from '@/services/websocket'
 import type { WSResponseMessage, WSErrorMessage } from '@/services/websocket'
+import { frontendSerialAPI } from '@/services/serial'
 
 export interface CommunicationLog {
   id: string
@@ -26,8 +27,28 @@ export const useCommunicationStore = defineStore('communication', () => {
   const wsClient = ref<WebSocketClient | null>(null)
   const wsConnected = ref(false)
 
+  // 前端串口相关状态
+  const useFrontendSerial = ref(false) // 是否使用前端串口
+  const frontendSerialSupported = ref(false) // 浏览器是否支持Web Serial API
+
   // 计算属性
   const isRealTimeConnected = computed(() => wsConnected.value)
+
+  // 检查前端串口支持
+  const checkFrontendSerialSupport = () => {
+    frontendSerialSupported.value = frontendSerialAPI.isSupported()
+    return frontendSerialSupported.value
+  }
+
+  // 初始化前端串口
+  const initializeFrontendSerial = async () => {
+    if (!checkFrontendSerialSupport()) {
+      throw new Error('当前浏览器不支持 Web Serial API')
+    }
+    
+    useFrontendSerial.value = true
+    ElMessage.success('已切换到前端串口模式')
+  }
 
   // 初始化WebSocket
   const initializeWebSocket = async () => {
@@ -143,6 +164,33 @@ export const useCommunicationStore = defineStore('communication', () => {
         serial_id: serialId
       })
 
+      // 如果使用前端串口
+      if (useFrontendSerial.value) {
+        try {
+          const result = await frontendSerialAPI.sendATCommand(command, serialId)
+          
+          // 设置数据回调来处理接收到的数据
+          if (serialId) {
+            frontendSerialAPI.setDataCallback(serialId, (data: string) => {
+              addLog({
+                type: 'at',
+                direction: 'received',
+                data: data,
+                description: `接收响应 (串口${serialId})`,
+                success: true,
+                serial_id: serialId
+              })
+            })
+          }
+          
+          return result
+        } catch (error) {
+          console.error('前端串口发送失败:', error)
+          throw error
+        }
+      }
+
+      // 使用后端WebSocket
       // 确保WebSocket连接
       if (!wsClient.value || !wsClient.value.isConnected()) {
         await initializeWebSocket()
@@ -198,6 +246,32 @@ export const useCommunicationStore = defineStore('communication', () => {
         serial_id: serialId
       })
       
+      // 如果使用前端串口
+      if (useFrontendSerial.value) {
+        try {
+          const result = await frontendSerialAPI.sendRawData(data, serialId)
+          
+          // 设置数据回调来处理接收到的数据
+          if (serialId) {
+            frontendSerialAPI.setDataCallback(serialId, (receivedData: string) => {
+              addLog({
+                type: 'raw',
+                direction: 'received',
+                data: receivedData,
+                description: `接收原始数据响应 (串口${serialId})`,
+                success: true,
+                serial_id: serialId
+              })
+            })
+          }
+          
+          return result
+        } catch (error) {
+          console.error('前端串口发送原始数据失败:', error)
+          throw error
+        }
+      }
+      
       // 使用REST API发送原始16进制数据，确保与后端处理逻辑一致
       const result = await serialAPI.sendRawData(data, serialId)
       
@@ -240,6 +314,8 @@ export const useCommunicationStore = defineStore('communication', () => {
     logs,
     maxLogs,
     wsConnected,
+    useFrontendSerial,
+    frontendSerialSupported,
     
     // 计算属性
     isRealTimeConnected,
@@ -250,6 +326,8 @@ export const useCommunicationStore = defineStore('communication', () => {
     sendATCommand,
     sendRawData,
     initializeWebSocket,
-    disconnectWebSocket
+    disconnectWebSocket,
+    checkFrontendSerialSupport,
+    initializeFrontendSerial
   }
 })
