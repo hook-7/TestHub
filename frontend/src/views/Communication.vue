@@ -80,8 +80,9 @@
               <el-form-item label="指令内容">
                 <el-input
                 v-model="commandForm.command"
-                placeholder="输入指令内容，例如: AT+GMR 或任何自定义指令"
+                placeholder="输入指令内容，例如: AT+GMR 或 mac:001122334455"
                 style="font-family: monospace;"
+                @input="handleCommandInput"
                 @keyup.enter="sendCommand"
               >
                 <template #append>
@@ -565,6 +566,7 @@ const sendCommand = async () => {
     const formattedCommand = formatCommand(commandForm.command)
     await communicationStore.sendATCommand(formattedCommand, connectionStore.selectedSerialId)
     ElMessage.success(`指令发送成功 (串口 #${connectionStore.selectedSerialId})`)
+    
     // 添加到历史记录
     addToHistory(commandForm.command)
   } catch (error) {
@@ -576,6 +578,35 @@ const sendCommand = async () => {
 
 const clearCommandInput = () => {
   commandForm.command = ''
+}
+
+// 处理指令输入变化，检测mac:格式并自动替换发送
+const handleCommandInput = (value: string) => {
+  // 检查是否包含完整的 mac:XXXX 格式（12位十六进制）
+  const macPattern = /mac:([0-9A-Fa-f]{12})/gi
+  const macMatches = value.match(macPattern)
+  
+  if (macMatches && macMatches.length > 0) {
+    // 如果找到完整的mac:格式，自动替换并发送
+    let commandToSend = value
+    
+    macMatches.forEach(match => {
+      const macValue = match.replace(/mac:/i, '')
+      // 保持原始MAC地址格式（不带冒号）
+      const formattedMac = macValue
+      // 替换为AT+MAC=指令
+      commandToSend = commandToSend.replace(match, `AT+MAC=${formattedMac}`)
+    })
+    
+    // 更新输入框显示替换后的内容
+    commandForm.command = commandToSend
+    
+    // 自动发送指令
+    setTimeout(async () => {
+      // 发送完成后清空输入框
+      commandForm.command = ''
+    }, 100) // 稍微延迟确保UI更新完成
+  }
 }
 
 const sendQuickCommand = async (cmd: SavedCommand) => {
