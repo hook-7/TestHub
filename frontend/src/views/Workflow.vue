@@ -173,8 +173,11 @@
                   <div class="log-command">
                     <strong>命令:</strong> {{ log.command }}
                   </div>
+                  <div v-if="log.expectedResponse" class="log-expected">
+                    <strong>期望响应:</strong> {{ log.expectedResponse }}
+                  </div>
                   <div v-if="log.response" class="log-response">
-                    <strong>响应:</strong> {{ log.response }}
+                    <strong>实际响应:</strong> {{ log.response }}
                   </div>
                   <div v-if="log.error" class="log-error">
                     <strong>错误:</strong> {{ log.error }}
@@ -407,6 +410,7 @@ interface ExecutionLog {
   name: string
   command: string
   response?: string
+  expectedResponse?: string // 期望的返回值
   error?: string
   status: 'pending' | 'running' | 'success' | 'error' | 'skipped'
   timestamp: number
@@ -521,6 +525,7 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
   const log: ExecutionLog = {
     name: cmd.name,
     command: cmd.command,
+    expectedResponse: cmd.expected_response || '', // 添加期望返回值
     status: 'running',
     timestamp: Date.now()
   }
@@ -1396,6 +1401,16 @@ onMounted(() => {
 .log-command {
   margin-bottom: 4px;
   color: #374151;
+}
+
+.log-expected {
+  margin-bottom: 4px;
+  color: #7c3aed;
+  font-family: 'Courier New', monospace;
+  background: #faf5ff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 3px solid #8b5cf6;
 }
 
 .log-response {
