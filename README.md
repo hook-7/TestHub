@@ -1,3 +1,4 @@
+pyinstaller --onefile .\start.py
 # Industrial HMI - AT指令交互系统
 
 工业上位机系统，专注于AT指令通信交互。
