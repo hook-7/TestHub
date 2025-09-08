@@ -147,7 +147,7 @@
               <div class="action-buttons">
                 <el-button 
                   type="primary" 
-                  @click="connect"
+                  @click="() => connect().catch(console.error)"
                   :loading="connecting"
                   size="large"
                   class="action-btn primary"
@@ -186,9 +186,10 @@
                   size="small" 
                   @click="disconnectAll"
                   :loading="disconnectingAll"
+                  :disabled="connectionStore.connectedSerials.length === 0"
                 >
                   <el-icon><Close /></el-icon>
-                  断开所有
+                  断开所有 ({{ connectionStore.connectedSerials.length }})
                 </el-button>
               </div>
             </div>
@@ -282,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { 
@@ -340,14 +341,27 @@ const rules: FormRules = {
   ],
 }
 
+// 防抖定时器
+let loadPortsTimer: NodeJS.Timeout | null = null
+
 // 方法
 const loadPorts = async () => {
-  loading.value = true
-  try {
-    await connectionStore.loadAvailablePorts()
-  } finally {
-    loading.value = false
+  // 防抖处理，避免频繁调用
+  if (loadPortsTimer) {
+    clearTimeout(loadPortsTimer)
   }
+  
+  return new Promise<void>((resolve) => {
+    loadPortsTimer = setTimeout(async () => {
+      loading.value = true
+      try {
+        await connectionStore.loadAvailablePorts()
+      } finally {
+        loading.value = false
+        resolve()
+      }
+    }, 100) // 100ms防抖
+  })
 }
 
 const autoDetect = async () => {
@@ -366,29 +380,57 @@ const autoDetect = async () => {
 }
 
 const connect = async () => {
-  if (!formRef.value) return
-  
-  const valid = await formRef.value.validate()
-  if (!valid) return
-  
-  // 检查是否已经连接了相同的串口
-  const existingSerial = connectionStore.connectedSerials.find(s => s.port === form.port)
-  if (existingSerial) {
-    ElMessage.warning(`串口 ${form.port} 已经连接 (ID: ${existingSerial.serial_id})`)
+  if (!formRef.value) {
+    ElMessage.error('表单引用不存在')
     return
   }
   
-  connecting.value = true
   try {
-    const response = await connectionStore.connect(form)
-    ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
-    // 连接成功后清空端口选择，保持其他配置参数
-    form.port = ''
-    // 刷新端口列表以更新可用端口
-    await loadPorts()
+    // 先检查表单数据
+    if (!form.port) {
+      ElMessage.warning('请选择串口')
+      return
+    }
+    
+    // 执行表单验证
+    let valid = false
+    try {
+      valid = await formRef.value.validate()
+    } catch (validationError) {
+      console.error('Form validation failed:', validationError)
+      ElMessage.warning('表单验证失败，请检查输入')
+      return
+    }
+    
+    if (!valid) {
+      ElMessage.warning('请检查表单输入')
+      return
+    }
+    
+    // 检查是否已经连接了相同的串口
+    const existingSerial = connectionStore.connectedSerials.find(s => s.port === form.port)
+    if (existingSerial) {
+      ElMessage.warning(`串口 ${form.port} 已经连接 (ID: ${existingSerial.serial_id})`)
+      return
+    }
+    
+    connecting.value = true
+    try {
+      const response = await connectionStore.connect(form)
+      ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
+      // 连接成功后清空端口选择，保持其他配置参数
+      form.port = ''
+      // 不需要手动调用loadPorts，状态监听器会自动处理
+    } catch (error: any) {
+      console.error('Connection error:', error)
+      ElMessage.error(error.message || '串口连接失败')
+    } finally {
+      connecting.value = false
+    }
   } catch (error: any) {
-    ElMessage.error(error.message || '串口连接失败')
-  } finally {
+    // 处理其他错误
+    console.error('Unexpected error in connect:', error)
+    ElMessage.error('连接过程中发生错误')
     connecting.value = false
   }
 }
@@ -399,27 +441,39 @@ const disconnectSerial = async (serialId: number) => {
     const success = await connectionStore.disconnect(serialId)
     if (success) {
       ElMessage.success(`串口 ${serialId} 断开成功`)
-      // 刷新端口列表以更新可用端口
-      await loadPorts()
+      // 不需要手动调用loadPorts，状态监听器会自动处理
+    } else {
+      ElMessage.error(`串口 ${serialId} 断开失败`)
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '串口断开失败')
+    console.error('Disconnect serial error:', error)
+    ElMessage.error(error.message || `串口 ${serialId} 断开失败`)
   } finally {
     disconnectingSerials.value[serialId] = false
   }
 }
 
 const disconnectAll = async () => {
+  // 检查是否有连接的串口
+  if (connectionStore.connectedSerials.length === 0) {
+    ElMessage.info('当前没有已连接的串口')
+    return
+  }
+  
+  const connectedCount = connectionStore.connectedSerials.length
   disconnectingAll.value = true
+  
   try {
     const success = await connectionStore.disconnect()
     if (success) {
-      ElMessage.success('所有串口断开成功')
-      // 刷新端口列表以更新可用端口
-      await loadPorts()
+      ElMessage.success(`成功断开所有串口 (共${connectedCount}个)`)
+      // 不需要手动调用loadPorts，状态监听器会自动处理
+    } else {
+      ElMessage.error('断开所有串口失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '断开串口失败')
+    console.error('Disconnect all error:', error)
+    ElMessage.error(error.message || '断开所有串口失败')
   } finally {
     disconnectingAll.value = false
   }
@@ -430,10 +484,50 @@ const disconnectAll = async () => {
 
 
 
+// 状态同步检查
+const syncState = async () => {
+  try {
+    await connectionStore.checkStatus()
+    await loadPorts()
+  } catch (error) {
+    console.error('State sync failed:', error)
+  }
+}
+
 // 生命周期
-onMounted(() => {
-  loadPorts()
-  connectionStore.checkStatus()
+onMounted(async () => {
+  // 确保按顺序执行，避免竞态条件
+  await syncState()
+})
+
+// 监听连接状态变化，确保UI同步
+watch(
+  () => connectionStore.connectedSerials,
+  (newSerials, oldSerials) => {
+    console.log('Connection state changed:', {
+      old: oldSerials?.length || 0,
+      new: newSerials.length,
+      oldSerials: oldSerials?.map(s => s.serial_id),
+      newSerials: newSerials.map(s => s.serial_id)
+    })
+    
+    // 当连接状态发生变化时，检查是否需要更新可用端口列表
+    if (newSerials.length !== oldSerials?.length) {
+      console.log('Port count changed, updating available ports...')
+      // 延迟更新，避免频繁调用
+      setTimeout(() => {
+        loadPorts()
+      }, 100) // 减少延迟时间
+    }
+  },
+  { deep: true, immediate: false }
+)
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (loadPortsTimer) {
+    clearTimeout(loadPortsTimer)
+  }
 })
 </script>
 

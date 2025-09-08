@@ -6,7 +6,7 @@
 
 - 后端: FastAPI + Python
 - 前端: Vue3 + Element Plus + Vite
-- 数据库: PostgreSQL
+- 数据库: SQLite
 - 包管理: uv
 - 通信协议: AT指令 (串口通信)
 
@@ -26,7 +26,7 @@
 ## 环境要求
 
 - Python 3.9+
-- PostgreSQL 12+
+- SQLite 3 (Python内置支持)
 - uv (Python包管理器)
 - Node.js 16+ (仅开发模式需要)
 
@@ -34,41 +34,19 @@
 - Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Windows: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
 
-**安装PostgreSQL:**
-- Ubuntu/Debian: `sudo apt-get install postgresql postgresql-contrib`
-- CentOS/RHEL: `sudo yum install postgresql-server postgresql-contrib`
-- Windows: 下载并安装 [PostgreSQL官方安装包](https://www.postgresql.org/download/windows/)
-- macOS: `brew install postgresql`
-
 ## 快速开始
 
 ### 1. 数据库配置
 
-首先需要创建PostgreSQL数据库：
-
-```sql
--- 连接到PostgreSQL
-psql -U postgres
-
--- 创建数据库
-CREATE DATABASE testhub;
-
--- 创建用户（可选，也可以使用默认的postgres用户）
-CREATE USER testhub_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE testhub TO testhub_user;
-```
+SQLite数据库将自动创建在 `data/testhub.db` 文件中，无需额外配置。
 
 ### 2. 环境配置
 
-创建 `.env` 文件并配置数据库连接：
+创建 `.env` 文件并配置数据库连接（可选）：
 
 ```bash
-# 数据库配置
-HMI_DB_HOST=localhost
-HMI_DB_PORT=5432
-HMI_DB_NAME=testhub
-HMI_DB_USER=postgres
-HMI_DB_PASSWORD=postgres
+# 数据库配置（可选，使用默认值即可）
+HMI_DB_NAME=testhub.db
 HMI_DB_ECHO=false
 
 # 其他配置...

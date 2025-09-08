@@ -59,6 +59,10 @@
               <el-icon><Operation /></el-icon>
               <span>工作流管理</span>
             </el-menu-item>
+            <!-- <el-menu-item index="/workflow-orchestration">
+              <el-icon><Grid /></el-icon>
+              <span>工作流编排</span>
+            </el-menu-item> -->
           </el-menu>
         </el-aside>
 
@@ -77,7 +81,8 @@ import {
   Connection, 
   Setting, 
   ChatLineRound,
-  Operation
+  Operation,
+  Grid
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 

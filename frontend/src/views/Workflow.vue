@@ -491,7 +491,7 @@ const loadCommands = async () => {
 
 // 替换命令中的MAC地址占位符
 const replaceMacAddress = (command: string, macAddress: string) => {
-  return command.replace(/026501123456/g, macAddress)
+  return command.replace(/\$\{mac\}/g, macAddress)
 }
 
 // 显示通知对话框
@@ -530,6 +530,8 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
   try {
     // 替换MAC地址
     const finalCommand = replaceMacAddress(cmd.command, form.value.macAddress)
+    console.log('finalCommand', finalCommand);
+    
     
 
 

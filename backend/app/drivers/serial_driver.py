@@ -319,10 +319,21 @@ class SerialDriver:
         try:
             if serial_id is None:
                 # 断开所有连接
+                logger.info(f"Disconnecting all serials, current count: {len(self.connections)}")
                 for sid in list(self.connections.keys()):
-                    await self.disconnect(sid)
+                    await self._disconnect_single(sid)
+                logger.info("All serials disconnected")
                 return
             
+            # 调用单个断开方法
+            await self._disconnect_single(serial_id)
+            
+        except Exception as e:
+            logger.error(f"Error disconnecting serial port {serial_id}: {e}")
+    
+    async def _disconnect_single(self, serial_id: int):
+        """断开单个串口连接"""
+        try:
             # 先停止实时读取任务
             await self.stop_realtime_reading(serial_id)
             
@@ -341,7 +352,7 @@ class SerialDriver:
                 logger.info(f"Serial port {port} (ID: {serial_id}) disconnected")
             
         except Exception as e:
-            logger.error(f"Error disconnecting serial port {serial_id}: {e}")
+            logger.error(f"Error disconnecting single serial port {serial_id}: {e}")
     
     async def write_data(self, serial_id: int, data: bytes) -> bool:
         """写入数据到指定串口"""
