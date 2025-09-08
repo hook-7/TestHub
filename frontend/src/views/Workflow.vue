@@ -47,10 +47,12 @@
               <el-form-item label="MAC地址" required>
                 <el-input
                   v-model="form.macAddress"
-                  placeholder="请输入MAC地址，如：026501123456"
+                  placeholder="请输入MAC地址，如：026501123456 或 mac:026501123456"
                   clearable
                   :disabled="isExecuting"
                   class="mac-input"
+                  @input="handleMacInput"
+                  @keydown.enter.prevent
                 >
                   <template #prepend>
                     <el-icon><Link /></el-icon>
@@ -215,12 +217,14 @@
                   <el-form-item label="SN序列号" required>
                     <el-input
                       v-model="snForm.serialNumber"
-                      placeholder="请输入SN序列号，如：25990000001"
+                      placeholder="请输入SN序列号，如：25990000001 或 S/N:25990000001MAC:0265010002BC"
                       clearable
                       :disabled="isExecuting"
                       class="sn-input"
-                      maxlength="12"
+                      maxlength="100"
                       show-word-limit
+                      @input="handleSNInput"
+                      @keydown.enter.prevent
                     >
                       <template #prepend>
                         <el-icon><Key /></el-icon>
@@ -495,7 +499,10 @@ const loadCommands = async () => {
 
 // 替换命令中的MAC地址占位符
 const replaceMacAddress = (command: string, macAddress: string) => {
-  return command.replace(/\$\{mac\}/g, macAddress)
+  // 先截断到第一个"%"符号
+  const truncatedCommand = command.split('%')[0]
+  // 然后替换MAC地址占位符
+  return truncatedCommand.replace(/\$\{mac:\}/g, macAddress)
 }
 
 // 显示通知对话框
@@ -519,6 +526,7 @@ const showNotificationDialog = async (description: string): Promise<boolean> => 
     return false // 用户选择"测试失败"
   }
 }
+
 
 // 执行单个命令
 const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
@@ -804,6 +812,23 @@ const writeSerialNumber = async () => {
   try {
     isWritingSN.value = true
     
+    // 检查并提取SN，如果输入包含S/N:格式（忽略大小写）
+    let actualSN = snForm.value.serialNumber
+    if (actualSN.toLowerCase().includes('s/n:')) {
+      console.log('Extracting SN from S/N: format')
+      const snStart = actualSN.toLowerCase().indexOf('s/n:') + 4
+      const extractedSN = actualSN.substring(snStart, snStart + 11)
+      
+      if (/^\d{11}$/.test(extractedSN)) {
+        actualSN = extractedSN
+        console.log('Extracted SN:', actualSN)
+        // 更新输入框显示提取的SN
+        snForm.value.serialNumber = actualSN
+      } else {
+        console.log('Invalid SN format, using original value')
+      }
+    }
+    
     // 将SN转换为小端序的16进制字符串，然后每个字节+33
     const snToLittleEndian = (sn: string) => {
       // 确保SN长度为12位（6字节）
@@ -839,15 +864,16 @@ const writeSerialNumber = async () => {
     }
     
     // 构建协议数据
-    const snLittleEndian = snToLittleEndian(snForm.value.serialNumber)
+    const snLittleEndian = snToLittleEndian(actualSN)
     const protocolData = `02AAAAAAAAAAAA68040C34C033444444${snLittleEndian}`
     const checksum = calculateChecksum(protocolData)
     const finalCommand = protocolData + checksum + '03'
+    console.log(finalCommand);
     
     // 发送16进制命令到串口（假设使用串口ID 1）
     const response = await serialAPI.sendRawData(finalCommand, 1)
     
-    ElMessage.success(`SN序列号写入成功: ${snForm.value.serialNumber} => ${response.received_data}`)
+    ElMessage.success(`SN序列号写入成功: ${actualSN} => ${response.received_data}`)
     console.log('SN写入响应:', response.received_data)
     
     
@@ -856,6 +882,56 @@ const writeSerialNumber = async () => {
     ElMessage.error('写入SN失败: ' + (error instanceof Error ? error.message : '未知错误'))
   } finally {
     isWritingSN.value = false
+  }
+}
+
+// 处理SN输入，检测S/N:格式并自动发送
+let snInputTimer: NodeJS.Timeout | null = null
+const handleSNInput = (value: string) => {
+  console.log('SN input value:', value)
+  
+  // 清除之前的定时器
+  if (snInputTimer) {
+    clearTimeout(snInputTimer)
+  }
+  
+  // 检查是否包含 S/N: 格式（忽略大小写）
+  if (value.toLowerCase().includes('s/n:')) {
+    console.log('Found S/N: pattern')
+    
+    // 使用防抖，延迟处理避免频繁触发
+    snInputTimer = setTimeout(async () => {
+      console.log('Processing SN extraction...')
+      
+      try {
+        await writeSerialNumber()
+        // 发送完成后清空输入框
+        snForm.value.serialNumber = ''
+      } catch (error) {
+        console.error('自动发送SN失败:', error)
+      }
+    }, 200) // 缩短防抖时间到200ms
+  }
+}
+
+// 处理MAC地址输入，检测mac:格式并自动替换
+let macInputTimer: NodeJS.Timeout | null = null
+const handleMacInput = (value: string) => {
+  // 清除之前的定时器
+  if (macInputTimer) {
+    clearTimeout(macInputTimer)
+  }
+  
+  // 检查是否以 mac: 开头
+  if (value.toLowerCase().startsWith('mac:')) {
+    // 使用防抖，延迟处理避免频繁触发
+    macInputTimer = setTimeout(() => {
+      // 提取mac:后面的部分
+      const extractedMac = value.replace(/^mac:/i, '')
+      // 更新MAC地址值
+      form.value.macAddress = extractedMac
+      console.log('extractedMac', extractedMac);
+    }, 500) // 500ms防抖
   }
 }
 
