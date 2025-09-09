@@ -59,6 +59,14 @@
               <el-icon><Operation /></el-icon>
               <span>工作流管理</span>
             </el-menu-item>
+        <el-menu-item index="/serial-test">
+          <el-icon><Setting /></el-icon>
+          <span>串口测试</span>
+        </el-menu-item>
+        <el-menu-item index="/serial-id-test">
+          <el-icon><Setting /></el-icon>
+          <span>串口ID测试</span>
+        </el-menu-item>
             <!-- <el-menu-item index="/workflow-orchestration">
               <el-icon><Grid /></el-icon>
               <span>工作流编排</span>
@@ -81,8 +89,7 @@ import {
   Connection, 
   Setting, 
   ChatLineRound,
-  Operation,
-  Grid
+  Operation
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 
