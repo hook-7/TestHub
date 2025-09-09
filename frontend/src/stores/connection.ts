@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { serialAPI, type SerialConnectionStatus, type SerialPortInfo, type SerialConfig } from '@/api/serial'
+import { webSerialService, type SerialConnectionStatus, type SerialPortInfo, type SerialConfig } from '@/services/webSerial'
 
 export const useConnectionStore = defineStore('connection', () => {
   // 状态
@@ -20,8 +20,8 @@ export const useConnectionStore = defineStore('connection', () => {
   const checkStatus = async () => {
     try {
       console.log('Checking connection status...')
-      const newStatus = await serialAPI.getConnectionStatus()
-      console.log('Received status from API:', newStatus)
+      const newStatus = await webSerialService.getConnectionStatus()
+      console.log('Received status from Web Serial API:', newStatus)
       status.value = newStatus
       console.log('Updated local status:', status.value)
       
@@ -46,7 +46,7 @@ export const useConnectionStore = defineStore('connection', () => {
   
   const loadAvailablePorts = async () => {
     try {
-      availablePorts.value = await serialAPI.getAvailablePorts()
+      availablePorts.value = await webSerialService.getAvailablePorts()
     } catch (error) {
       console.error('Failed to load available ports:', error)
       // 清空端口列表，避免显示错误数据
@@ -56,7 +56,7 @@ export const useConnectionStore = defineStore('connection', () => {
   
   const autoDetectPort = async (): Promise<string | null> => {
     try {
-      return await serialAPI.autoDetectPort()
+      return await webSerialService.autoDetectPort()
     } catch (error) {
       console.error('Failed to auto detect port:', error)
       return null
@@ -65,7 +65,7 @@ export const useConnectionStore = defineStore('connection', () => {
   
   const connect = async (config: SerialConfig) => {
     try {
-      const response = await serialAPI.connectSerial(config)
+      const response = await webSerialService.connectSerial(config)
       // 先更新状态，再选择串口
       await checkStatus()
       // 自动选择新连接的串口
@@ -81,7 +81,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const disconnect = async (serialId?: number) => {
     try {
       console.log('Disconnecting serial:', serialId)
-      await serialAPI.disconnectSerial(serialId)
+      await webSerialService.disconnectSerial(serialId)
       console.log('Disconnect API call completed, checking status...')
       // 更新状态
       await checkStatus()

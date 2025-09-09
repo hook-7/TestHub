@@ -13,15 +13,7 @@
                 串口配置
               </h3>
               <div class="header-actions">
-                <el-button 
-                  type="primary" 
-                  @click="loadPorts"
-                  :loading="loading"
-                  size="small"
-                >
-                  <el-icon><Refresh /></el-icon>
-                  刷新端口
-                </el-button>
+                <!-- 串口配置不需要刷新按钮，连接时会自动选择设备 -->
               </div>
             </div>
           </template>
@@ -34,53 +26,28 @@
             size="large"
             class="config-form"
           >
-            <!-- 串口选择 -->
+            <!-- 串口信息提示 -->
             <div class="form-section">
               <h4 class="section-title">
                 <el-icon><Connection /></el-icon>
-                串口选择
+                串口连接
               </h4>
-              <div class="form-row">
-                <el-form-item label="串口" prop="port">
-                  <el-select 
-                    v-model="form.port" 
-                    placeholder="选择串口"
-                    style="width: 100%"
-                    @focus="loadPorts"
-                  >
-                    <el-option
-                      v-for="port in availableUnconnectedPorts"
-                      :key="port.device"
-                      :label="`${port.device} - ${port.description}`"
-                      :value="port.device"
-                    >
-                      <div style="display: flex; justify-content: space-between;">
-                        <span>{{ port.device }}</span>
-                        <span style="color: var(--el-text-color-secondary); font-size: 12px;">
-                          {{ port.description }}
-                        </span>
-                      </div>
-                    </el-option>
-                    <el-option
-                      v-if="availableUnconnectedPorts.length === 0"
-                      disabled
-                      label="暂无可用串口 (所有串口已连接或无串口设备)"
-                      value=""
-                    />
-                  </el-select>
-                </el-form-item>
-                
-                <el-form-item>
-                  <el-button 
-                    @click="autoDetect"
-                    :loading="autoDetecting"
-                    type="success"
-                    plain
-                  >
-                    <el-icon><Search /></el-icon>
-                    自动检测
-                  </el-button>
-                </el-form-item>
+              <div class="connection-info">
+                <el-alert
+                  title="点击连接按钮后，浏览器会弹出设备选择对话框"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                >
+                  <template #default>
+                    <p>请确保：</p>
+                    <ul>
+                      <li>串口设备已连接到电脑</li>
+                      <li>设备驱动程序已正确安装</li>
+                      <li>在HTTPS环境下访问此页面</li>
+                    </ul>
+                  </template>
+                </el-alert>
               </div>
             </div>
 
@@ -112,9 +79,9 @@
               <div class="form-row">
                 <el-form-item label="校验位" prop="parity">
                   <el-select v-model="form.parity">
-                    <el-option label="无校验 (N)" value="N" />
-                    <el-option label="偶校验 (E)" value="E" />
-                    <el-option label="奇校验 (O)" value="O" />
+                    <el-option label="无校验" value="none" />
+                    <el-option label="偶校验" value="even" />
+                    <el-option label="奇校验" value="odd" />
                   </el-select>
                 </el-form-item>
                 
@@ -149,6 +116,7 @@
                   type="primary" 
                   @click="() => connect().catch(console.error)"
                   :loading="connecting"
+                  :disabled="!isWebSerialSupported"
                   size="large"
                   class="action-btn primary"
                 >
@@ -169,27 +137,18 @@
               <h3>
                 <el-icon><InfoFilled /></el-icon>
                 已连接串口
-                <el-badge :value="connectionStore.connectedSerials.length" class="connection-badge" />
+                <el-badge :value="connectedCount" class="connection-badge" />
               </h3>
               <div class="header-actions">
-                <el-button 
-                  type="success" 
-                  size="small" 
-                  @click="loadPorts"
-                  :loading="loading"
-                >
-                  <el-icon><Refresh /></el-icon>
-                  刷新
-                </el-button>
                 <el-button 
                   type="danger" 
                   size="small" 
                   @click="disconnectAll"
                   :loading="disconnectingAll"
-                  :disabled="connectionStore.connectedSerials.length === 0"
+                  :disabled="connectedCount === 0"
                 >
                   <el-icon><Close /></el-icon>
-                  断开所有 ({{ connectionStore.connectedSerials.length }})
+                  断开所有 ({{ connectedCount }})
                 </el-button>
               </div>
             </div>
@@ -288,8 +247,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { 
   Setting, 
-  Refresh, 
-  Search, 
   Connection, 
   Close, 
   CircleCheck, 
@@ -299,85 +256,60 @@ import {
   Check 
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
+import { webSerialService } from '@/services/webSerial'
 
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
 
+// 浏览器兼容性检查
+const isWebSerialSupported = ref(false)
+const compatibilityMessage = ref('')
+
+// 检查Web Serial API支持
+const checkWebSerialSupport = () => {
+  try {
+    isWebSerialSupported.value = webSerialService.isSupported()
+    if (!isWebSerialSupported.value) {
+      compatibilityMessage.value = '当前浏览器不支持Web Serial API，请使用Chrome 89+、Edge 89+或Opera 76+'
+    } else {
+      compatibilityMessage.value = 'Web Serial API支持正常'
+    }
+  } catch (error) {
+    isWebSerialSupported.value = false
+    compatibilityMessage.value = 'Web Serial API检查失败'
+    console.error('Web Serial API check failed:', error)
+  }
+}
 
 // 表单引用
 const formRef = ref<FormInstance>()
 
-// 计算属性 - 过滤掉已连接的串口
-const availableUnconnectedPorts = computed(() => {
-  const connectedPorts = connectionStore.connectedSerials.map(s => s.port)
-  return connectionStore.availablePorts.filter(port => !connectedPorts.includes(port.device))
-})
+// 计算属性 - 已连接串口数量
+const connectedCount = computed(() => connectionStore.connectedSerials.length)
 
 // 状态
-const loading = ref(false)
 const connecting = ref(false)
 const disconnectingAll = ref(false)
 const disconnectingSerials = ref<Record<number, boolean>>({})
-const autoDetecting = ref(false)
 
 
 const form = reactive({
-  port: '',
   baudrate: 9600,  
   bytesize: 8,
-  parity: 'N',
+  parity: 'none',
   stopbits: 1,
   timeout: 0.5,  
 })
 
 // 表单验证规则
 const rules: FormRules = {
-  port: [
-    { required: true, message: '请选择串口', trigger: 'change' }
-  ],
   baudrate: [
     { required: true, message: '请选择波特率', trigger: 'change' }
   ],
 }
 
-// 防抖定时器
-let loadPortsTimer: NodeJS.Timeout | null = null
-
 // 方法
-const loadPorts = async () => {
-  // 防抖处理，避免频繁调用
-  if (loadPortsTimer) {
-    clearTimeout(loadPortsTimer)
-  }
-  
-  return new Promise<void>((resolve) => {
-    loadPortsTimer = setTimeout(async () => {
-      loading.value = true
-      try {
-        await connectionStore.loadAvailablePorts()
-      } finally {
-        loading.value = false
-        resolve()
-      }
-    }, 100) // 100ms防抖
-  })
-}
-
-const autoDetect = async () => {
-  autoDetecting.value = true
-  try {
-    const detectedPort = await connectionStore.autoDetectPort()
-    if (detectedPort) {
-      form.port = detectedPort
-      ElMessage.success(`自动检测到串口: ${detectedPort}`)
-    } else {
-      ElMessage.warning('未检测到可用串口')
-    }
-  } finally {
-    autoDetecting.value = false
-  }
-}
 
 const connect = async () => {
   if (!formRef.value) {
@@ -385,13 +317,13 @@ const connect = async () => {
     return
   }
   
+  // 检查Web Serial API支持
+  if (!isWebSerialSupported.value) {
+    ElMessage.error('当前浏览器不支持Web Serial API，无法连接串口')
+    return
+  }
+  
   try {
-    // 先检查表单数据
-    if (!form.port) {
-      ElMessage.warning('请选择串口')
-      return
-    }
-    
     // 执行表单验证
     let valid = false
     try {
@@ -407,20 +339,17 @@ const connect = async () => {
       return
     }
     
-    // 检查是否已经连接了相同的串口
-    const existingSerial = connectionStore.connectedSerials.find(s => s.port === form.port)
-    if (existingSerial) {
-      ElMessage.warning(`串口 ${form.port} 已经连接 (ID: ${existingSerial.serial_id})`)
-      return
-    }
-    
     connecting.value = true
     try {
-      const response = await connectionStore.connect(form)
+      // 设置一个临时的端口标识，实际连接时会弹出设备选择对话框
+      const configWithPort = {
+        ...form,
+        port: 'user-selected' // 这个值不会真正使用，只是满足接口要求
+      }
+      
+      const response = await connectionStore.connect(configWithPort)
       ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
-      // 连接成功后清空端口选择，保持其他配置参数
-      form.port = ''
-      // 不需要手动调用loadPorts，状态监听器会自动处理
+      // 连接成功后保持配置参数，方便下次连接
     } catch (error: any) {
       console.error('Connection error:', error)
       ElMessage.error(error.message || '串口连接失败')
@@ -488,7 +417,6 @@ const disconnectAll = async () => {
 const syncState = async () => {
   try {
     await connectionStore.checkStatus()
-    await loadPorts()
   } catch (error) {
     console.error('State sync failed:', error)
   }
@@ -496,8 +424,17 @@ const syncState = async () => {
 
 // 生命周期
 onMounted(async () => {
-  // 确保按顺序执行，避免竞态条件
-  await syncState()
+  // 首先检查Web Serial API支持
+  checkWebSerialSupport()
+  
+  // 如果支持Web Serial API，则执行状态同步
+  if (isWebSerialSupported.value) {
+    // 确保按顺序执行，避免竞态条件
+    await syncState()
+  } else {
+    // 如果不支持，显示提示信息
+    ElMessage.warning(compatibilityMessage.value)
+  }
 })
 
 // 监听连接状态变化，确保UI同步
@@ -510,24 +447,13 @@ watch(
       oldSerials: oldSerials?.map(s => s.serial_id),
       newSerials: newSerials.map(s => s.serial_id)
     })
-    
-    // 当连接状态发生变化时，检查是否需要更新可用端口列表
-    if (newSerials.length !== oldSerials?.length) {
-      console.log('Port count changed, updating available ports...')
-      // 延迟更新，避免频繁调用
-      setTimeout(() => {
-        loadPorts()
-      }, 100) // 减少延迟时间
-    }
   },
   { deep: true, immediate: false }
 )
 
-// 组件卸载时清理定时器
+// 组件卸载时清理
 onUnmounted(() => {
-  if (loadPortsTimer) {
-    clearTimeout(loadPortsTimer)
-  }
+  // 清理工作（如果需要）
 })
 </script>
 
@@ -537,6 +463,26 @@ onUnmounted(() => {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: 24px;
+}
+
+/* 连接信息提示样式 */
+.connection-info {
+  margin-bottom: 16px;
+}
+
+.connection-info .el-alert {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+}
+
+.connection-info .el-alert ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.connection-info .el-alert li {
+  margin: 4px 0;
+  font-weight: 500;
 }
 
 /* 页面标题 */
