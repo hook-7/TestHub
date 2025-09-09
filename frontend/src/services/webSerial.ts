@@ -58,6 +58,7 @@ export class WebSerialService {
   private readers: Map<number, ReadableStreamDefaultReader> = new Map()
   private writers: Map<number, WritableStreamDefaultWriter> = new Map()
   private isReading: Map<number, boolean> = new Map()
+  private dataBuffers: Map<number, string> = new Map() // 数据缓冲区
 
 
   constructor() {
@@ -156,18 +157,35 @@ export class WebSerialService {
 
       const serialId = this.getNextSerialId()
       
+      // 获取实际的端口信息
+      const portInfo = port.getInfo()
+      const actualPort = `COM${portInfo.usbVendorId}-${portInfo.usbProductId}` || 'Unknown'
+      
+      // 创建包含实际端口信息的配置
+      const actualConfig = {
+        ...config,
+        port: actualPort
+      }
+
       // 保存连接信息
       this.ports.set(serialId, port)
-      this.portConfigs.set(serialId, config)
+      this.portConfigs.set(serialId, actualConfig)
 
-      // 启动数据读取
-      await this.startReading(serialId, port)
+      // 设置默认数据回调函数
+      this.setDataCallback(serialId, (data, serialId) => {
+        console.log(`Serial ${serialId} received:`, data)
+      })
 
-      console.log(`Serial port connected: ${config.port} at ${config.baudrate} baud with serial_id ${serialId}`)
+      // 异步启动数据读取
+      this.startReading(serialId, port).catch(error => {
+        console.error(`Error starting reading for serial ${serialId}:`, error)
+      })
+
+      console.log(`Serial port connected: ${actualPort} at ${config.baudrate} baud with serial_id ${serialId}`)
       
       return {
         serial_id: serialId,
-        port: config.port,
+        port: actualPort,
         message: `串口连接成功！分配ID: ${serialId}`
       }
     } catch (error) {
@@ -242,6 +260,7 @@ export class WebSerialService {
     this.portConfigs.delete(serialId)
     this.dataCallbacks.delete(serialId)
     this.isReading.delete(serialId)
+    this.dataBuffers.delete(serialId)
 
     console.log(`Serial port ${serialId} disconnected`)
   }
@@ -427,9 +446,37 @@ export class WebSerialService {
         if (done) break
 
         const data = new TextDecoder().decode(value)
-        const callback = this.dataCallbacks.get(serialId)
-        if (callback) {
-          callback(data, serialId)
+        
+        // 将数据添加到缓冲区
+        const currentBuffer = this.dataBuffers.get(serialId) || ''
+        const newBuffer = currentBuffer + data
+        this.dataBuffers.set(serialId, newBuffer)
+        
+        // 检查是否有完整的消息（以换行符结尾）
+        const lines = newBuffer.split('\n')
+        if (lines.length > 1) {
+          // 处理完整的行
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim()
+            if (line) {
+              const callback = this.dataCallbacks.get(serialId)
+              if (callback) {
+                callback(line, serialId)
+              }
+            }
+          }
+          
+          // 保留最后一个不完整的行
+          this.dataBuffers.set(serialId, lines[lines.length - 1])
+        }
+        
+        // 防止缓冲区无限增长
+        if (newBuffer.length > 1000) {
+          const callback = this.dataCallbacks.get(serialId)
+          if (callback) {
+            callback(newBuffer, serialId)
+          }
+          this.dataBuffers.set(serialId, '')
         }
       }
     } catch (error) {
@@ -437,7 +484,7 @@ export class WebSerialService {
     } finally {
       this.isReading.set(serialId, false)
       this.readers.delete(serialId)
-      console.log(`Stopped reading from serial ${serialId}`)
+      this.dataBuffers.delete(serialId)
     }
   }
 

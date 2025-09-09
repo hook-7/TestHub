@@ -311,6 +311,7 @@ const rules: FormRules = {
 
 // 方法
 
+
 const connect = async () => {
   if (!formRef.value) {
     ElMessage.error('表单引用不存在')
@@ -329,7 +330,6 @@ const connect = async () => {
     try {
       valid = await formRef.value.validate()
     } catch (validationError) {
-      console.error('Form validation failed:', validationError)
       ElMessage.warning('表单验证失败，请检查输入')
       return
     }
@@ -349,7 +349,10 @@ const connect = async () => {
       
       const response = await connectionStore.connect(configWithPort)
       ElMessage.success(`串口连接成功！分配ID: ${response.serial_id}`)
-      // 连接成功后保持配置参数，方便下次连接
+      
+      // 强制刷新状态
+      await syncState()
+      
     } catch (error: any) {
       console.error('Connection error:', error)
       ElMessage.error(error.message || '串口连接失败')
@@ -357,7 +360,6 @@ const connect = async () => {
       connecting.value = false
     }
   } catch (error: any) {
-    // 处理其他错误
     console.error('Unexpected error in connect:', error)
     ElMessage.error('连接过程中发生错误')
     connecting.value = false
@@ -620,6 +622,17 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* 已选择串口信息样式 */
+.selected-port-info {
+  margin-top: 16px;
+}
+
+.selected-port-info .el-alert {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.15);
 }
 
 .action-btn {
