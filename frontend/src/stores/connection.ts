@@ -19,11 +19,8 @@ export const useConnectionStore = defineStore('connection', () => {
   // 操作
   const checkStatus = async () => {
     try {
-      console.log('Checking connection status...')
       const newStatus = await webSerialService.getConnectionStatus()
-      console.log('Received status from Web Serial API:', newStatus)
       status.value = newStatus
-      console.log('Updated local status:', status.value)
       
       // 如果当前选择的串口已断开，自动选择第一个可用串口
       if (selectedSerialId.value !== null && !connectedSerials.value.find(s => s.serial_id === selectedSerialId.value)) {
@@ -66,30 +63,28 @@ export const useConnectionStore = defineStore('connection', () => {
   const connect = async (config: SerialConfig) => {
     try {
       const response = await webSerialService.connectSerial(config)
-      // 先更新状态，再选择串口
+      
+      // 更新状态
       await checkStatus()
+      
       // 自动选择新连接的串口
       selectedSerialId.value = response.serial_id
+      
       return response
     } catch (error) {
       console.error('Failed to connect:', error)
-      // 抛出错误，让调用者处理
       throw error
     }
   }
   
   const disconnect = async (serialId?: number) => {
     try {
-      console.log('Disconnecting serial:', serialId)
       await webSerialService.disconnectSerial(serialId)
-      console.log('Disconnect API call completed, checking status...')
       // 更新状态
       await checkStatus()
-      console.log('Status check completed, current connections:', status.value.connected_serials.length)
       return true
     } catch (error) {
       console.error('Failed to disconnect:', error)
-      // 抛出错误，让调用者处理
       throw error
     }
   }
