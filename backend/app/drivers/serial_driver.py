@@ -109,9 +109,7 @@ class SerialDriver:
                     # 如果有数据且设置了回调函数，则发送数据
                     if data and self.data_callback:
                         await self.data_callback(serial_id, data)
-                    
-                    # 短暂休眠避免过度占用CPU
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.05)
                     
                 except Exception as e:
                     logger.error(f"Error in read loop for serial {serial_id}: {e}")

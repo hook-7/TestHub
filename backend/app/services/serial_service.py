@@ -116,6 +116,7 @@ class SerialService:
             if not command.endswith('\r\n'):
                 command = command + '\r\n'
             data = command.encode('utf-8')
+            logger.info(f"Sending command: {data}")
             # 使用智能读取方法，支持多种AT指令终止符
             terminators = [b'\r\nOK\r\n', b'\r\nERROR\r\n', b'\r\n', b'OK\r\n', b'ERROR\r\n']
             response = None
