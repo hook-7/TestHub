@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -132,7 +133,11 @@ setup_exception_handlers(app)
 # API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-app.mount("/", StaticFiles(directory=str(settings.DATA_DIR/"dist"), html=True), name="frontend")
+
+app.mount("/assets", StaticFiles(directory=str(settings.DATA_DIR/"dist/assets")), name="assets")
+@app.get("/{path_name:path}")
+async def serve_vue(path_name: str):
+    return FileResponse(str(settings.DATA_DIR/"dist")+"/index.html")
 
 
 
