@@ -100,7 +100,7 @@
             </el-form-item>
             
             <!-- 指令控制选项 -->
-            <el-form-item label="控制选项">
+            <!-- <el-form-item label="控制选项">
               <div class="command-controls">
                 <el-checkbox v-model="commandForm.autoAddCRLF" size="small">
                   自动添加\r\n
@@ -119,7 +119,7 @@
                   清空
                 </el-button>
               </div>
-            </el-form-item>
+            </el-form-item> -->
           </el-form>
 
           <!-- 原始数据发送 -->
@@ -465,7 +465,7 @@ const commandHistory = ref<string[]>([])
 const commandForm = reactive({
   command: '',
   autoAddCRLF: true,
-  lineEnding: '\r\n',
+  lineEnding: '',
 })
 
 // 新指令表单
