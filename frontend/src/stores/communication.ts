@@ -1,10 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { RawDataResponse } from '@/api/serial'
-import { serialAPI } from '@/api/serial'
 import { ElMessage } from 'element-plus'
-import { WebSocketClient, WSMessageType } from '@/services/websocket'
-import type { WSResponseMessage, WSErrorMessage } from '@/services/websocket'
+import { webSerialService, type RawDataResponse } from '@/services/webSerial'
 
 export interface CommunicationLog {
   id: string
@@ -22,93 +19,79 @@ export const useCommunicationStore = defineStore('communication', () => {
   const logs = ref<CommunicationLog[]>([])
   const maxLogs = ref(1000) // 最大日志条数
 
-  // WebSocket相关状态
-  const wsClient = ref<WebSocketClient | null>(null)
-  const wsConnected = ref(false)
+  // Web Serial API相关状态
+  const isRealTimeConnected = ref(false)
 
   // 计算属性
-  const isRealTimeConnected = computed(() => wsConnected.value)
+  const isWebSerialConnected = computed(() => isRealTimeConnected.value)
 
-  // 初始化WebSocket
-  const initializeWebSocket = async () => {
-    if (wsClient.value) return
-
+  // 初始化Web Serial API
+  const initializeWebSerial = async () => {
     try {
-      wsClient.value = new WebSocketClient()
-      
-      // 设置消息回调
-      wsClient.value.onMessage((message: WSResponseMessage | WSErrorMessage) => {
-        handleWebSocketMessage(message)
-      })
+      // 检查Web Serial API支持
+      if (!webSerialService.isSupported()) {
+        throw new Error('Web Serial API不支持，请使用Chrome 89+、Edge 89+或Opera 76+')
+      }
 
-      // 设置连接状态回调
-      wsClient.value.onConnectionChange((connected: boolean) => {
-        wsConnected.value = connected
+      // 设置数据接收回调
+      const connectedSerials = webSerialService.getConnectedSerials()
+      for (const serial of connectedSerials) {
+        webSerialService.setDataCallback(serial.serial_id, (data: string, serialId: number) => {
+          addLog({
+            type: 'at',
+            direction: 'received',
+            description: `接收数据 (串口#${serialId})`,
+            data: data,
+            success: true,
+            serial_id: serialId
+          })
+        })
+      }
+
+      isRealTimeConnected.value = connectedSerials.length > 0
+      
+      if (isRealTimeConnected.value) {
         addLog({
           type: 'at',
           direction: 'received',
-          description: connected ? 'WebSocket连接已建立' : 'WebSocket连接已断开',
-          data: `连接状态: ${connected ? '已连接' : '已断开'}`,
-          success: connected
+          description: 'Web Serial API已初始化',
+          data: `已连接 ${connectedSerials.length} 个串口`,
+          success: true
         })
-      })
-
-      // 连接WebSocket
-      const connected = await wsClient.value.connect()
-      if (!connected) {
-        ElMessage.error('WebSocket连接失败，请检查后端服务')
-        throw new Error('WebSocket连接失败')
       }
     } catch (error) {
-      console.error('初始化WebSocket失败:', error)
-      ElMessage.error('WebSocket初始化失败，请检查后端服务')
+      console.error('初始化Web Serial API失败:', error)
+      ElMessage.error('Web Serial API初始化失败')
       throw error
     }
   }
 
-  // 处理WebSocket消息
-  const handleWebSocketMessage = (message: WSResponseMessage | WSErrorMessage) => {
-    const isError = message.type === WSMessageType.ERROR
-    const serialId = message.serial_id
-
-    if (message.type === WSMessageType.AUTO_AT) {
-      addLog({
-        type: 'at',
-        direction: 'sent',
-        description: isError ? '命令执行错误' : '接收报文',
-        data: (message as WSResponseMessage).message,
-        success: !isError,
-        serial_id: serialId
-      })
+  // 设置串口数据回调（用于新连接的串口）
+  const setSerialDataCallback = (serialId: number) => {
+    console.log(`Setting data callback for serial ${serialId}`)
+    webSerialService.setDataCallback(serialId, (data: string, serialId: number) => {
+      console.log(`Data callback triggered for serial ${serialId}:`, data)
       addLog({
         type: 'at',
         direction: 'received',
-        description: isError ? '命令执行错误' : '接收报文',
-        data: (message as WSResponseMessage).data?.received_data,
-        success: !isError,
+        description: `接收数据 (串口#${serialId})`,
+        data: data,
+        success: true,
         serial_id: serialId
       })
-      return
-    }
+    })
+  }
 
+  // 断开Web Serial API
+  const disconnectWebSerial = () => {
+    isRealTimeConnected.value = false
     addLog({
       type: 'at',
       direction: 'received',
-      description: isError ? '命令执行错误' : '接收报文',
-      data: isError ? (message as WSErrorMessage).error : (message as WSResponseMessage).message,
-      success: !isError,
-      serial_id: serialId
+      description: 'Web Serial API已断开',
+      data: '所有串口连接已断开',
+      success: false
     })
-
-  }
-
-  // 断开WebSocket
-  const disconnectWebSocket = () => {
-    if (wsClient.value) {
-      wsClient.value.disconnect()
-      wsClient.value = null
-      wsConnected.value = false
-    }
   }
   
   // 操作
@@ -133,105 +116,67 @@ export const useCommunicationStore = defineStore('communication', () => {
   
   const sendATCommand = async (command: string, serialId?: number): Promise<RawDataResponse> => {
     try {
-      // 记录发送的指令
+      // 使用Web Serial API发送指令
+      const result = await webSerialService.sendATCommand(command, serialId)
+      
+      // 只记录一次发送日志
       addLog({
         type: 'at',
         direction: 'sent',
-        data: command,
-        description: '发送指令',
-        success: true,
-        serial_id: serialId
-      })
-
-      // 确保WebSocket连接
-      if (!wsClient.value || !wsClient.value.isConnected()) {
-        await initializeWebSocket()
-      }
-
-      // 使用WebSocket发送指令
-      if (wsClient.value && wsClient.value.isConnected()) {
-        const success = await wsClient.value.sendCommand(command, serialId)
-        if (!success) {
-          throw new Error('WebSocket发送失败')
-        }
-        
-        // WebSocket模式下，响应通过回调处理，这里只返回成功状态
-        return { 
-          serial_id: serialId || 0,
-          sent_data: command,
-          received_data: '已通过WebSocket发送，等待响应...',
-          timestamp: Date.now()
-        }
-      } else {
-        throw new Error('WebSocket连接失败')
-      }
-    } catch (error) {
-      // 模拟成功响应用于演示
-      const mockResponse = {
-        serial_id: serialId || 1,
-        sent_data: command,
-        received_data: 'OK',
-        timestamp: Date.now()
-      }
-      
-      // 记录模拟接收的数据
-      addLog({
-        type: 'at',
-        direction: 'received',
-        data: mockResponse.received_data,
-        description: `接收响应 (串口${mockResponse.serial_id})`,
-        success: true,
-        serial_id: mockResponse.serial_id
-      })
-      
-      return mockResponse
-    }
-  }
-  
-  const sendRawData = async (data: string, serialId?: number): Promise<RawDataResponse> => {
-    try {
-      addLog({
-        type: 'raw',
-        direction: 'sent',
-        data: data,
-        description: serialId ? `发送原始数据到串口${serialId}` : '发送原始数据',
-        serial_id: serialId
-      })
-      
-      // 使用REST API发送原始16进制数据，确保与后端处理逻辑一致
-      const result = await serialAPI.sendRawData(data, serialId)
-      
-      // 记录接收到的数据
-      addLog({
-        type: 'raw',
-        direction: 'received',
-        data: result.received_data,
-        description: `接收原始数据响应 (串口${result.serial_id})`,
+        data: result.sent_data,
+        description: `发送指令 (串口#${result.serial_id})`,
         success: true,
         serial_id: result.serial_id
       })
       
       return result
     } catch (error) {
-      // 模拟成功响应用于演示
-      const mockResponse = {
-        serial_id: serialId || 1,
-        sent_data: data,
-        received_data: '41540D0A', // 模拟AT\r\n的16进制响应
-        timestamp: Date.now()
-      }
+      console.error('发送AT指令失败:', error)
       
-      // 记录模拟接收的数据
+      // 记录发送失败
       addLog({
-        type: 'raw',
-        direction: 'received',
-        data: mockResponse.received_data,
-        description: `接收原始数据响应 (串口${mockResponse.serial_id})`,
-        success: true,
-        serial_id: mockResponse.serial_id
+        type: 'at',
+        direction: 'sent',
+        data: command,
+        description: `发送失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        success: false,
+        serial_id: serialId
       })
       
-      return mockResponse
+      throw error
+    }
+  }
+  
+  const sendRawData = async (data: string, serialId?: number): Promise<RawDataResponse> => {
+    try {
+      // 使用Web Serial API发送原始数据
+      const result = await webSerialService.sendRawData(data, serialId)
+      
+      // 只记录一次发送日志
+      addLog({
+        type: 'raw',
+        direction: 'sent',
+        data: result.sent_data,
+        description: `发送原始数据 (串口#${result.serial_id})`,
+        success: true,
+        serial_id: result.serial_id
+      })
+      
+      return result
+    } catch (error) {
+      console.error('发送原始数据失败:', error)
+      
+      // 记录发送失败
+      addLog({
+        type: 'raw',
+        direction: 'sent',
+        data: data,
+        description: `发送失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        success: false,
+        serial_id: serialId
+      })
+      
+      throw error
     }
   }
   
@@ -239,17 +184,18 @@ export const useCommunicationStore = defineStore('communication', () => {
     // 状态
     logs,
     maxLogs,
-    wsConnected,
+    isRealTimeConnected,
     
     // 计算属性
-    isRealTimeConnected,
+    isWebSerialConnected,
     
     // 操作
     addLog,
     clearLogs,
     sendATCommand,
     sendRawData,
-    initializeWebSocket,
-    disconnectWebSocket
+    initializeWebSerial,
+    disconnectWebSerial,
+    setSerialDataCallback
   }
 })
