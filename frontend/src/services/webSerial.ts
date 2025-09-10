@@ -443,6 +443,7 @@ export class WebSerialService {
         if (done) break
 
         const data = new TextDecoder().decode(value)
+        console.log(data);
         
         // 将数据添加到缓冲区
         const currentBuffer = this.dataBuffers.get(serialId) || ''
@@ -450,7 +451,7 @@ export class WebSerialService {
         this.dataBuffers.set(serialId, newBuffer)
         
         // 检查是否有完整的消息（以换行符结尾）
-        const lines = newBuffer.split('\n')
+        const lines = newBuffer.split('\r\n')
         if (lines.length > 1) {
           // 处理完整的行
           for (let i = 0; i < lines.length - 1; i++) {
