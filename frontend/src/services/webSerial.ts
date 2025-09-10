@@ -171,10 +171,7 @@ export class WebSerialService {
       this.ports.set(serialId, port)
       this.portConfigs.set(serialId, actualConfig)
 
-      // 设置默认数据回调函数
-      this.setDataCallback(serialId, (data, serialId) => {
-        console.log(`Serial ${serialId} received:`, data)
-      })
+      // 不设置默认回调，等待外部设置
 
       // 异步启动数据读取
       this.startReading(serialId, port).catch(error => {
@@ -459,15 +456,38 @@ export class WebSerialService {
           for (let i = 0; i < lines.length - 1; i++) {
             const line = lines[i].trim()
             if (line) {
+              console.log(`Serial ${serialId} received line:`, line)
               const callback = this.dataCallbacks.get(serialId)
               if (callback) {
+                console.log(`Calling callback for serial ${serialId}`)
                 callback(line, serialId)
+              } else {
+                console.warn(`No callback set for serial ${serialId}`)
               }
             }
           }
           
           // 保留最后一个不完整的行
           this.dataBuffers.set(serialId, lines[lines.length - 1])
+        } else {
+          // 如果没有换行符，检查是否有其他分隔符（如\r）
+          const crLines = newBuffer.split('\r')
+          if (crLines.length > 1) {
+            for (let i = 0; i < crLines.length - 1; i++) {
+              const line = crLines[i].trim()
+              if (line) {
+                console.log(`Serial ${serialId} received line (CR):`, line)
+                const callback = this.dataCallbacks.get(serialId)
+                if (callback) {
+                  console.log(`Calling callback for serial ${serialId}`)
+                  callback(line, serialId)
+                } else {
+                  console.warn(`No callback set for serial ${serialId}`)
+                }
+              }
+            }
+            this.dataBuffers.set(serialId, crLines[crLines.length - 1])
+          }
         }
         
         // 防止缓冲区无限增长

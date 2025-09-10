@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { webSerialService, type SerialConnectionStatus, type SerialPortInfo, type SerialConfig } from '@/services/webSerial'
+import { useCommunicationStore } from './communication'
 
 export const useConnectionStore = defineStore('connection', () => {
   // 状态
@@ -64,11 +65,18 @@ export const useConnectionStore = defineStore('connection', () => {
     try {
       const response = await webSerialService.connectSerial(config)
       
+      // 设置数据回调用于实时日志（在更新状态之前）
+      const communicationStore = useCommunicationStore()
+      communicationStore.setSerialDataCallback(response.serial_id)
+      
       // 更新状态
       await checkStatus()
       
       // 自动选择新连接的串口
       selectedSerialId.value = response.serial_id
+      
+      // 更新实时连接状态
+      communicationStore.isRealTimeConnected = true
       
       return response
     } catch (error) {
@@ -82,6 +90,12 @@ export const useConnectionStore = defineStore('connection', () => {
       await webSerialService.disconnectSerial(serialId)
       // 更新状态
       await checkStatus()
+      
+      // 更新实时连接状态
+      const communicationStore = useCommunicationStore()
+      const connectedSerials = webSerialService.getConnectedSerials()
+      communicationStore.isRealTimeConnected = connectedSerials.length > 0
+      
       return true
     } catch (error) {
       console.error('Failed to disconnect:', error)
