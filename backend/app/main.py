@@ -18,6 +18,7 @@ from app.core.logging import setup_logging
 from app.core.error_handler import setup_exception_handlers
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.config import settings
+from fastapi.responses import FileResponse
 
 # Setup logging
 setup_logging()
@@ -132,7 +133,10 @@ setup_exception_handlers(app)
 # API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-app.mount("/", StaticFiles(directory=str(settings.DATA_DIR/"dist"), html=True), name="frontend")
+app.mount("/assets", StaticFiles(directory=str(settings.DATA_DIR/"dist/assets")), name="assets")
+@app.get("/{path_name:path}")
+async def serve_vue(path_name: str):
+    return FileResponse(str(settings.DATA_DIR/"dist")+"/index.html")
 
 
 

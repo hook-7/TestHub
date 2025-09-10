@@ -10,6 +10,40 @@
         </template>
         
         <div class="workflow-content">
+          <!-- WebSocket连接状态 -->
+          <div class="websocket-status-section">
+            <el-alert
+              :title="`WebSocket状态: ${wsStore.connectionStatusText}`"
+              :type="wsStore.connectionStatusColor"
+              :closable="false"
+              show-icon
+            >
+              <template #default>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <el-icon><Connection /></el-icon>
+                  <span>{{ wsStore.connectionStatusText }}</span>
+                  <el-button 
+                    v-if="!wsStore.isConnected"
+                    type="primary" 
+                    size="small"
+                    @click="connectWebSocket"
+                    :loading="wsStore.connectionStatus === 'connecting'"
+                  >
+                    连接
+                  </el-button>
+                  <el-button 
+                    v-else
+                    type="danger" 
+                    size="small"
+                    @click="disconnectWebSocket"
+                  >
+                    断开
+                  </el-button>
+                </div>
+              </template>
+            </el-alert>
+          </div>
+
           <!-- 加载状态提示 -->
           <div v-if="isLoadingCommands" class="loading-section">
             <el-alert
@@ -154,7 +188,7 @@
           <!-- 执行日志区域 -->
           <div v-if="executionLogs.length > 0" class="logs-section">
             <el-divider content-position="left">
-              <span class="divider-text">执行日志</span>
+              <span class="divider-text">执行步骤</span>
             </el-divider>
             
             <div class="logs-container">
@@ -268,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Link, 
@@ -281,14 +315,19 @@ import {
   Clock,
   Edit,
   Key,
-  RefreshLeft
+  RefreshLeft,
+  Connection
 } from '@element-plus/icons-vue'
 import { serialAPI } from '@/api/serial'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
+import { useWebSocketStore } from '@/stores/websocket'
 
 // 命令数据 - 从常用命令接口动态获取
 const cmds = ref<SavedCommand[]>([])
+
+// WebSocket和连接状态
+const wsStore = useWebSocketStore()
 
 // 硬编码的测试项（已注释，现在从API获取）
 /*
@@ -482,6 +521,112 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
+// WebSocket连接管理
+const connectWebSocket = async (showMessage: boolean = true) => {
+  try {
+    await wsStore.connect()
+    if (showMessage) {
+      ElMessage.success('WebSocket连接成功')
+    }
+  } catch (error) {
+    console.error('WebSocket连接失败:', error)
+    if (showMessage) {
+      ElMessage.error('WebSocket连接失败')
+    }
+  }
+}
+
+const disconnectWebSocket = () => {
+  wsStore.disconnect()
+}
+
+// 等待WebSocket响应的辅助方法
+const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now()
+    const checkInterval = 100 // 每100ms检查一次
+    
+    const checkResponse = () => {
+      // 检查是否有新的响应消息
+      const recentMessages = wsStore.messageHistory.slice(-5) 
+      console.log('recentMessages', recentMessages);
+      
+      // 查找匹配的响应消息
+      const response = recentMessages.find(msg => {
+        // 基本条件：响应类型、串口ID、时间戳
+        if (msg.type !== 'response' || 
+            msg.serial_id !== cmd.target_serial_id ||
+            !msg.timestamp || 
+            new Date(msg.timestamp).getTime() <= startTime) {
+          return false
+        }
+        
+        // 如果有期望响应，进行匹配
+        if (cmd.expected_response && cmd.expected_response.trim()) {
+          console.log('cmd.expected_response', cmd.expected_response);
+          const message =  msg.message.split('%')[0]
+          if (message.includes(cmd.expected_response)) {
+            return true
+          }
+          try {
+            const regex = new RegExp(cmd.expected_response)
+            if (regex.test(msg.message)) {
+              return true
+            }
+          } catch (e) {
+            // 正则表达式无效，忽略
+          }
+        } else {
+          // 没有期望响应，只要有响应就返回
+          return true
+        }
+        
+        return false
+      })
+      
+      if (response) {
+        console.log('找到匹配的响应:', response)
+        const processedResponse = {
+          ...response,
+          // 判断是否匹配期望响应
+          matchesExpected: true,
+          // 添加处理时间
+          processingTime: Date.now() - startTime
+        }
+        
+        resolve(processedResponse)
+        return
+      }
+      
+      // 检查是否有错误响应
+      const errorResponse = recentMessages.find(msg => 
+        msg.type === 'error' && 
+        msg.serial_id === cmd.target_serial_id &&
+        msg.timestamp && 
+        new Date(msg.timestamp).getTime() > startTime
+      )
+      
+      if (errorResponse) {
+        console.log('收到错误响应:', errorResponse)
+        const errorMessage = 'error' in errorResponse ? errorResponse.error : 'WebSocket命令执行失败'
+        reject(new Error(errorMessage))
+        return
+      }
+      
+      // 检查超时
+      if (Date.now() - startTime > timeout) {
+        reject(new Error('WebSocket响应超时'))
+        return
+      }
+      
+      // 继续检查
+      setTimeout(checkResponse, checkInterval)
+    }
+    
+    checkResponse()
+  })
+}
+
 // 加载常用命令
 const loadCommands = async () => {
   try {
@@ -504,6 +649,7 @@ const replaceMacAddress = (command: string, macAddress: string) => {
   // 然后替换MAC地址占位符
   return truncatedCommand.replace(/\$\{mac:\}/g, macAddress)
 }
+
 
 // 显示通知对话框
 const showNotificationDialog = async (description: string): Promise<boolean> => {
@@ -545,17 +691,55 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
     const finalCommand = replaceMacAddress(cmd.command, form.value.macAddress)
     console.log('finalCommand', finalCommand);
     
-    
+    let response: any
 
+    // 优先使用WebSocket，如果未连接则使用HTTP
+    if (wsStore.isConnected) {
+      console.log('使用WebSocket发送命令:', finalCommand)
+      
+      // 发送WebSocket命令
+      const success = await wsStore.sendCommand(finalCommand, cmd.target_serial_id)
+      
+      if (!success) {
+        throw new Error('WebSocket命令发送失败')
+      }
 
-    // 使用HTTP请求发送命令
-    const response = await serialAPI.sendATCommand(
-      finalCommand, 
-      cmd.target_serial_id
-    )
+      // 等待WebSocket响应
+      response = await waitForWebSocketResponse(cmd, 5000) 
+      console.log('response', response);
+      
+      
+      if (!response) {
+        throw new Error('WebSocket响应超时')
+      }
+    } else {
+      console.log('使用HTTP发送命令:', finalCommand)
+      
+      // 使用HTTP请求发送命令
+      response = await serialAPI.sendATCommand(
+        finalCommand, 
+        cmd.target_serial_id
+      )
+    }
     
-    log.response = response.received_data
+    // 使用处理后的响应数据
+    log.response = response.received_data || response.message
     log.status = 'success'
+    
+    // 如果有提取的参数，记录到日志中
+    if (response.extractedParams) {
+      console.log('提取的参数:', response.extractedParams)
+      // 可以将参数存储到log中供后续使用
+      ;(log as any).extractedParams = response.extractedParams
+    }
+    
+    // 检查是否匹配期望响应
+    if (response.matchesExpected === false) {
+      console.warn('响应不匹配期望值:', {
+        expected: cmd.expected_response,
+        actual: response.message
+      })
+    }
     
   } catch (error) {
     log.error = error instanceof Error ? error.message : '未知错误'
@@ -970,8 +1154,17 @@ const getResultStatusClass = () => {
 }
 
 // 组件挂载时加载命令
-onMounted(() => {
+onMounted(async () => {
   loadCommands()
+  // 初始化WebSocket客户端
+  wsStore.initializeClient()
+  // 自动连接WebSocket（不显示提示消息）
+  await connectWebSocket(false)
+})
+
+onUnmounted(() => {
+  // 清理WebSocket连接
+  wsStore.disconnect()
 })
 
 </script>
@@ -980,6 +1173,10 @@ onMounted(() => {
 .workflow-container {
   height: 100%;
   background: linear-gradient(135deg, #f5f7fa 0%, #f8fafc 100%);
+}
+
+.websocket-status-section {
+  margin-bottom: 20px;
 }
 
 .page-content {
