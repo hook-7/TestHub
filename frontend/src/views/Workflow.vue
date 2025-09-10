@@ -94,6 +94,18 @@
                 </el-input>
               </el-form-item>
               
+              <el-form-item label="自动执行">
+                <el-switch
+                  v-model="autoExecuteEnabled"
+                  active-text="启用"
+                  inactive-text="禁用"
+                  :disabled="isExecuting"
+                />
+                <span class="form-help-text">
+                  启用后，输入mac:格式的地址将自动执行工作流
+                </span>
+              </el-form-item>
+              
               <el-form-item>
                 <el-button 
                   type="primary" 
@@ -427,6 +439,9 @@ const cmds = ref<SavedCommand[]>([
 const form = ref({
   macAddress: ''
 })
+
+// 自动执行设置
+const autoExecuteEnabled = ref(true)
 
 // SN表单数据
 const snForm = ref({
@@ -868,6 +883,11 @@ const executeWorkflow = async () => {
     return
   }
 
+  // 检查是否可以执行工作流
+  if (!canExecuteWorkflow()) {
+    return
+  }
+
   // 重置状态
   isExecuting.value = true
   currentStepIndex.value = -1
@@ -1115,8 +1135,54 @@ const handleMacInput = (value: string) => {
       // 更新MAC地址值
       form.value.macAddress = extractedMac
       console.log('extractedMac', extractedMac);
+      
+      // 检查是否可以执行工作流
+      if (canExecuteWorkflow()) {
+        if (autoExecuteEnabled.value) {
+          // 自动执行模式：直接执行
+          executeWorkflow()
+        } else {
+          // 手动确认模式：询问用户
+          ElMessageBox.confirm(
+            `检测到MAC地址: ${extractedMac}\n是否要自动执行工作流？`,
+            '自动执行确认',
+            {
+              confirmButtonText: '执行',
+              cancelButtonText: '稍后',
+              type: 'info'
+            }
+          ).then(() => {
+            executeWorkflow()
+          }).catch(() => {
+            // 用户取消，不做任何操作
+          })
+        }
+      }
     }, 500) // 500ms防抖
   }
+}
+
+// 检查是否可以执行工作流
+const canExecuteWorkflow = (): boolean => {
+  // 检查是否已经在执行
+  if (isExecuting.value) {
+    ElMessage.warning('工作流正在执行中，请等待完成')
+    return false
+  }
+  
+  // 检查是否有可用的命令
+  if (cmds.value.length === 0) {
+    ElMessage.warning('没有可用的测试命令')
+    return false
+  }
+  
+  // 检查WebSocket连接状态
+  if (!wsStore.isConnected) {
+    ElMessage.warning('WebSocket未连接，请先连接')
+    return false
+  }
+  
+  return true
 }
 
 // 获取测试结果状态文本
@@ -1177,6 +1243,12 @@ onUnmounted(() => {
 
 .websocket-status-section {
   margin-bottom: 20px;
+}
+
+.form-help-text {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
 }
 
 .page-content {
