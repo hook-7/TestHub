@@ -19,19 +19,19 @@
           </div>
         </div>
 
-        <!-- WebSocket连接状态 -->
+        <!-- Web Serial API连接状态 -->
         <div class="status-item">
           <div class="status-label">
             <el-icon class="label-icon"><Monitor /></el-icon>
             实时通信
           </div>
-          <div class="realtime-badge" :class="{ connected: communicationStore.isRealTimeConnected, disconnected: !communicationStore.isRealTimeConnected }">
+          <div class="realtime-badge" :class="{ connected: communicationStore.isWebSerialConnected, disconnected: !communicationStore.isWebSerialConnected }">
             <el-icon class="status-icon">
-              <span v-if="communicationStore.isRealTimeConnected" class="connected-icon">●</span>
+              <span v-if="communicationStore.isWebSerialConnected" class="connected-icon">●</span>
               <span v-else class="disconnected-icon">●</span>
             </el-icon>
             <span class="status-text">
-              {{ communicationStore.isRealTimeConnected ? '已连接' : '连接中' }}
+              {{ communicationStore.isWebSerialConnected ? '已连接' : '未连接' }}
             </span>
           </div>
         </div>
@@ -571,6 +571,7 @@ const sendCommand = async () => {
     addToHistory(commandForm.command)
   } catch (error) {
     console.error('Send command error:', error)
+    ElMessage.error(`指令发送失败: ${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     commandLoading.value = false
   }
@@ -638,6 +639,7 @@ const sendQuickCommand = async (cmd: SavedCommand) => {
     addToHistory(cleanCommand)
   } catch (error) {
     console.error('Send command error:', error)
+    ElMessage.error(`快捷指令发送失败: ${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     commandLoading.value = false
   }
@@ -923,6 +925,7 @@ const sendRawData = async () => {
     ElMessage.success(`原始数据发送成功 (串口 #${connectionStore.selectedSerialId})`)
   } catch (error) {
     console.error('Send raw data error:', error)
+    ElMessage.error(`原始数据发送失败: ${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     rawLoading.value = false
   }
@@ -1034,12 +1037,12 @@ onMounted(async () => {
   // 加载保存的指令
   await loadSavedCommands()
   
-  // 初始化WebSocket连接
+  // 初始化Web Serial API
   try {
-    await communicationStore.initializeWebSocket()
+    await communicationStore.initializeWebSerial()
   } catch (error) {
-    console.error('WebSocket初始化失败:', error)
-    ElMessage.error('实时连接初始化失败')
+    console.error('Web Serial API初始化失败:', error)
+    ElMessage.error('Web Serial API初始化失败')
   }
 })
 
