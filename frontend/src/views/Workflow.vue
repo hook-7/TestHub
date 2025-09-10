@@ -579,13 +579,18 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
     const startTime = Date.now()
     const checkInterval = 100 
     
+    // 设置超时定时器，确保在指定时间后一定会超时
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`WebSocket响应超时 (${timeout}ms)`))
+    }, timeout)
+    
     const checkResponse = () => {
-      // 检查是否有新的响应消息
-      const recentMessages = wsStore.messageHistory.slice(-5)
-      console.log('recentMessages', recentMessages);
+      // 检查是否有新的响应消息 - 检查所有消息而不是只检查最近5条
+      const allMessages = wsStore.messageHistory
+      console.log('检查消息历史，总数:', allMessages.length, '最近5条:', allMessages.slice(-5));
       
-      // 查找匹配的响应消息
-      const response = recentMessages.find(msg => {
+      // 查找匹配的响应消息 - 只检查在开始时间之后的消息
+      const response = allMessages.find(msg => {
         // 基本条件：响应类型、串口ID、时间戳
         if (msg.type !== 'response' || 
             msg.serial_id !== cmd.target_serial_id ||
@@ -593,9 +598,15 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
           return false
         }
         
+        // 检查消息时间戳是否在开始时间之后
+        const msgTime = new Date(msg.timestamp).getTime()
+        if (msgTime <= startTime) {
+          return false
+        }
+        
         // 如果有期望响应，进行匹配
         if (cmd.expected_response && cmd.expected_response.trim()) {
-          const message =  msg.message.split('%')[0]
+          const message = msg.message.split('%')[0]
           if (message.includes(cmd.expected_response)) {
             return true
           }
@@ -617,6 +628,7 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
       
       if (response) {
         console.log('找到匹配的响应:', response)
+        clearTimeout(timeoutId) // 清除超时定时器
         const processedResponse = {
           ...response,
           // 判断是否匹配期望响应
@@ -630,7 +642,7 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
       }
       
       // 检查是否有错误响应
-      const errorResponse = recentMessages.find(msg => 
+      const errorResponse = allMessages.find(msg => 
         msg.type === 'error' && 
         msg.serial_id === cmd.target_serial_id &&
         msg.timestamp && 
@@ -639,14 +651,9 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
       
       if (errorResponse) {
         console.log('收到错误响应:', errorResponse)
+        clearTimeout(timeoutId) // 清除超时定时器
         const errorMessage = 'error' in errorResponse ? errorResponse.error : 'WebSocket命令执行失败'
         reject(new Error(errorMessage))
-        return
-      }
-      
-      // 检查超时
-      if (Date.now() - startTime > timeout) {
-        reject(new Error('WebSocket响应超时'))
         return
       }
       
@@ -738,7 +745,7 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
       }
 
       // 等待WebSocket响应
-      response = await waitForWebSocketResponse(cmd, 5000) 
+      response = await waitForWebSocketResponse(cmd, 30000) 
       console.log('response', response);
       
       
