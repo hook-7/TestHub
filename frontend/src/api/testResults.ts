@@ -112,6 +112,14 @@ export class TestResultsAPI {
   static async deleteTestResult(testResultId: string): Promise<void> {
     await api.delete(`/test-results/${testResultId}`)
   }
+
+  /**
+   * 获取所有测试结果数据用于导出
+   */
+  static async getAllTestResultsForExport(params: GetTestResultsParams = {}): Promise<any[]> {
+    const response = await api.get('/test-results/export', { params })
+    return response
+  }
 }
 
 // 导出API实例

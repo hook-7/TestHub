@@ -4,7 +4,7 @@ Test Results API Endpoints
 """
 
 import logging
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, status, Query, Response
 from sqlmodel import Session
 from typing import Optional
 from datetime import datetime
@@ -46,6 +46,61 @@ async def save_test_result(
     except Exception as e:
         logger.error(f"保存测试结果失败: {e}")
         return APIResponse.error(code=500, msg=f"保存测试结果失败: {str(e)}")
+
+
+@router.get(
+    "/export",
+    response_model=APIResponse,
+    summary="获取所有测试结果数据",
+    description="获取所有测试结果数据用于前端导出",
+    responses={
+        200: {"description": "获取成功"},
+        500: {"description": "系统错误"}
+    }
+)
+async def get_all_test_results_for_export(
+    mac_address: Optional[str] = Query(None, description="MAC地址筛选"),
+    operator: Optional[str] = Query(None, description="操作员筛选"),
+    workstation: Optional[str] = Query(None, description="工位筛选"),
+    device_id: Optional[str] = Query(None, description="设备ID筛选"),
+    start_date: Optional[str] = Query(None, description="开始日期筛选 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期筛选 (YYYY-MM-DD)"),
+    db_session: Session = Depends(get_session)
+):
+    """获取所有测试结果数据用于前端导出"""
+    try:
+        logger.info("API端点开始处理导出请求")
+        
+        # 解析日期参数
+        start_datetime = None
+        end_datetime = None
+        if start_date:
+            start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
+        
+        logger.info(f"调用服务层方法，参数: mac_address={mac_address}, operator={operator}")
+        
+        # 获取测试结果数据
+        test_results = await test_result_service.get_all_test_results_for_export(
+            db_session,
+            mac_address=mac_address,
+            operator=operator,
+            workstation=workstation,
+            device_id=device_id,
+            start_date=start_datetime,
+            end_date=end_datetime
+        )
+        
+        logger.info(f"服务层返回了 {len(test_results)} 条测试结果")
+        return APIResponse.success(data=test_results, msg="获取测试结果数据成功")
+        
+    except ValueError as e:
+        logger.error(f"日期格式错误: {e}")
+        return APIResponse.error(code=400, msg="日期格式错误，请使用YYYY-MM-DD格式")
+    except Exception as e:
+        logger.error(f"获取测试结果数据失败: {e}")
+        return APIResponse.error(code=500, msg=f"获取测试结果数据失败: {str(e)}")
 
 
 @router.get(
@@ -157,3 +212,5 @@ async def delete_test_result(
     except Exception as e:
         logger.error(f"删除测试结果失败: {e}")
         return APIResponse.error(code=500, msg=f"删除测试结果失败: {str(e)}")
+
+

@@ -10,6 +10,20 @@
         </template>
         
         <div class="workflow-content">
+          <!-- 导出按钮区域 -->
+          <div class="export-section">
+            <el-button 
+              type="success" 
+              size="default"
+              @click="exportAllReports"
+              :loading="isExporting"
+              class="export-all-btn"
+            >
+              <el-icon><Download /></el-icon>
+              导出全部测试结果
+            </el-button>
+          </div>
+
           <!-- WebSocket连接状态 -->
           <div class="websocket-status-section">
             <el-alert
@@ -328,7 +342,8 @@ import {
   Edit,
   Key,
   RefreshLeft,
-  Connection
+  Connection,
+  Download
 } from '@element-plus/icons-vue'
 import { serialAPI } from '@/api/serial'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
@@ -454,6 +469,9 @@ const isLoadingCommands = ref(false)
 // SN写入状态
 const isWritingSN = ref(false)
 
+// 导出状态
+const isExporting = ref(false)
+
 // 执行状态
 const isExecuting = ref(false)
 const currentStepIndex = ref(-1)
@@ -559,11 +577,11 @@ const disconnectWebSocket = () => {
 const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
   return new Promise((resolve, reject) => {
     const startTime = Date.now()
-    const checkInterval = 100 // 每100ms检查一次
+    const checkInterval = 100 
     
     const checkResponse = () => {
       // 检查是否有新的响应消息
-      const recentMessages = wsStore.messageHistory.slice(-5) 
+      const recentMessages = wsStore.messageHistory.slice(-5)
       console.log('recentMessages', recentMessages);
       
       // 查找匹配的响应消息
@@ -571,14 +589,12 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
         // 基本条件：响应类型、串口ID、时间戳
         if (msg.type !== 'response' || 
             msg.serial_id !== cmd.target_serial_id ||
-            !msg.timestamp || 
-            new Date(msg.timestamp).getTime() <= startTime) {
+            !msg.timestamp ) {
           return false
         }
         
         // 如果有期望响应，进行匹配
         if (cmd.expected_response && cmd.expected_response.trim()) {
-          console.log('cmd.expected_response', cmd.expected_response);
           const message =  msg.message.split('%')[0]
           if (message.includes(cmd.expected_response)) {
             return true
@@ -662,7 +678,7 @@ const replaceMacAddress = (command: string, macAddress: string) => {
   // 先截断到第一个"%"符号
   const truncatedCommand = command.split('%')[0]
   // 然后替换MAC地址占位符
-  return truncatedCommand.replace(/\$\{mac:\}/g, macAddress)
+  return truncatedCommand.replace(/\$\{mac\}/g, macAddress)
 }
 
 
@@ -704,6 +720,8 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
   try {
     // 替换MAC地址
     const finalCommand = replaceMacAddress(cmd.command, form.value.macAddress)
+    console.log('form.value.macAddress', form.value.macAddress);
+    
     console.log('finalCommand', finalCommand);
     
     let response: any
@@ -1219,6 +1237,108 @@ const getResultStatusClass = () => {
   }
 }
 
+// 导出所有测试报告
+const exportAllReports = async () => {
+  try {
+    isExporting.value = true
+    
+    // 获取测试结果数据
+    const testResults = await testResultsAPI.getAllTestResultsForExport()
+    
+    // 生成CSV内容
+    const csvContent = generateCSV(testResults)
+    
+    // 创建Blob并下载，添加BOM以支持Excel正确显示中文
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // 生成文件名
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+    link.download = `test_results_list_${timestamp}.csv`
+    
+    // 触发下载
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // 清理URL对象
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success(`测试结果导出成功，共导出 ${testResults.length} 条记录`)
+    
+  } catch (error) {
+    console.error('导出测试报告失败:', error)
+    ElMessage.error('导出测试报告失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    isExporting.value = false
+  }
+}
+
+// 生成CSV内容
+const generateCSV = (data: any[]) => {
+  if (!data || data.length === 0) {
+    return '测试结果ID,MAC地址,开始时间,结束时间,总测试数,通过数,失败数,跳过数,通过率(%),操作员,工位,设备ID,创建时间,测试状态,耗时(秒)\n暂无数据,,,,,,,,,,,,,数据库中暂无测试结果数据,'
+  }
+  
+  // CSV头部
+  const headers = [
+    '测试结果ID',
+    'MAC地址', 
+    '开始时间',
+    '结束时间',
+    '总测试数',
+    '通过数',
+    '失败数',
+    '跳过数',
+    '通过率(%)',
+    '操作员',
+    '工位',
+    '设备ID',
+    '创建时间',
+    '测试状态',
+    '耗时(秒)'
+  ]
+  
+  // 转义CSV字段的函数
+  const escapeCSVField = (field: any) => {
+    if (field === null || field === undefined) {
+      return ''
+    }
+    const str = String(field)
+    // 如果包含逗号、引号或换行符，需要用引号包围并转义引号
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+  
+  // 生成CSV行
+  const rows = data.map(item => [
+    escapeCSVField(item.id),
+    escapeCSVField(item.mac_address),
+    escapeCSVField(item.start_time ? new Date(item.start_time).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.end_time ? new Date(item.end_time).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.total_tests || 0),
+    escapeCSVField(item.passed_tests || 0),
+    escapeCSVField(item.failed_tests || 0),
+    escapeCSVField(item.skipped_tests || 0),
+    escapeCSVField(item.pass_rate || 0),
+    escapeCSVField(item.operator),
+    escapeCSVField(item.workstation),
+    escapeCSVField(item.device_id),
+    escapeCSVField(item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.test_status),
+    escapeCSVField(item.duration || 0)
+  ])
+  
+  // 组合CSV内容
+  const csvLines = [headers.map(escapeCSVField).join(','), ...rows.map(row => row.join(','))]
+  return csvLines.join('\n')
+}
+
 // 组件挂载时加载命令
 onMounted(async () => {
   loadCommands()
@@ -1239,6 +1359,34 @@ onUnmounted(() => {
 .workflow-container {
   height: 100%;
   background: linear-gradient(135deg, #f5f7fa 0%, #f8fafc 100%);
+}
+
+.export-section {
+  margin-bottom: 20px;
+  text-align: center;
+  padding: 16px 0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+}
+
+.export-all-btn {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+  min-width: 200px;
+}
+
+.export-all-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(103, 194, 58, 0.4);
+}
+
+.export-all-btn:active {
+  transform: translateY(0);
 }
 
 .websocket-status-section {
@@ -1803,6 +1951,16 @@ onUnmounted(() => {
   
   .workflow-content {
     padding: 16px;
+  }
+  
+  .export-section {
+    padding: 12px 0;
+  }
+  
+  .export-all-btn {
+    padding: 10px 24px;
+    font-size: 14px;
+    min-width: 160px;
   }
   
   .mac-form {

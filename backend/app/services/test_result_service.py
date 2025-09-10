@@ -5,6 +5,8 @@ Test Result Service
 
 import logging
 import uuid
+import csv
+import io
 from datetime import datetime
 from typing import List, Optional, Tuple
 from sqlmodel import Session, select, func, desc
@@ -244,6 +246,87 @@ class TestResultService:
         except Exception as e:
             session.rollback()
             self.logger.error(f"删除测试结果失败: {e}")
+            raise
+
+    async def get_all_test_results_for_export(
+        self, 
+        session: Session,
+        mac_address: Optional[str] = None,
+        operator: Optional[str] = None,
+        workstation: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[dict]:
+        """获取所有测试结果数据用于前端导出"""
+        try:
+            self.logger.info("开始获取测试结果数据...")
+            
+            # 构建查询条件
+            statement = select(TestResult)
+            
+            if mac_address:
+                statement = statement.where(TestResult.mac_address == mac_address)
+            if operator:
+                statement = statement.where(TestResult.operator == operator)
+            if workstation:
+                statement = statement.where(TestResult.workstation == workstation)
+            if device_id:
+                statement = statement.where(TestResult.device_id == device_id)
+            if start_date:
+                statement = statement.where(TestResult.created_at >= start_date)
+            if end_date:
+                statement = statement.where(TestResult.created_at <= end_date)
+            
+            # 按创建时间排序
+            statement = statement.order_by(desc(TestResult.created_at))
+            test_results = session.exec(statement).all()
+            
+            self.logger.info(f"查询到 {len(test_results)} 条测试结果")
+            
+            # 转换为字典格式
+            result_data = []
+            for test_result in test_results:
+                # 计算通过率
+                pass_rate = 0
+                if test_result.total_tests > 0:
+                    pass_rate = round((test_result.passed_tests / test_result.total_tests) * 100, 2)
+                
+                # 计算耗时
+                duration = 0
+                if test_result.start_time and test_result.end_time:
+                    duration = round((test_result.end_time - test_result.start_time).total_seconds(), 2)
+                
+                # 判断测试状态
+                if test_result.failed_tests > 0:
+                    test_status = '失败'
+                elif test_result.passed_tests > 0:
+                    test_status = '成功'
+                else:
+                    test_status = '未完成'
+                
+                result_data.append({
+                    'id': test_result.id,
+                    'mac_address': test_result.mac_address,
+                    'start_time': test_result.start_time.isoformat() if test_result.start_time else None,
+                    'end_time': test_result.end_time.isoformat() if test_result.end_time else None,
+                    'total_tests': test_result.total_tests,
+                    'passed_tests': test_result.passed_tests,
+                    'failed_tests': test_result.failed_tests,
+                    'skipped_tests': test_result.skipped_tests,
+                    'pass_rate': pass_rate,
+                    'operator': test_result.operator,
+                    'workstation': test_result.workstation,
+                    'device_id': test_result.device_id,
+                    'created_at': test_result.created_at.isoformat(),
+                    'test_status': test_status,
+                    'duration': duration
+                })
+            
+            return result_data
+            
+        except Exception as e:
+            self.logger.error(f"获取测试结果数据失败: {e}")
             raise
 
 
