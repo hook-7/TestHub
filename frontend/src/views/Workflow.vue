@@ -662,9 +662,9 @@ const saveTestResultToBackend = async () => {
       passed_tests: testResult.value.passedTests,
       failed_tests: testResult.value.failedTests,
       skipped_tests: testResult.value.skippedTests,
-      operator: '操作员', // 可以从用户输入或其他地方获取
-      workstation: '工位1', // 可以从配置或其他地方获取
-      device_id: '设备001' // 可以从配置或其他地方获取
+      operator: '操作员', 
+      workstation: '工位1', 
+      device_id: '设备001' 
     }
     
     // 调用API保存

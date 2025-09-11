@@ -577,10 +577,6 @@ const sendCommand = async () => {
   }
 }
 
-const clearCommandInput = () => {
-  commandForm.command = ''
-}
-
 // 处理指令输入变化，检测mac:格式并自动替换发送
 const handleCommandInput = (value: string) => {
   // 检查是否包含完整的 mac:XXXX 格式（12位十六进制）
@@ -1037,9 +1033,10 @@ onMounted(async () => {
   // 加载保存的指令
   await loadSavedCommands()
   
-  // 初始化Web Serial API
+  // 初始化Web Serial API（设置数据接收回调）
   try {
     await communicationStore.initializeWebSerial()
+    console.log('Web Serial API initialized successfully')
   } catch (error) {
     console.error('Web Serial API初始化失败:', error)
     ElMessage.error('Web Serial API初始化失败')
