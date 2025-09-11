@@ -25,7 +25,6 @@ class WSMessageType(str, Enum):
     CONNECT = "connect"
     DISCONNECT = "disconnect"
     AUTO_AT = "auto_at"
-    REALTIME_DATA = "realtime_data"  # 实时串口数据
 
 
 class WSCommandMessage(BaseModel):

@@ -47,6 +47,7 @@ class CrossPlatformRunner:
         possible_paths = [
             "C:\\Program Files\\nodejs",
             "C:\\Program Files (x86)\\nodejs",
+            "C:\\nvm4w\\nodejs",
             os.path.expanduser("~\\AppData\\Local\\Programs\\nodejs"),
             os.path.expanduser("~\\AppData\\Roaming\\npm"),
         ]

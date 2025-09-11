@@ -349,6 +349,7 @@ import { serialAPI } from '@/api/serial'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
 import { useWebSocketStore } from '@/stores/websocket'
+import { WSMessageType } from '@/services/websocket'
 
 // 命令数据 - 从常用命令接口动态获取
 const cmds = ref<SavedCommand[]>([])
@@ -476,6 +477,9 @@ const isExporting = ref(false)
 const isExecuting = ref(false)
 const currentStepIndex = ref(-1)
 const executionLogs = ref<ExecutionLog[]>([])
+
+// 工具函数：延迟
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const shouldStop = ref(false)
 
 // 测试结果状态
@@ -577,7 +581,7 @@ const disconnectWebSocket = () => {
 const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
   return new Promise((resolve, reject) => {
     const startTime = Date.now()
-    const checkInterval = 100 
+    const checkInterval = 1000 
     
     // 设置超时定时器，确保在指定时间后一定会超时
     const timeoutId = setTimeout(() => {
@@ -587,27 +591,31 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
     const checkResponse = () => {
       // 检查是否有新的响应消息 - 检查所有消息而不是只检查最近5条
       const allMessages = wsStore.messageHistory
-      console.log('检查消息历史，总数:', allMessages.length, '最近5条:', allMessages.slice(-5));
       
       // 查找匹配的响应消息 - 只检查在开始时间之后的消息
       const response = allMessages.find(msg => {
-        // 基本条件：响应类型、串口ID、时间戳
-        if (msg.type !== 'response' || 
+        // 基本条件：响应类型或实时数据类型、串口ID、时间戳
+        if (msg.type !== WSMessageType.RESPONSE  ||
             msg.serial_id !== cmd.target_serial_id ||
             !msg.timestamp ) {
+
+
           return false
         }
-        
+        if(msg.message.startsWith('PLC_MAC')) {
+          console.log('msg.message', msg.message);
+        }
         // 检查消息时间戳是否在开始时间之后
         const msgTime = new Date(msg.timestamp).getTime()
         if (msgTime <= startTime) {
+          console.log('msgTime <= startTime',msg.message);
+          
           return false
         }
         
         // 如果有期望响应，进行匹配
         if (cmd.expected_response && cmd.expected_response.trim()) {
-          const message = msg.message.split('%')[0]
-          if (message.includes(cmd.expected_response)) {
+          if (msg.message.includes(cmd.expected_response)) {
             return true
           }
           try {
@@ -748,7 +756,7 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
       response = await waitForWebSocketResponse(cmd, 30000) 
       console.log('response', response);
       
-      
+      sleep(1000)
       if (!response) {
         throw new Error('WebSocket响应超时')
       }
@@ -944,7 +952,11 @@ const executeWorkflow = async () => {
       
       // 创建日志条目
       const log = await executeCommand(cmd)
+      
       executionLogs.value.push(log)
+      
+      // 添加1秒延迟，避免命令发送过快
+      await sleep(1000)
 
       // 创建测试项结果
       const testItemResult = createTestItemResult(cmd, log)

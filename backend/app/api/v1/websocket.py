@@ -45,7 +45,7 @@ class ConnectionManager:
                 
                 # 构造实时数据消息
                 realtime_msg = WSResponseMessage(
-                    type=WSMessageType.REALTIME_DATA,
+                    type=WSMessageType.RESPONSE,
                     message=data_text,
                     serial_id=serial_id,
                     data={
