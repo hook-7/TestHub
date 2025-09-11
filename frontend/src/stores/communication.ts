@@ -33,10 +33,14 @@ export const useCommunicationStore = defineStore('communication', () => {
         throw new Error('Web Serial API不支持，请使用Chrome 89+、Edge 89+或Opera 76+')
       }
 
-      // 设置数据接收回调
+      // 获取已连接的串口并设置数据回调
       const connectedSerials = webSerialService.getConnectedSerials()
+      console.log('Initializing Web Serial API with connected serials:', connectedSerials)
+      
       for (const serial of connectedSerials) {
+        console.log(`Setting data callback for serial ${serial.serial_id}`)
         webSerialService.setDataCallback(serial.serial_id, (data: string, serialId: number) => {
+          console.log(`Data callback triggered for serial ${serialId}:`, data)
           addLog({
             type: 'at',
             direction: 'received',

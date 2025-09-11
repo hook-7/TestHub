@@ -26,30 +26,6 @@
             size="large"
             class="config-form"
           >
-            <!-- 串口信息提示 -->
-            <div class="form-section">
-              <h4 class="section-title">
-                <el-icon><Connection /></el-icon>
-                串口连接
-              </h4>
-              <div class="connection-info">
-                <el-alert
-                  title="点击连接按钮后，浏览器会弹出设备选择对话框"
-                  type="info"
-                  :closable="false"
-                  show-icon
-                >
-                  <template #default>
-                    <p>请确保：</p>
-                    <ul>
-                      <li>串口设备已连接到电脑</li>
-                      <li>设备驱动程序已正确安装</li>
-                      <li>在HTTPS环境下访问此页面</li>
-                    </ul>
-                  </template>
-                </el-alert>
-              </div>
-            </div>
 
             <!-- 串口参数 -->
             <div class="form-section">
