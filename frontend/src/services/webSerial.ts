@@ -443,12 +443,13 @@ export class WebSerialService {
         if (done) break
 
         const data = new TextDecoder().decode(value)
-        console.log(data);
+        console.log(`Serial ${serialId} raw data received:`, data);
         
         // 将数据添加到缓冲区
         const currentBuffer = this.dataBuffers.get(serialId) || ''
         const newBuffer = currentBuffer + data
         this.dataBuffers.set(serialId, newBuffer)
+        console.log(`Serial ${serialId} buffer updated:`, newBuffer)
         
         // 检查是否有完整的消息（以换行符结尾）
         const lines = newBuffer.split('\r\n')
@@ -513,7 +514,9 @@ export class WebSerialService {
    * 设置数据回调函数
    */
   setDataCallback(serialId: number, callback: SerialDataCallback): void {
+    console.log(`Setting data callback for serial ${serialId}`)
     this.dataCallbacks.set(serialId, callback)
+    console.log(`Data callback set for serial ${serialId}, total callbacks:`, this.dataCallbacks.size)
   }
 
   /**
