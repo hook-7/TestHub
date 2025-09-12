@@ -389,6 +389,152 @@ export class WebSerialService {
   }
 
   /**
+   * 接收数据 - 等待指定时间内的数据接收
+   */
+  async receiveData(timeout: number = 5000, serialId?: number): Promise<RawDataResponse> {
+    const targetSerialId = serialId || this.getFirstConnectedSerialId()
+    if (targetSerialId === null) {
+      throw new Error('没有连接的串口')
+    }
+
+    const port = this.ports.get(targetSerialId)
+    if (!port) {
+      throw new Error(`串口 ${targetSerialId} 未连接`)
+    }
+
+    return new Promise((resolve, reject) => {
+      let receivedData = ''
+      let timeoutId: number
+
+      // 设置超时
+      timeoutId = window.setTimeout(() => {
+        this.dataCallbacks.delete(targetSerialId) // 清理临时回调
+        reject(new Error(`接收数据超时 (${timeout}ms)`))
+      }, timeout)
+
+      // 设置临时数据回调
+      const tempCallback = (data: string, serialId: number) => {
+        if (serialId === targetSerialId) {
+          receivedData += data + '\n'
+          clearTimeout(timeoutId)
+          this.dataCallbacks.delete(targetSerialId) // 清理临时回调
+          resolve({
+            serial_id: targetSerialId,
+            sent_data: '',
+            received_data: receivedData.trim(),
+            timestamp: Date.now()
+          })
+        }
+      }
+
+      // 设置回调
+      this.setDataCallback(targetSerialId, tempCallback)
+
+      // 如果已经有数据在缓冲区，立即返回
+      const bufferData = this.dataBuffers.get(targetSerialId)
+      if (bufferData && bufferData.trim()) {
+        clearTimeout(timeoutId)
+        this.dataCallbacks.delete(targetSerialId)
+        resolve({
+          serial_id: targetSerialId,
+          sent_data: '',
+          received_data: bufferData.trim(),
+          timestamp: Date.now()
+        })
+        return
+      }
+    })
+  }
+
+  /**
+   * 接收指定长度的数据
+   */
+  async receiveDataWithLength(length: number, timeout: number = 5000, serialId?: number): Promise<RawDataResponse> {
+    const targetSerialId = serialId || this.getFirstConnectedSerialId()
+    if (targetSerialId === null) {
+      throw new Error('没有连接的串口')
+    }
+
+    const port = this.ports.get(targetSerialId)
+    if (!port) {
+      throw new Error(`串口 ${targetSerialId} 未连接`)
+    }
+
+    return new Promise((resolve, reject) => {
+      let receivedData = ''
+      let timeoutId: number
+
+      // 设置超时
+      timeoutId = window.setTimeout(() => {
+        this.dataCallbacks.delete(targetSerialId) // 清理临时回调
+        reject(new Error(`接收数据超时 (${timeout}ms)`))
+      }, timeout)
+
+      // 设置临时数据回调
+      const tempCallback = (data: string, serialId: number) => {
+        if (serialId === targetSerialId) {
+          receivedData += data
+          if (receivedData.length >= length) {
+            clearTimeout(timeoutId)
+            this.dataCallbacks.delete(targetSerialId) // 清理临时回调
+            resolve({
+              serial_id: targetSerialId,
+              sent_data: '',
+              received_data: receivedData.substring(0, length),
+              timestamp: Date.now()
+            })
+          }
+        }
+      }
+
+      // 设置回调
+      this.setDataCallback(targetSerialId, tempCallback)
+
+      // 如果缓冲区已经有足够的数据，立即返回
+      const bufferData = this.dataBuffers.get(targetSerialId) || ''
+      if (bufferData.length >= length) {
+        clearTimeout(timeoutId)
+        this.dataCallbacks.delete(targetSerialId)
+        resolve({
+          serial_id: targetSerialId,
+          sent_data: '',
+          received_data: bufferData.substring(0, length),
+          timestamp: Date.now()
+        })
+        return
+      }
+    })
+  }
+
+  /**
+   * 发送指令并等待响应
+   */
+  async sendCommandAndWaitResponse(command: string, timeout: number = 5000, serialId?: number): Promise<RawDataResponse> {
+    const targetSerialId = serialId || this.getFirstConnectedSerialId()
+    if (targetSerialId === null) {
+      throw new Error('没有连接的串口')
+    }
+
+    try {
+      // 先发送指令
+      const sendResult = await this.sendATCommand(command, targetSerialId)
+      
+      // 等待响应
+      const receiveResult = await this.receiveData(timeout, targetSerialId)
+      
+      return {
+        serial_id: targetSerialId,
+        sent_data: sendResult.sent_data,
+        received_data: receiveResult.received_data,
+        timestamp: Date.now()
+      }
+    } catch (error) {
+      console.error(`Error in sendCommandAndWaitResponse:`, error)
+      throw new Error(`发送指令并等待响应失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  /**
    * 启动实时数据读取
    */
   async startRealtimeReading(serialId: number): Promise<void> {
