@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { webSerialService, type RawDataResponse } from '@/services/webSerial'
+import { webSerialService, type RawDataResponse, type SerialConnectionInfo } from '@/services/webSerial'
 
 export interface CommunicationLog {
   id: string
@@ -21,9 +21,11 @@ export const useCommunicationStore = defineStore('communication', () => {
 
   // Web Serial API相关状态
   const isRealTimeConnected = ref(false)
+  const connectedSerials = ref<SerialConnectionInfo[]>([])
 
   // 计算属性
   const isWebSerialConnected = computed(() => isRealTimeConnected.value)
+  const hasConnectedSerials = computed(() => connectedSerials.value.length > 0)
 
   // 初始化Web Serial API
   const initializeWebSerial = async () => {
@@ -34,10 +36,10 @@ export const useCommunicationStore = defineStore('communication', () => {
       }
 
       // 获取已连接的串口并设置数据回调
-      const connectedSerials = webSerialService.getConnectedSerials()
-      console.log('Initializing Web Serial API with connected serials:', connectedSerials)
+      const currentSerials = webSerialService.getConnectedSerials()
+      console.log('Initializing Web Serial API with connected serials:', currentSerials)
       
-      for (const serial of connectedSerials) {
+      for (const serial of currentSerials) {
         console.log(`Setting data callback for serial ${serial.serial_id}`)
         webSerialService.setDataCallback(serial.serial_id, (data: string, serialId: number) => {
           console.log(`Data callback triggered for serial ${serialId}:`, data)
@@ -52,14 +54,15 @@ export const useCommunicationStore = defineStore('communication', () => {
         })
       }
 
-      isRealTimeConnected.value = connectedSerials.length > 0
+      isRealTimeConnected.value = currentSerials.length > 0
+      connectedSerials.value = currentSerials
       
       if (isRealTimeConnected.value) {
         addLog({
           type: 'at',
           direction: 'received',
           description: 'Web Serial API已初始化',
-          data: `已连接 ${connectedSerials.length} 个串口`,
+          data: `已连接 ${currentSerials.length} 个串口`,
           success: true
         })
       }
@@ -68,6 +71,13 @@ export const useCommunicationStore = defineStore('communication', () => {
       ElMessage.error('Web Serial API初始化失败')
       throw error
     }
+  }
+
+  // 更新串口连接状态
+  const updateSerialConnectionStatus = () => {
+    const serials = webSerialService.getConnectedSerials()
+    connectedSerials.value = serials
+    console.log('Updated serial connection status:', serials)
   }
 
   // 设置串口数据回调（用于新连接的串口）
@@ -89,6 +99,7 @@ export const useCommunicationStore = defineStore('communication', () => {
   // 断开Web Serial API
   const disconnectWebSerial = () => {
     isRealTimeConnected.value = false
+    connectedSerials.value = []
     addLog({
       type: 'at',
       direction: 'received',
@@ -189,9 +200,11 @@ export const useCommunicationStore = defineStore('communication', () => {
     logs,
     maxLogs,
     isRealTimeConnected,
+    connectedSerials,
     
     // 计算属性
     isWebSerialConnected,
+    hasConnectedSerials,
     
     // 操作
     addLog,
@@ -200,6 +213,7 @@ export const useCommunicationStore = defineStore('communication', () => {
     sendRawData,
     initializeWebSerial,
     disconnectWebSerial,
-    setSerialDataCallback
+    setSerialDataCallback,
+    updateSerialConnectionStatus
   }
 })
