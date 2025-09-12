@@ -5,6 +5,7 @@ import { serialAPI } from '@/api/serial'
 import { ElMessage } from 'element-plus'
 import { WebSocketClient, WSMessageType } from '@/services/websocket'
 import type { WSResponseMessage, WSErrorMessage } from '@/services/websocket'
+import { cleanMessage } from '@/utils/messageUtils'
 
 export interface CommunicationLog {
   id: string
@@ -84,18 +85,23 @@ export const useCommunicationStore = defineStore('communication', () => {
         type: 'at',
         direction: 'received',
         description: isError ? '命令执行错误' : '接收报文',
-        data: (message as WSResponseMessage).data?.received_data,
+        data: cleanMessage((message as WSResponseMessage).data?.received_data),
         success: !isError,
         serial_id: serialId
       })
       return
     }
 
+    // 使用工具函数清理消息
+    const messageData = isError 
+      ? (message as WSErrorMessage).error 
+      : (message as WSResponseMessage).message
+
     addLog({
       type: 'at',
       direction: 'received',
       description: isError ? '命令执行错误' : '接收报文',
-      data: isError ? (message as WSErrorMessage).error : (message as WSResponseMessage).message,
+      data: cleanMessage(messageData),
       success: !isError,
       serial_id: serialId
     })

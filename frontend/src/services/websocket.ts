@@ -4,6 +4,7 @@
  */
 
 import { ElMessage } from 'element-plus'
+import { cleanMessage } from '@/utils/messageUtils'
 
 // WebSocket消息类型
 export enum WSMessageType {
@@ -234,7 +235,9 @@ export class WebSocketClient {
         break
       case WSMessageType.INFO:
         if (message.message && !message.message.includes('欢迎')) {
-          ElMessage.info(message.message)
+          // 使用工具函数清理消息
+          const cleanedMessage = cleanMessage(message.message)
+          ElMessage.info(cleanedMessage)
         }
         break
     }

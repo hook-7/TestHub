@@ -28,6 +28,10 @@ class SerialDriver:
         self.reading_tasks: Dict[int, asyncio.Task] = {}  # serial_id -> reading task
         self.data_callback: Optional[Callable[[int, bytes], None]] = None  # 数据回调函数
         
+        # 行缓冲管理 - 确保接收整行数据
+        self.line_buffers: Dict[int, bytes] = {}  # serial_id -> buffer
+        self.read_locks: Dict[int, asyncio.Lock] = {}  # serial_id -> read lock
+        
         # 默认配置模板
         self.default_config = {
             "baudrate": settings.SERIAL_BAUDRATE,
@@ -51,6 +55,24 @@ class SerialDriver:
         
         # 理论上不会到达这里，但为了安全起见
         return max(used_ids) + 1
+    
+    async def _get_read_lock(self, serial_id: int) -> asyncio.Lock:
+        """获取串口读取锁，防止并发读取冲突"""
+        if serial_id not in self.read_locks:
+            self.read_locks[serial_id] = asyncio.Lock()
+        return self.read_locks[serial_id]
+    
+    def _init_serial_buffers(self, serial_id: int):
+        """初始化串口缓冲区"""
+        if serial_id not in self.line_buffers:
+            self.line_buffers[serial_id] = b""
+    
+    def _cleanup_serial_buffers(self, serial_id: int):
+        """清理串口缓冲区"""
+        if serial_id in self.line_buffers:
+            del self.line_buffers[serial_id]
+        if serial_id in self.read_locks:
+            del self.read_locks[serial_id]
     
     def set_data_callback(self, callback: Callable[[int, bytes], None]):
         """设置数据回调函数，用于实时数据推送"""
@@ -85,11 +107,14 @@ class SerialDriver:
             logger.info(f"Stopped real-time reading for serial {serial_id}")
     
     async def _realtime_read_loop(self, serial_id: int):
-        """实时读取循环"""
+        """实时读取循环 - 基于行的读取，确保接收完整行数据"""
         connection = self.connections.get(serial_id)
         if not connection:
             logger.error(f"No connection found for serial {serial_id}")
             return
+        
+        # 初始化缓冲区
+        self._init_serial_buffers(serial_id)
         
         try:
             while True:
@@ -99,17 +124,21 @@ class SerialDriver:
                         logger.warning(f"Serial {serial_id} connection closed, stopping read loop")
                         break
                     
-                    # 异步读取数据
-                    loop = asyncio.get_event_loop()
-                    data = await loop.run_in_executor(
-                        self.executor, 
-                        lambda: self._read_available_data(connection)
-                    )
+                    # 使用锁保护读取操作
+                    read_lock = await self._get_read_lock(serial_id)
+                    async with read_lock:
+                        # 异步读取数据
+                        loop = asyncio.get_event_loop()
+                        data = await loop.run_in_executor(
+                            self.executor, 
+                            lambda: self._read_available_data(connection)
+                        )
+                        
+                        # 处理接收到的数据
+                        if data:
+                            await self._process_received_data(serial_id, data)
                     
-                    # 如果有数据且设置了回调函数，则发送数据
-                    if data and self.data_callback:
-                        await self.data_callback(serial_id, data)
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.01)  # 减少休眠时间，提高响应性
                     
                 except Exception as e:
                     logger.error(f"Error in read loop for serial {serial_id}: {e}")
@@ -120,9 +149,36 @@ class SerialDriver:
         except Exception as e:
             logger.error(f"Unexpected error in read loop for serial {serial_id}: {e}")
         finally:
-            # 清理任务
+            # 清理任务和缓冲区
             if serial_id in self.reading_tasks:
                 del self.reading_tasks[serial_id]
+            self._cleanup_serial_buffers(serial_id)
+    
+    async def _process_received_data(self, serial_id: int, data: bytes):
+        """处理接收到的数据，实现基于行的读取"""
+        if serial_id not in self.line_buffers:
+            self.line_buffers[serial_id] = b""
+        
+        # 将新数据添加到缓冲区
+        self.line_buffers[serial_id] += data
+        
+        # 查找完整的行（以\r\n结尾）
+        while b'\r\n' in self.line_buffers[serial_id]:
+            # 找到第一个\r\n的位置
+            line_end = self.line_buffers[serial_id].find(b'\r\n')
+            
+            # 提取完整行（包含\r\n）
+            complete_line = self.line_buffers[serial_id][:line_end + 2]
+            
+            # 从缓冲区中移除已处理的行
+            self.line_buffers[serial_id] = self.line_buffers[serial_id][line_end + 2:]
+            
+            # 发送完整行数据给回调函数
+            if self.data_callback and complete_line:
+                try:
+                    await self.data_callback(serial_id, complete_line)
+                except Exception as e:
+                    logger.error(f"Error in data callback for serial {serial_id}: {e}")
     
     def _read_available_data(self, connection: serial.Serial) -> bytes:
         """读取串口缓冲区中可用的数据"""
@@ -298,6 +354,9 @@ class SerialDriver:
             self.port_configs[serial_id] = config
             self.connected_ports[serial_id] = port
             
+            # 初始化串口缓冲区
+            self._init_serial_buffers(serial_id)
+            
             # 自动启动实时读取任务
             await self.start_realtime_reading(serial_id)
             
@@ -349,6 +408,9 @@ class SerialDriver:
                 port = self.connected_ports.pop(serial_id)
                 logger.info(f"Serial port {port} (ID: {serial_id}) disconnected")
             
+            # 清理缓冲区
+            self._cleanup_serial_buffers(serial_id)
+            
         except Exception as e:
             logger.error(f"Error disconnecting single serial port {serial_id}: {e}")
     
@@ -372,27 +434,30 @@ class SerialDriver:
             return False
     
     async def read_data(self, serial_id: int, size: int = 1024, timeout: Optional[float] = None) -> bytes:
-        """从指定串口读取数据"""
+        """从指定串口读取数据 - 使用锁保护，避免与实时读取冲突"""
         connection = self.connections.get(serial_id)
         if not connection or not connection.is_open:
             raise RuntimeError(f"Serial port {serial_id} not connected")
         
         try:
-            # 设置临时超时
-            original_timeout = connection.timeout
-            if timeout is not None:
-                connection.timeout = timeout
-            
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
-                self.executor, lambda: self._read_sync(connection, size)
-            )
-            
-            # 恢复原始超时
-            connection.timeout = original_timeout
-            
-            logger.info(f"Serial {serial_id}: Read {len(data)} bytes: {data.hex()}")
-            return data
+            # 使用锁保护读取操作
+            read_lock = await self._get_read_lock(serial_id)
+            async with read_lock:
+                # 设置临时超时
+                original_timeout = connection.timeout
+                if timeout is not None:
+                    connection.timeout = timeout
+                
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(
+                    self.executor, lambda: self._read_sync(connection, size)
+                )
+                
+                # 恢复原始超时
+                connection.timeout = original_timeout
+                
+                logger.info(f"Serial {serial_id}: Read {len(data)} bytes: {data.hex()}")
+                return data
             
         except Exception as e:
             logger.error(f"Error reading data from serial {serial_id}: {e}")
@@ -431,27 +496,30 @@ class SerialDriver:
     
     async def read_until(self, serial_id: int, terminator: bytes = b'\r\n', max_size: int = 1024, 
                         timeout: Optional[float] = None) -> bytes:
-        """从指定串口读取数据直到遇到指定的终止符"""
+        """从指定串口读取数据直到遇到指定的终止符 - 使用锁保护，避免与实时读取冲突"""
         connection = self.connections.get(serial_id)
         if not connection or not connection.is_open:
             raise RuntimeError(f"Serial port {serial_id} not connected")
         
         try:
-            # 设置临时超时
-            original_timeout = connection.timeout
-            if timeout is not None:
-                connection.timeout = timeout
-            
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
-                self.executor, lambda: self._read_until_sync(connection, terminator, max_size)
-            )
-            
-            # 恢复原始超时
-            connection.timeout = original_timeout
-            
-            logger.info(f"Serial {serial_id}: Read until terminator {terminator}: {(data.hex())}")
-            return data
+            # 使用锁保护读取操作
+            read_lock = await self._get_read_lock(serial_id)
+            async with read_lock:
+                # 设置临时超时
+                original_timeout = connection.timeout
+                if timeout is not None:
+                    connection.timeout = timeout
+                
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(
+                    self.executor, lambda: self._read_until_sync(connection, terminator, max_size)
+                )
+                
+                # 恢复原始超时
+                connection.timeout = original_timeout
+                
+                logger.info(f"Serial {serial_id}: Read until terminator {terminator}: {(data.hex())}")
+                return data
             
         except Exception as e:
             logger.error(f"Error reading until terminator from serial {serial_id}: {e}")
@@ -459,7 +527,7 @@ class SerialDriver:
     
     async def write_read(self, serial_id: int, data: bytes, read_size: int = 1024, 
                         read_timeout: float = 1.0, write_delay: float = 0.01) -> bytes:
-        """写入数据并读取响应（固定大小）"""
+        """写入数据并读取响应（固定大小） - 使用锁保护，避免与实时读取冲突"""
         await self.write_data(serial_id, data)
         
         # 给设备一点时间处理命令
@@ -470,7 +538,7 @@ class SerialDriver:
     async def write_read_until(self, serial_id: int, data: bytes, terminator: bytes = b'\r\n', 
                               max_size: int = 1024, read_timeout: float = 1.0, 
                               write_delay: float = 0.01) -> bytes:
-        """写入数据并读取响应直到遇到终止符（推荐用于AT命令）"""
+        """写入数据并读取响应直到遇到终止符（推荐用于AT命令） - 使用锁保护，避免与实时读取冲突"""
         await self.write_data(serial_id, data)
         
         # 给设备一点时间处理命令

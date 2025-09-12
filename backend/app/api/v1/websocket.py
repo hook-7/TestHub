@@ -35,12 +35,17 @@ class ConnectionManager:
         self._setup_serial_data_callback()
     
     def _setup_serial_data_callback(self):
-        """设置串口数据回调函数"""
+        """设置串口数据回调函数 - 优化为只推送完整行数据"""
         async def serial_data_callback(serial_id: int, data: bytes):
-            """串口数据回调函数，将数据推送给所有WebSocket客户端"""
+            """串口数据回调函数，将完整行数据推送给所有WebSocket客户端"""
             try:
+                # 确保数据是完整的行（以\r\n结尾）
+                if not data.endswith(b'\r\n'):
+                    logger.warning(f"Received incomplete line data from serial {serial_id}: {data}")
+                    return
+                
                 # 将字节数据转换为可读格式
-                data_text = data.decode('utf-8', errors='ignore')
+                data_text = data.decode('utf-8', errors='ignore').strip()  # 去除\r\n
                 data_hex = data.hex().upper()
                 
                 # 构造实时数据消息
@@ -52,7 +57,8 @@ class ConnectionManager:
                         "raw_data": data_text,
                         "hex_data": data_hex,
                         "timestamp": datetime.now().isoformat(),
-                        "serial_id": serial_id
+                        "serial_id": serial_id,
+                        "is_complete_line": True  # 标记为完整行
                     },
                     timestamp=datetime.now().isoformat(),
                     success=True
@@ -60,13 +66,14 @@ class ConnectionManager:
                 
                 # 广播给所有连接的客户端
                 await self.broadcast(realtime_msg.model_dump())
+                logger.debug(f"Broadcasted complete line from serial {serial_id}: {data_text}")
                 
             except Exception as e:
                 logger.error(f"Error processing serial data callback: {e}")
         
         # 设置回调函数
         serial_driver.set_data_callback(serial_data_callback)
-        logger.info("Serial data callback configured for real-time WebSocket broadcasting")
+        logger.info("Serial data callback configured for real-time WebSocket broadcasting (line-based)")
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """接受WebSocket连接"""

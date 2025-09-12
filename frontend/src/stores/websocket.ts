@@ -132,6 +132,45 @@ export const useWebSocketStore = defineStore('websocket', () => {
     }
   }
 
+  // 带重试机制的命令发送方法 - 只负责发送，不等待响应
+  const sendCommandWithRetry = async (command: string, serialId?: number, args: string[] = [], maxRetries: number = 3): Promise<boolean> => {
+    if (!client.value || !isConnected.value) {
+      ElMessage.error('WebSocket未连接，请先连接')
+      return false
+    }
+
+    let lastError: Error | null = null
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`发送命令尝试 ${attempt}/${maxRetries}: ${command}`)
+        
+        const success = await client.value.sendCommand(command, serialId, args)
+        if (!success) {
+          throw new Error('命令发送失败')
+        }
+
+        console.log(`命令 ${command} 发送成功 (尝试 ${attempt})`)
+        return true
+        
+      } catch (error) {
+        lastError = error as Error
+        console.warn(`命令发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
+        
+        if (attempt < maxRetries) {
+          console.log(`等待 1 秒后重试...`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      }
+    }
+
+    // 所有重试都失败了
+    console.error(`命令发送失败，已重试 ${maxRetries} 次:`, lastError)
+    ElMessage.error(`命令发送失败，已重试 ${maxRetries} 次`)
+    return false
+  }
+
+
   const clearMessageHistory = () => {
     messageHistory.value = []
     lastMessage.value = null
@@ -172,6 +211,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
     connect,
     disconnect,
     sendCommand,
+    sendCommandWithRetry,
     clearMessageHistory,
     getMessagesByType,
     getMessagesBySerialId,

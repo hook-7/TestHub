@@ -351,6 +351,7 @@ import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
 import { useWebSocketStore } from '@/stores/websocket'
 import { WSMessageType } from '@/services/websocket'
+import { matchesExpectedResponse, matchesExpectedResponseRegex } from '@/utils/messageUtils'
 
 // 命令数据 - 从常用命令接口动态获取
 const cmds = ref<SavedCommand[]>([])
@@ -581,6 +582,49 @@ const disconnectWebSocket = () => {
   wsStore.disconnect()
 }
 
+// 带重试机制的命令发送和响应等待
+const sendCommandWithRetryAndWait = async (command: string, cmd: SavedCommand, maxRetries: number = 3, responseTimeout: number = 1000): Promise<any> => {
+  let lastError: Error | null = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`发送命令尝试 ${attempt}/${maxRetries}: ${command}`)
+      
+      // 发送命令
+      const success = await wsStore.sendCommand(command, cmd.target_serial_id)
+      if (!success) {
+        throw new Error('命令发送失败')
+      }
+
+      // 等待响应
+      const response = await waitForWebSocketResponse(cmd, responseTimeout)
+      
+      if (response) {
+        console.log(`命令 ${command} 发送成功并收到响应 (尝试 ${attempt})`)
+        return response
+      } else {
+        // 没有收到响应，但不立即抛出错误，而是继续重试
+        console.warn(`命令发送后 ${responseTimeout}ms 内未收到响应 (尝试 ${attempt}/${maxRetries})`)
+        lastError = new Error(`命令发送后 ${responseTimeout}ms 内未收到响应`)
+      }
+      
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`命令发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
+    }
+    
+    // 如果不是最后一次尝试，等待后继续重试
+    if (attempt < maxRetries) {
+      console.log(`等待 1 秒后重试...`)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  // 所有重试都失败了
+  console.error(`命令发送失败，已重试 ${maxRetries} 次:`, lastError)
+  throw lastError || new Error('命令发送失败')
+}
+
 // 等待WebSocket响应的辅助方法
 const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -601,7 +645,9 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
       }
       
       // 检查是否有新的响应消息 - 检查所有消息而不是只检查最近5条
-      const allMessages = wsStore.messageHistory
+      const allMessages = wsStore.messageHistory.slice(-6)
+      // console.log('allMessages', allMessages);
+      
       
       // 查找匹配的响应消息 - 只检查在开始时间之后的消息
       const response = allMessages.find(msg => {
@@ -613,30 +659,32 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
 
           return false
         }
-        if(msg.message.startsWith('PLC_MAC')) {
-          console.log('msg.message', msg.message);
-        }
+
         // 检查消息时间戳是否在开始时间之后
         const msgTime = new Date(msg.timestamp).getTime()
-        if (msgTime <= startTime) {
-          console.log('msgTime <= startTime',msg.message);
-          
+        if (msgTime <= startTime) {    
           return false
         }
         
         // 如果有期望响应，进行匹配
         if (cmd.expected_response && cmd.expected_response.trim()) {
-          if (msg.message.includes(cmd.expected_response)) {
+          // WebSocket消息只有message字段
+          const responseMessage = 'message' in msg ? msg.message : ''
+   
+          // 使用工具函数进行匹配，自动处理\r\n
+          if (matchesExpectedResponse(responseMessage, cmd.expected_response)) {
+            console.log('匹配成功 (普通匹配)')
+            console.log('responseMessage', responseMessage);
             return true
           }
-          try {
-            const regex = new RegExp(cmd.expected_response)
-            if (regex.test(msg.message)) {
-              return true
-            }
-          } catch (e) {
-            // 正则表达式无效，忽略
+          
+          if (matchesExpectedResponseRegex(responseMessage, cmd.expected_response)) {
+            console.log('匹配成功 (正则匹配)')
+            console.log('responseMessage', responseMessage);
+            return true
           }
+          
+          console.log('匹配失败')
         } else {
           // 没有期望响应，只要有响应就返回
           return true
@@ -648,10 +696,25 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
       if (response) {
         console.log('找到匹配的响应:', response)
         clearTimeout(timeoutId) // 清除超时定时器
+        
+        // 判断是否匹配期望响应
+        let matchesExpected = true
+        if (cmd.expected_response && cmd.expected_response.trim()) {
+          // WebSocket消息只有message字段
+          const responseMessage = 'message' in response ? response.message : ''
+          matchesExpected = matchesExpectedResponse(responseMessage, cmd.expected_response) || 
+                           matchesExpectedResponseRegex(responseMessage, cmd.expected_response)
+          console.log('最终匹配结果:', {
+            expected: cmd.expected_response,
+            actual: responseMessage,
+            matchesExpected: matchesExpected
+          })
+        }
+        
         const processedResponse = {
           ...response,
-          // 判断是否匹配期望响应
-          matchesExpected: true,
+          // 根据实际匹配情况设置
+          matchesExpected: matchesExpected,
           // 添加处理时间
           processingTime: Date.now() - startTime
         }
@@ -761,15 +824,8 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
         throw new Error('执行已停止')
       }
       
-      // 发送WebSocket命令
-      const success = await wsStore.sendCommand(finalCommand, cmd.target_serial_id)
-      
-      if (!success) {
-        throw new Error('WebSocket命令发送失败')
-      }
-
-      // 等待WebSocket响应
-      response = await waitForWebSocketResponse(cmd, 30000) 
+      // 带重试机制的WebSocket命令发送和响应等待
+      response = await sendCommandWithRetryAndWait(finalCommand, cmd, 3, 10000)
       console.log('response', response);
       
       sleep(1000)
@@ -806,7 +862,13 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
     if (response.matchesExpected === false) {
       console.warn('响应不匹配期望值:', {
         expected: cmd.expected_response,
-        actual: response.message
+        actual: response.message || response.received_data
+      })
+      console.log('响应对象:', response)
+    } else {
+      console.log('响应匹配期望值:', {
+        expected: cmd.expected_response,
+        actual: response.message || response.received_data
       })
     }
     
@@ -856,12 +918,25 @@ const createTestItemResult = (cmd: SavedCommand, log: ExecutionLog): TestItemRes
   } else {
     // 没有通知的测试项，比较预期响应
     if (expectedResponse) {
-      isOk = actualResponse.includes(expectedResponse.trim())
+      // 使用与waitForWebSocketResponse相同的匹配逻辑
+      isOk = matchesExpectedResponse(actualResponse, expectedResponse) || 
+             matchesExpectedResponseRegex(actualResponse, expectedResponse)
       reason = isOk ? 'expected_match' : 'expected_mismatch'
+      console.log('期望响应检查:', {
+        expected: expectedResponse,
+        actual: actualResponse,
+        isOk: isOk,
+        reason: reason
+      })
     } else {
       // 没有预期响应，只要有响应就算OK
       isOk = actualResponse.length > 0
       reason = isOk ? 'has_response' : 'no_response'
+      console.log('无期望响应检查:', {
+        actual: actualResponse,
+        isOk: isOk,
+        reason: reason
+      })
     }
   }
 
