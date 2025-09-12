@@ -391,7 +391,7 @@ class SerialDriver:
             # 恢复原始超时
             connection.timeout = original_timeout
             
-            logger.debug(f"Serial {serial_id}: Read {len(data)} bytes: {data.hex()}")
+            logger.info(f"Serial {serial_id}: Read {len(data)} bytes: {data.hex()}")
             return data
             
         except Exception as e:
@@ -423,7 +423,10 @@ class SerialDriver:
             # 检查是否遇到终止符
             if terminator in data:
                 break
-                
+        def pretty_bytes(data: bytes) -> str:
+            return " ".join(f"{b:02X}" for b in data)
+        print("HEX:", pretty_bytes(data))
+        print("ASCII repr:", repr(data.decode(errors="replace")))
         return data
     
     async def read_until(self, serial_id: int, terminator: bytes = b'\r\n', max_size: int = 1024, 
@@ -447,7 +450,7 @@ class SerialDriver:
             # 恢复原始超时
             connection.timeout = original_timeout
             
-            logger.debug(f"Serial {serial_id}: Read until terminator {terminator}: {len(data)} bytes")
+            logger.info(f"Serial {serial_id}: Read until terminator {terminator}: {(data.hex())}")
             return data
             
         except Exception as e:

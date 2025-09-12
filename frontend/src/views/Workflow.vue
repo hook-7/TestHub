@@ -585,7 +585,7 @@ const disconnectWebSocket = () => {
 const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
   return new Promise((resolve, reject) => {
     const startTime = Date.now()
-    const checkInterval = 1000 
+    const checkInterval = 100
     
     // 设置超时定时器，确保在指定时间后一定会超时
     const timeoutId = setTimeout(() => {
@@ -1118,7 +1118,7 @@ const writeSerialNumber = async () => {
       
       // 先按字节分割
       for (let i = 0; i < paddedSN.length; i += 2) {
-        const byteValue = parseInt(paddedSN.substr(i, 2), 16)
+        const byteValue = parseInt(paddedSN.substring(i, i + 2), 16)
         bytes.push(byteValue)
       }
       
@@ -1138,7 +1138,7 @@ const writeSerialNumber = async () => {
     const calculateChecksum = (hexString: string) => {
       let sum = 0
       for (let i = 0; i < hexString.length; i += 2) {
-        sum += parseInt(hexString.substr(i, 2), 16)
+        sum += parseInt(hexString.substring(i, i + 2), 16)
       }
       // 和取低位字节（只取最低8位）
       return (sum & 0xFF).toString(16).padStart(2, '0').toUpperCase()
@@ -1154,7 +1154,15 @@ const writeSerialNumber = async () => {
     // 发送16进制命令到串口（假设使用串口ID 1）
     const response = await serialAPI.sendRawData(finalCommand, 1)
     
-    ElMessage.success(`SN序列号写入成功: ${actualSN} => ${response.received_data}`)
+    response.received_data.substring(16, 18)
+
+    if(response.received_data && response.received_data.substring(16, 18) === "84" && verify_response_sn(response.received_data, actualSN)){
+
+      ElMessage.success(`SN序列号写入成功: ${actualSN} `)
+    }else{
+      ElMessage.error(`SN序列号写入失败: ${actualSN} `)
+    }
+    
     console.log('SN写入响应:', response.received_data)
     
     
@@ -1165,6 +1173,43 @@ const writeSerialNumber = async () => {
     isWritingSN.value = false
   }
 }
+
+
+const verify_response_sn = (hex_sn: string, input_sn: string) => {
+  const paddedSN = input_sn.padStart(12, '0')
+  const hex_sn_header = hex_sn.substring(0, hex_sn.length - 4)
+  const sum_hex = hex_sn.substring(hex_sn.length - 4)
+  const sn = hex_sn.substring(2, 14)
+
+  const reversed_sn = reversing_sn(sn)
+  const checksum = checksum_sn(hex_sn_header)+"03"
+  if(checksum === sum_hex && reversed_sn === paddedSN){
+    return true
+  }
+
+  return false
+}
+
+
+const reversing_sn = (sn: string) => {
+    let reversed_sn = ''
+    for (let i = 0; i < sn.length; i += 2) {
+        const byte = sn.substring(i, i + 2)
+        reversed_sn = byte + reversed_sn
+    }
+    return reversed_sn
+}
+
+const checksum_sn = (hexString: string) => {
+    let sum = 0
+    for (let i = 0; i < hexString.length; i += 2) {
+      sum += parseInt(hexString.substring(i, i + 2), 16)
+    }
+
+    return (sum & 0xFF).toString(16).padStart(2, '0').toUpperCase()
+  }
+
+
 
 // 处理SN输入，检测S/N:格式并自动发送
 let snInputTimer: NodeJS.Timeout | null = null
