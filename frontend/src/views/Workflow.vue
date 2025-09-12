@@ -41,6 +41,31 @@
             </el-alert>
           </div>
 
+          <!-- 串口连接状态提示 -->
+          <div v-else-if="!isSerialConnected" class="serial-status-section">
+            <el-alert
+              title="串口未连接"
+              type="warning"
+              :closable="false"
+              show-icon
+            >
+              <template #default>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span>请先在"串口配置"页面连接串口设备，然后才能执行工作流</span>
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    @click="refreshSerialStatus"
+                    style="margin-left: 16px;"
+                  >
+                    <el-icon><RefreshLeft /></el-icon>
+                    刷新状态
+                  </el-button>
+                </div>
+              </template>
+            </el-alert>
+          </div>
+
           <!-- MAC地址输入区域 -->
           <div v-else class="input-section">
             <el-form :model="form" label-width="120px" class="mac-form">
@@ -64,7 +89,7 @@
                 <el-button 
                   type="primary" 
                   :loading="isExecuting"
-                  :disabled="!form.macAddress || isExecuting"
+                  :disabled="!form.macAddress || isExecuting || !isSerialConnected"
                   @click="executeWorkflow"
                   class="execute-btn"
                 >
@@ -237,7 +262,7 @@
                       <el-button 
                         type="success" 
                         :loading="isWritingSN"
-                        :disabled="!snForm.serialNumber || isExecuting"
+                        :disabled="!snForm.serialNumber || isExecuting || !isSerialConnected"
                         @click="writeSerialNumber"
                         class="write-sn-btn"
                         size="large"
@@ -283,106 +308,16 @@ import {
   Key,
   RefreshLeft
 } from '@element-plus/icons-vue'
-import { serialAPI } from '@/api/serial'
+import { webSerialService } from '@/services/webSerial'
+import { useCommunicationStore } from '@/stores/communication'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
 
+// 通信store
+const communicationStore = useCommunicationStore()
+
 // 命令数据 - 从常用命令接口动态获取
 const cmds = ref<SavedCommand[]>([])
-
-// 硬编码的测试项（已注释，现在从API获取）
-/*
-const cmds = ref<SavedCommand[]>([
-	{
-		"id": "1",
-		"name": "设置MAC",
-		"command": "AT+MAC=026501123456",
-		"description": "",
-		"created_at": 1725431941000,
-		"expected_response": "",
-		"send_as_hex": false,
-		"show_notification": false,
-		"target_serial_id": 1
-	},
-	{
-		"id": "2",
-		"name": "获取MAC",
-		"command": "AT+MAC?",
-		"description": "123",
-		"created_at": 1725431958000,
-		"expected_response": "",
-		"send_as_hex": false,
-		"show_notification": false,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd54",
-		"name": "测试 Eeprom",
-		"command": "Eeprom",
-		"description": "",
-		"created_at": 1725583346000,
-		"expected_response": "EEPROM Test OK\r\n",
-		"send_as_hex": false,
-		"show_notification": false,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd55",
-		"name": "测试LED1",
-		"command": "ON1",
-		"description": "LED1 是否亮灯?",
-		"created_at": 1725583346000,
-		"expected_response": "LED1OK\r\n",
-		"send_as_hex": false,
-		"show_notification": true,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd56",
-		"name": "测试LED2",
-		"command": "ON2",
-		"description": "LED2 是否亮灯?",
-		"created_at": 1725583346000,
-		"expected_response": "LED2OK\r\n",
-		"send_as_hex": false,
-		"show_notification": true,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd57",
-		"name": "测试LED3",
-		"command": "ON1",
-		"description": "LED3 是否亮灯?",
-		"created_at": 1725583346000,
-		"expected_response": "LED3OK\r\n",
-		"send_as_hex": false,
-		"show_notification": true,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd58",
-		"name": "测试 DPLCA",
-		"command": "DPLCA",
-		"description": "",
-		"created_at": 1725583346000,
-		"expected_response": "",
-		"send_as_hex": false,
-		"show_notification": false,
-		"target_serial_id": 1
-	},
-	{
-		"id": "4c1eae2c-49e4-431c-a271-81fc7c5dcd59",
-		"name": "测试 S485B",
-		"command": "S485B",
-		"description": "",
-		"created_at": 1725583346000,
-		"expected_response": "485BOK\r\n",
-		"send_as_hex": false,
-		"show_notification": false,
-		"target_serial_id": 2
-	}
-])
-*/
 
 // 表单数据
 const form = ref({
@@ -448,6 +383,11 @@ interface TestItemResult {
 }
 
 // 计算属性
+const isSerialConnected = computed(() => {
+  const connectedSerials = webSerialService.getConnectedSerials()
+  return connectedSerials.length > 0
+})
+
 const progressPercentage = computed(() => {
   if (cmds.value.length === 0) return 0
   const percentage = Math.round(((currentStepIndex.value + 1) / cmds.value.length) * 100)
@@ -541,15 +481,17 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
   let userChoice: boolean | undefined = undefined
 
   try {
+    // 检查串口连接状态
+    if (cmd.target_serial_id && !webSerialService.isSerialConnected(cmd.target_serial_id)) {
+      throw new Error(`串口 ${cmd.target_serial_id} 未连接`)
+    }
+
     // 替换MAC地址
     const finalCommand = replaceMacAddress(cmd.command, form.value.macAddress)
     console.log('finalCommand', finalCommand);
     
-    
-
-
-    // 使用HTTP请求发送命令
-    const response = await serialAPI.sendATCommand(
+    // 使用Web Serial API发送命令
+    const response = await communicationStore.sendATCommand(
       finalCommand, 
       cmd.target_serial_id
     )
@@ -677,10 +619,37 @@ const saveTestResultToBackend = async () => {
   }
 }
 
+// 检查串口连接状态
+const checkSerialConnection = () => {
+  const connectedSerials = webSerialService.getConnectedSerials()
+  if (connectedSerials.length === 0) {
+    ElMessage.error('没有连接的串口，请先在串口配置页面连接串口设备')
+    return false
+  }
+  return true
+}
+
+// 刷新串口连接状态
+const refreshSerialStatus = () => {
+  // 触发响应式更新
+  const connectedSerials = webSerialService.getConnectedSerials()
+  console.log('当前连接的串口:', connectedSerials)
+  if (connectedSerials.length > 0) {
+    ElMessage.success(`检测到 ${connectedSerials.length} 个已连接的串口`)
+  } else {
+    ElMessage.warning('没有检测到已连接的串口')
+  }
+}
+
 // 执行工作流
 const executeWorkflow = async () => {
   if (!form.value.macAddress.trim()) {
     ElMessage.warning('请输入MAC地址')
+    return
+  }
+
+  // 检查串口连接状态
+  if (!checkSerialConnection()) {
     return
   }
 
@@ -809,6 +778,11 @@ const writeSerialNumber = async () => {
     return
   }
 
+  // 检查串口连接状态
+  if (!checkSerialConnection()) {
+    return
+  }
+
   try {
     isWritingSN.value = true
     
@@ -870,8 +844,13 @@ const writeSerialNumber = async () => {
     const finalCommand = protocolData + checksum + '03'
     console.log(finalCommand);
     
+    // 检查串口连接状态
+    if (!webSerialService.isSerialConnected(1)) {
+      throw new Error('串口 1 未连接')
+    }
+
     // 发送16进制命令到串口（假设使用串口ID 1）
-    const response = await serialAPI.sendRawData(finalCommand, 1)
+    const response = await communicationStore.sendRawData(finalCommand, 1)
     
     ElMessage.success(`SN序列号写入成功: ${actualSN} => ${response.received_data}`)
     console.log('SN写入响应:', response.received_data)
@@ -969,9 +948,17 @@ const getResultStatusClass = () => {
   }
 }
 
-// 组件挂载时加载命令
-onMounted(() => {
-  loadCommands()
+// 组件挂载时加载命令和初始化Web Serial API
+onMounted(async () => {
+  await loadCommands()
+  
+  // 初始化Web Serial API
+  try {
+    await communicationStore.initializeWebSerial()
+  } catch (error) {
+    console.error('Web Serial API初始化失败:', error)
+    ElMessage.warning('Web Serial API初始化失败，请确保已连接串口设备')
+  }
 })
 
 </script>
@@ -1004,7 +991,8 @@ onMounted(() => {
 
 /* 加载和空状态样式 */
 .loading-section,
-.empty-section {
+.empty-section,
+.serial-status-section {
   margin: 20px 0;
   padding: 0 20px;
 }
