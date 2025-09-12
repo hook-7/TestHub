@@ -24,35 +24,18 @@
             </el-button>
           </div>
 
-          <!-- WebSocket连接状态 -->
+          <!-- WebSocket连接状态 - 已禁用串口数据推送功能 -->
           <div class="websocket-status-section">
             <el-alert
-              :title="`WebSocket状态: ${wsStore.connectionStatusText}`"
-              :type="wsStore.connectionStatusColor"
+              title="WebSocket串口数据推送功能已禁用"
+              type="info"
               :closable="false"
               show-icon
             >
               <template #default>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <el-icon><Connection /></el-icon>
-                  <span>{{ wsStore.connectionStatusText }}</span>
-                  <el-button 
-                    v-if="!wsStore.isConnected"
-                    type="primary" 
-                    size="small"
-                    @click="connectWebSocket"
-                    :loading="wsStore.connectionStatus === 'connecting'"
-                  >
-                    连接
-                  </el-button>
-                  <el-button 
-                    v-else
-                    type="danger" 
-                    size="small"
-                    @click="disconnectWebSocket"
-                  >
-                    断开
-                  </el-button>
+                  <el-icon><Warning /></el-icon>
+                  <span>串口数据将通过HTTP API进行通信，不再使用WebSocket实时推送</span>
                 </div>
               </template>
             </el-alert>
@@ -343,21 +326,21 @@ import {
   Edit,
   Key,
   RefreshLeft,
-  Connection,
   Download
 } from '@element-plus/icons-vue'
 import { serialAPI } from '@/api/serial'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
-import { useWebSocketStore } from '@/stores/websocket'
-import { WSMessageType } from '@/services/websocket'
+// WebSocket串口数据推送功能已禁用
+// import { useWebSocketStore } from '@/stores/websocket'
+// import { WSMessageType } from '@/services/websocket'
 import { matchesExpectedResponse, matchesExpectedResponseRegex } from '@/utils/messageUtils'
 
 // 命令数据 - 从常用命令接口动态获取
 const cmds = ref<SavedCommand[]>([])
 
-// WebSocket和连接状态
-const wsStore = useWebSocketStore()
+// WebSocket串口数据推送功能已禁用
+// const wsStore = useWebSocketStore()
 
 // 硬编码的测试项（已注释，现在从API获取）
 /*
@@ -563,188 +546,138 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
-// WebSocket连接管理
-const connectWebSocket = async (showMessage: boolean = true) => {
-  try {
-    await wsStore.connect()
-    if (showMessage) {
-      ElMessage.success('WebSocket连接成功')
-    }
-  } catch (error) {
-    console.error('WebSocket连接失败:', error)
-    if (showMessage) {
-      ElMessage.error('WebSocket连接失败')
-    }
-  }
-}
+// WebSocket串口数据推送功能已禁用，相关函数已移除
 
-const disconnectWebSocket = () => {
-  wsStore.disconnect()
-}
-
-// 带重试机制的命令发送和响应等待
-const sendCommandWithRetryAndWait = async (command: string, cmd: SavedCommand, maxRetries: number = 3, responseTimeout: number = 1000): Promise<any> => {
+// HTTP API重试机制 - 返回值不符合期望时重试
+const sendCommandWithRetry = async (command: string, serialId: number, expectedResponse?: string, maxRetries: number = 3): Promise<any> => {
   let lastError: Error | null = null
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`发送命令尝试 ${attempt}/${maxRetries}: ${command}`)
+      console.log(`HTTP API发送命令尝试 ${attempt}/${maxRetries}: ${command}`)
       
       // 发送命令
-      const success = await wsStore.sendCommand(command, cmd.target_serial_id)
-      if (!success) {
-        throw new Error('命令发送失败')
-      }
-
-      // 等待响应
-      const response = await waitForWebSocketResponse(cmd, responseTimeout)
+      const response = await serialAPI.sendATCommand(command, serialId)
       
       if (response) {
         console.log(`命令 ${command} 发送成功并收到响应 (尝试 ${attempt})`)
+        
+        // 如果有期望返回值，检查是否匹配
+        if (expectedResponse && expectedResponse.trim()) {
+          const responseMessage = response.received_data || ''
+          const matchesExpected = matchesExpectedResponse(responseMessage, expectedResponse) || 
+                                 matchesExpectedResponseRegex(responseMessage, expectedResponse)
+          
+          if (matchesExpected) {
+            console.log(`响应匹配期望值，命令执行成功`)
+            return response
+          } else {
+            console.warn(`响应不匹配期望值 (尝试 ${attempt}/${maxRetries})`)
+            console.warn(`期望: ${expectedResponse}`)
+            console.warn(`实际: ${responseMessage}`)
+            
+            // 如果不是最后一次尝试，继续重试
+            if (attempt < maxRetries) {
+              console.log(`等待 2 秒后重试...`)
+              await new Promise(resolve => setTimeout(resolve, 3000))
+              continue
+            } else {
+              // 最后一次尝试仍然不匹配，返回响应但标记为不匹配
+              console.error(`响应不匹配期望值，已重试 ${maxRetries} 次`)
+              return {
+                ...response,
+                matchesExpected: false
+              }
+            }
+          }
+        }
+        
         return response
-      } else {
-        // 没有收到响应，但不立即抛出错误，而是继续重试
-        console.warn(`命令发送后 ${responseTimeout}ms 内未收到响应 (尝试 ${attempt}/${maxRetries})`)
-        lastError = new Error(`命令发送后 ${responseTimeout}ms 内未收到响应`)
       }
+      
+      throw new Error('未收到响应')
       
     } catch (error) {
       lastError = error as Error
-      console.warn(`命令发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
-    }
-    
-    // 如果不是最后一次尝试，等待后继续重试
-    if (attempt < maxRetries) {
-      console.log(`等待 1 秒后重试...`)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.warn(`HTTP API命令发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
+      
+      // 网络错误或服务器错误时重试
+      if (attempt < maxRetries) {
+        console.log(`等待 5 秒后重试...`)
+        await new Promise(resolve => setTimeout(resolve, 5000))
+      }
     }
   }
 
   // 所有重试都失败了
-  console.error(`命令发送失败，已重试 ${maxRetries} 次:`, lastError)
-  throw lastError || new Error('命令发送失败')
+  console.error(`HTTP API命令发送失败，已重试 ${maxRetries} 次:`, lastError)
+  throw lastError || new Error('HTTP API命令发送失败')
 }
 
-// 等待WebSocket响应的辅助方法
-const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    const startTime = Date.now()
-    const checkInterval = 100
-    
-    // 设置超时定时器，确保在指定时间后一定会超时
-    const timeoutId = setTimeout(() => {
-      reject(new Error(`WebSocket响应超时 (${timeout}ms)`))
-    }, timeout)
-    
-    const checkResponse = () => {
-      // 检查是否需要停止执行
-      if (shouldStop.value) {
-        clearTimeout(timeoutId)
-        reject(new Error('执行已停止'))
-        return
-      }
+// HTTP API原始数据重试机制 - 返回值不符合期望时重试
+const sendRawDataWithRetry = async (data: string, serialId: number, expectedResponse?: string, maxRetries: number = 3): Promise<any> => {
+  let lastError: Error | null = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`HTTP API发送原始数据尝试 ${attempt}/${maxRetries}: ${data}`)
       
-      // 检查是否有新的响应消息 - 检查所有消息而不是只检查最近5条
-      const allMessages = wsStore.messageHistory.slice(-6)
-      // console.log('allMessages', allMessages);
-      
-      
-      // 查找匹配的响应消息 - 只检查在开始时间之后的消息
-      const response = allMessages.find(msg => {
-        // 基本条件：响应类型或实时数据类型、串口ID、时间戳
-        if (msg.type !== WSMessageType.RESPONSE  ||
-            msg.serial_id !== cmd.target_serial_id ||
-            !msg.timestamp ) {
-
-
-          return false
-        }
-
-        // 检查消息时间戳是否在开始时间之后
-        const msgTime = new Date(msg.timestamp).getTime()
-        if (msgTime <= startTime) {    
-          return false
-        }
-        
-        // 如果有期望响应，进行匹配
-        if (cmd.expected_response && cmd.expected_response.trim()) {
-          // WebSocket消息只有message字段
-          const responseMessage = 'message' in msg ? msg.message : ''
-   
-          // 使用工具函数进行匹配，自动处理\r\n
-          if (matchesExpectedResponse(responseMessage, cmd.expected_response)) {
-            console.log('匹配成功 (普通匹配)')
-            console.log('responseMessage', responseMessage);
-            return true
-          }
-          
-          if (matchesExpectedResponseRegex(responseMessage, cmd.expected_response)) {
-            console.log('匹配成功 (正则匹配)')
-            console.log('responseMessage', responseMessage);
-            return true
-          }
-          
-          console.log('匹配失败')
-        } else {
-          // 没有期望响应，只要有响应就返回
-          return true
-        }
-        
-        return false
-      })
+      // 发送原始数据
+      const response = await serialAPI.sendRawData(data, serialId)
       
       if (response) {
-        console.log('找到匹配的响应:', response)
-        clearTimeout(timeoutId) // 清除超时定时器
+        console.log(`原始数据 ${data} 发送成功并收到响应 (尝试 ${attempt})`)
         
-        // 判断是否匹配期望响应
-        let matchesExpected = true
-        if (cmd.expected_response && cmd.expected_response.trim()) {
-          // WebSocket消息只有message字段
-          const responseMessage = 'message' in response ? response.message : ''
-          matchesExpected = matchesExpectedResponse(responseMessage, cmd.expected_response) || 
-                           matchesExpectedResponseRegex(responseMessage, cmd.expected_response)
-          console.log('最终匹配结果:', {
-            expected: cmd.expected_response,
-            actual: responseMessage,
-            matchesExpected: matchesExpected
-          })
+        // 如果有期望返回值，检查是否匹配
+        if (expectedResponse && expectedResponse.trim()) {
+          const responseMessage = response.received_data || ''
+          const matchesExpected = matchesExpectedResponse(responseMessage, expectedResponse) || 
+                                 matchesExpectedResponseRegex(responseMessage, expectedResponse)
+          
+          if (matchesExpected) {
+            console.log(`响应匹配期望值，原始数据发送成功`)
+            return response
+          } else {
+            console.warn(`响应不匹配期望值 (尝试 ${attempt}/${maxRetries})`)
+            console.warn(`期望: ${expectedResponse}`)
+            console.warn(`实际: ${responseMessage}`)
+            
+            // 如果不是最后一次尝试，继续重试
+            if (attempt < maxRetries) {
+              console.log(`等待 5 秒后重试...`)
+              await new Promise(resolve => setTimeout(resolve, 5000))
+              continue
+            } else {
+              // 最后一次尝试仍然不匹配，返回响应但标记为不匹配
+              console.error(`响应不匹配期望值，已重试 ${maxRetries} 次`)
+              return {
+                ...response,
+                matchesExpected: false
+              }
+            }
+          }
         }
         
-        const processedResponse = {
-          ...response,
-          // 根据实际匹配情况设置
-          matchesExpected: matchesExpected,
-          // 添加处理时间
-          processingTime: Date.now() - startTime
-        }
-        
-        resolve(processedResponse)
-        return
+        return response
       }
       
-      // 检查是否有错误响应
-      const errorResponse = allMessages.find(msg => 
-        msg.type === 'error' && 
-        msg.serial_id === cmd.target_serial_id &&
-        msg.timestamp && 
-        new Date(msg.timestamp).getTime() > startTime
-      )
+      throw new Error('未收到响应')
       
-      if (errorResponse) {
-        console.log('收到错误响应:', errorResponse)
-        clearTimeout(timeoutId) // 清除超时定时器
-        const errorMessage = 'error' in errorResponse ? errorResponse.error : 'WebSocket命令执行失败'
-        reject(new Error(errorMessage))
-        return
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`HTTP API原始数据发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
+      
+      // 网络错误或服务器错误时重试
+      if (attempt < maxRetries) {
+        console.log(`等待 5 秒后重试...`)
+        await new Promise(resolve => setTimeout(resolve, 5000))
       }
-      
-      // 继续检查
-      setTimeout(checkResponse, checkInterval)
     }
-    
-    checkResponse()
-  })
+  }
+
+  // 所有重试都失败了
+  console.error(`HTTP API原始数据发送失败，已重试 ${maxRetries} 次:`, lastError)
+  throw lastError || new Error('HTTP API原始数据发送失败')
 }
 
 // 加载常用命令
@@ -815,37 +748,21 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
     
     let response: any
 
-    // 优先使用WebSocket，如果未连接则使用HTTP
-    if (wsStore.isConnected) {
-      console.log('使用WebSocket发送命令:', finalCommand)
-      
-      // 检查是否需要停止执行
-      if (shouldStop.value) {
-        throw new Error('执行已停止')
-      }
-      
-      // 带重试机制的WebSocket命令发送和响应等待
-      response = await sendCommandWithRetryAndWait(finalCommand, cmd, 3, 10000)
-      console.log('response', response);
-      
-      sleep(1000)
-      if (!response) {
-        throw new Error('WebSocket响应超时')
-      }
-    } else {
-      console.log('使用HTTP发送命令:', finalCommand)
-      
-      // 检查是否需要停止执行
-      if (shouldStop.value) {
-        throw new Error('执行已停止')
-      }
-      
-      // 使用HTTP请求发送命令
-      response = await serialAPI.sendATCommand(
-        finalCommand, 
-        cmd.target_serial_id
-      )
+    // 使用HTTP API发送命令（WebSocket串口数据推送已禁用）
+    console.log('使用HTTP API发送命令:', finalCommand)
+    
+    // 检查是否需要停止执行
+    if (shouldStop.value) {
+      throw new Error('执行已停止')
     }
+    
+    // 使用带重试机制的HTTP API发送命令
+    response = await sendCommandWithRetry(
+      finalCommand, 
+      cmd.target_serial_id || 1, // 默认使用串口ID 1
+      cmd.expected_response, // 传入期望返回值，有期望值时只尝试一次
+      3 // 最大重试次数（仅在没有期望值时生效）
+    )
     
     // 使用处理后的响应数据
     log.response = response.received_data || response.message
@@ -1052,7 +969,7 @@ const executeWorkflow = async () => {
       executionLogs.value.push(log)
       
       // 添加1秒延迟，避免命令发送过快
-      await sleep(1000)
+      await sleep(100)
 
       // 创建测试项结果
       const testItemResult = createTestItemResult(cmd, log)
@@ -1226,8 +1143,8 @@ const writeSerialNumber = async () => {
     const finalCommand = protocolData + checksum + '03'
     console.log(finalCommand);
     
-    // 发送16进制命令到串口（假设使用串口ID 1）
-    const response = await serialAPI.sendRawData(finalCommand, 1)
+    // 发送16进制命令到串口（假设使用串口ID 1）- 使用重试机制
+    const response = await sendRawDataWithRetry(finalCommand, 1, undefined, 3)
     
     response.received_data.substring(16, 18)
 
@@ -1373,11 +1290,8 @@ const canExecuteWorkflow = (): boolean => {
     return false
   }
   
-  // 检查WebSocket连接状态
-  if (!wsStore.isConnected) {
-    ElMessage.warning('WebSocket未连接，请先连接')
-    return false
-  }
+  // WebSocket串口数据推送功能已禁用，使用HTTP API
+  console.log('使用HTTP API进行串口通信')
   
   return true
 }
@@ -1521,15 +1435,13 @@ const generateCSV = (data: any[]) => {
 // 组件挂载时加载命令
 onMounted(async () => {
   loadCommands()
-  // 初始化WebSocket客户端
-  wsStore.initializeClient()
-  // 自动连接WebSocket（不显示提示消息）
-  await connectWebSocket(false)
+  // WebSocket串口数据推送功能已禁用
+  console.log('WebSocket串口数据推送功能已禁用，使用HTTP API')
 })
 
 onUnmounted(() => {
-  // 清理WebSocket连接
-  wsStore.disconnect()
+  // WebSocket串口数据推送功能已禁用
+  console.log('WebSocket串口数据推送功能已禁用')
 })
 
 </script>

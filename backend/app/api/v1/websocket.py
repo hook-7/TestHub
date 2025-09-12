@@ -35,45 +35,10 @@ class ConnectionManager:
         self._setup_serial_data_callback()
     
     def _setup_serial_data_callback(self):
-        """设置串口数据回调函数 - 优化为只推送完整行数据"""
-        async def serial_data_callback(serial_id: int, data: bytes):
-            """串口数据回调函数，将完整行数据推送给所有WebSocket客户端"""
-            try:
-                # 确保数据是完整的行（以\r\n结尾）
-                if not data.endswith(b'\r\n'):
-                    logger.warning(f"Received incomplete line data from serial {serial_id}: {data}")
-                    return
-                
-                # 将字节数据转换为可读格式
-                data_text = data.decode('utf-8', errors='ignore').strip()  # 去除\r\n
-                data_hex = data.hex().upper()
-                
-                # 构造实时数据消息
-                realtime_msg = WSResponseMessage(
-                    type=WSMessageType.RESPONSE,
-                    message=data_text,
-                    serial_id=serial_id,
-                    data={
-                        "raw_data": data_text,
-                        "hex_data": data_hex,
-                        "timestamp": datetime.now().isoformat(),
-                        "serial_id": serial_id,
-                        "is_complete_line": True  # 标记为完整行
-                    },
-                    timestamp=datetime.now().isoformat(),
-                    success=True
-                )
-                
-                # 广播给所有连接的客户端
-                await self.broadcast(realtime_msg.model_dump())
-                logger.debug(f"Broadcasted complete line from serial {serial_id}: {data_text}")
-                
-            except Exception as e:
-                logger.error(f"Error processing serial data callback: {e}")
-        
-        # 设置回调函数
-        serial_driver.set_data_callback(serial_data_callback)
-        logger.info("Serial data callback configured for real-time WebSocket broadcasting (line-based)")
+        """设置串口数据回调函数 - 已禁用WebSocket串口数据推送"""
+        # WebSocket串口数据推送功能已禁用
+        # 不再设置串口数据回调函数
+        logger.info("Serial data callback disabled - WebSocket serial data broadcasting is turned off")
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """接受WebSocket连接"""
@@ -258,32 +223,9 @@ async def websocket_status():
 
 
 
-@router.post("/start-realtime-reading/{serial_id}", response_model=APIResponse)
-async def start_realtime_reading(serial_id: int):
-    """启动指定串口的实时数据读取"""
-    try:
-        await serial_driver.start_realtime_reading(serial_id)
-        return APIResponse.success(
-            data={"serial_id": serial_id, "status": "started"},
-            msg=f"串口 {serial_id} 实时读取已启动"
-        )
-    except Exception as e:
-        logger.error(f"启动实时读取失败: {e}")
-        return APIResponse.error(code=500, msg=f"启动实时读取失败: {str(e)}")
-
-
-@router.post("/stop-realtime-reading/{serial_id}", response_model=APIResponse)
-async def stop_realtime_reading(serial_id: int):
-    """停止指定串口的实时数据读取"""
-    try:
-        await serial_driver.stop_realtime_reading(serial_id)
-        return APIResponse.success(
-            data={"serial_id": serial_id, "status": "stopped"},
-            msg=f"串口 {serial_id} 实时读取已停止"
-        )
-    except Exception as e:
-        logger.error(f"停止实时读取失败: {e}")
-        return APIResponse.error(code=500, msg=f"停止实时读取失败: {str(e)}")
+# WebSocket串口实时读取API端点已禁用
+# @router.post("/start-realtime-reading/{serial_id}", response_model=APIResponse)
+# @router.post("/stop-realtime-reading/{serial_id}", response_model=APIResponse)
 
 
 @router.post("/send-message", response_model=APIResponse)

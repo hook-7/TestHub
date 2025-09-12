@@ -467,6 +467,34 @@ class SerialDriver:
         """同步读取数据"""
         return connection.read(size)
     
+    async def clear_input_buffer(self, serial_id: int):
+        """清理串口输入缓冲区"""
+        connection = self.connections.get(serial_id)
+        if not connection or not connection.is_open:
+            return
+        
+        try:
+            # 使用锁保护清理操作
+            read_lock = await self._get_read_lock(serial_id)
+            async with read_lock:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    self.executor, lambda: self._clear_input_buffer_sync(connection)
+                )
+                logger.debug(f"Serial {serial_id}: Input buffer cleared")
+        except Exception as e:
+            logger.warning(f"Error clearing input buffer for serial {serial_id}: {e}")
+    
+    def _clear_input_buffer_sync(self, connection: serial.Serial):
+        """同步清理输入缓冲区"""
+        try:
+            # 读取并丢弃缓冲区中的所有数据
+            if connection.in_waiting > 0:
+                discarded_data = connection.read(connection.in_waiting)
+                logger.debug(f"Discarded {len(discarded_data)} bytes from input buffer: {discarded_data.hex()}")
+        except Exception as e:
+            logger.warning(f"Error clearing input buffer: {e}")
+    
     def _read_until_sync(self, connection: serial.Serial, terminator: bytes, max_size: int = 1024) -> bytes:
         """同步读取数据直到遇到终止符"""
         data = b""
@@ -528,6 +556,9 @@ class SerialDriver:
     async def write_read(self, serial_id: int, data: bytes, read_size: int = 1024, 
                         read_timeout: float = 1.0, write_delay: float = 0.01) -> bytes:
         """写入数据并读取响应（固定大小） - 使用锁保护，避免与实时读取冲突"""
+        # 清理输入缓冲区，避免读取到旧数据
+        await self.clear_input_buffer(serial_id)
+        
         await self.write_data(serial_id, data)
         
         # 给设备一点时间处理命令
@@ -539,6 +570,9 @@ class SerialDriver:
                               max_size: int = 1024, read_timeout: float = 1.0, 
                               write_delay: float = 0.01) -> bytes:
         """写入数据并读取响应直到遇到终止符（推荐用于AT命令） - 使用锁保护，避免与实时读取冲突"""
+        # 清理输入缓冲区，避免读取到旧数据
+        await self.clear_input_buffer(serial_id)
+        
         await self.write_data(serial_id, data)
         
         # 给设备一点时间处理命令
