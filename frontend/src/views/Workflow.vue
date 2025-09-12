@@ -10,6 +10,20 @@
         </template>
         
         <div class="workflow-content">
+          <!-- 导出按钮区域 -->
+          <div class="export-section">
+            <el-button 
+              type="success" 
+              size="default"
+              @click="exportAllReports"
+              :loading="isExporting"
+              class="export-all-btn"
+            >
+              <el-icon><Download /></el-icon>
+              导出全部测试结果
+            </el-button>
+          </div>
+
           <!-- 加载状态提示 -->
           <div v-if="isLoadingCommands" class="loading-section">
             <el-alert
@@ -71,6 +85,7 @@
             <el-form :model="form" label-width="120px" class="mac-form">
               <el-form-item label="MAC地址" required>
                 <el-input
+                  ref="macAddressInputRef"
                   v-model="form.macAddress"
                   placeholder="请输入MAC地址，如：026501123456 或 mac:026501123456"
                   clearable
@@ -83,6 +98,46 @@
                     <el-icon><Link /></el-icon>
                   </template>
                 </el-input>
+              </el-form-item>
+              
+              <el-form-item label="自动执行">
+                <el-switch
+                  v-model="autoExecuteEnabled"
+                  active-text="启用"
+                  inactive-text="禁用"
+                  :disabled="isExecuting"
+                />
+                <span class="form-help-text">
+                  启用后，输入mac:格式的地址将自动执行工作流
+                </span>
+              </el-form-item>
+              
+              <!-- 重试配置选项 -->
+              <el-form-item label="重试配置">
+                <div class="retry-config">
+                  <el-input-number
+                    v-model="retryConfig.maxRetries"
+                    :min="1"
+                    :max="10"
+                    :disabled="isExecuting"
+                    controls-position="right"
+                    size="small"
+                    style="width: 120px;"
+                  />
+                  <span class="config-label">最大重试次数</span>
+                  
+                  <el-input-number
+                    v-model="retryConfig.responseTimeout"
+                    :min="1000"
+                    :max="30000"
+                    :step="1000"
+                    :disabled="isExecuting"
+                    controls-position="right"
+                    size="small"
+                    style="width: 120px; margin-left: 20px;"
+                  />
+                  <span class="config-label">响应超时(ms)</span>
+                </div>
               </el-form-item>
               
               <el-form-item>
@@ -306,13 +361,18 @@ import {
   Clock,
   Edit,
   Key,
-  RefreshLeft
+  RefreshLeft,
+  Download
 } from '@element-plus/icons-vue'
 import { webSerialService } from '@/services/webSerial'
+import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import { getAllCommands, type SavedCommand } from '@/api/commands'
 import { testResultsAPI, type SaveTestResultRequest } from '@/api/testResults'
+import router from '@/router'
 
+// 连接store
+const connectionStore = useConnectionStore()
 // 通信store
 const communicationStore = useCommunicationStore()
 
@@ -324,9 +384,18 @@ const form = ref({
   macAddress: ''
 })
 
+// 自动执行设置
+const autoExecuteEnabled = ref(true)
+
 // SN表单数据
 const snForm = ref({
   serialNumber: ''
+})
+
+// 重试配置
+const retryConfig = ref({
+  maxRetries: 3,        // 最大重试次数
+  responseTimeout: 5000 // 响应超时时间(ms)
 })
 
 // 加载状态
@@ -335,11 +404,17 @@ const isLoadingCommands = ref(false)
 // SN写入状态
 const isWritingSN = ref(false)
 
+// 导出状态
+const isExporting = ref(false)
+
 // 执行状态
 const isExecuting = ref(false)
 const currentStepIndex = ref(-1)
 const executionLogs = ref<ExecutionLog[]>([])
 const shouldStop = ref(false)
+
+// 输入框引用
+const macAddressInputRef = ref()
 
 // 测试结果状态
 const testResult = ref<TestResult | null>(null)
@@ -384,8 +459,7 @@ interface TestItemResult {
 
 // 计算属性
 const isSerialConnected = computed(() => {
-  const connectedSerials = webSerialService.getConnectedSerials()
-  return connectedSerials.length > 0
+  return connectionStore.isConnected
 })
 
 const progressPercentage = computed(() => {
@@ -442,7 +516,129 @@ const replaceMacAddress = (command: string, macAddress: string) => {
   // 先截断到第一个"%"符号
   const truncatedCommand = command.split('%')[0]
   // 然后替换MAC地址占位符
-  return truncatedCommand.replace(/\$\{mac:\}/g, macAddress)
+  return truncatedCommand.replace(/\$\{mac\}/g, macAddress)
+}
+
+// 期望响应匹配工具函数
+const matchesExpectedResponse = (actualResponse: string, expectedResponse: string): boolean => {
+  if (!actualResponse || !expectedResponse) return false
+  
+  // 标准化处理：去除首尾空白，统一换行符
+  const normalizedActual = actualResponse.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const normalizedExpected = expectedResponse.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  
+  // 精确匹配
+  if (normalizedActual === normalizedExpected) return true
+  
+  // 包含匹配
+  if (normalizedActual.includes(normalizedExpected)) return true
+  
+  return false
+}
+
+// 正则表达式匹配函数
+const matchesExpectedResponseRegex = (actualResponse: string, expectedResponse: string): boolean => {
+  if (!actualResponse || !expectedResponse) return false
+  
+  try {
+    // 标准化处理
+    const normalizedActual = actualResponse.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    const normalizedExpected = expectedResponse.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    
+    // 尝试作为正则表达式匹配
+    const regex = new RegExp(normalizedExpected, 'i') // 不区分大小写
+    return regex.test(normalizedActual)
+  } catch (error) {
+    // 如果正则表达式无效，返回false
+    console.warn('正则表达式匹配失败:', error)
+    return false
+  }
+}
+
+// 带重试机制的命令发送和响应等待
+const sendCommandWithRetryAndWait = async (command: string, cmd: SavedCommand, maxRetries: number = 3, responseTimeout: number = 5000): Promise<any> => {
+  let lastError: Error | null = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`发送命令尝试 ${attempt}/${maxRetries}: ${command}`)
+      
+      // 检查串口连接状态
+      if (!connectionStore.isConnected) {
+        throw new Error('没有连接的串口')
+      }
+      
+      // 检查特定串口是否连接
+      if (cmd.target_serial_id && !webSerialService.isSerialConnected(cmd.target_serial_id)) {
+        throw new Error(`串口 ${cmd.target_serial_id} 未连接`)
+      }
+
+      // 使用Web Serial API发送命令并等待响应
+      const response = await webSerialService.sendCommandAndWaitResponse(
+        command, 
+        responseTimeout,
+        cmd.target_serial_id
+      )
+      
+      if (response && response.received_data) {
+        console.log(`命令 ${command} 发送成功并收到响应 (尝试 ${attempt})`)
+        
+        // 检查期望响应匹配
+        if (cmd.expected_response && cmd.expected_response.trim()) {
+          const matchesExpected = matchesExpectedResponse(response.received_data, cmd.expected_response) || 
+                                 matchesExpectedResponseRegex(response.received_data, cmd.expected_response)
+          
+          if (matchesExpected) {
+            console.log('期望响应匹配成功')
+            return {
+              ...response,
+              matchesExpected: true
+            }
+          } else {
+            console.warn(`期望响应匹配失败 (尝试 ${attempt}/${maxRetries})`)
+            console.warn('期望:', cmd.expected_response)
+            console.warn('实际:', response.received_data)
+            
+            // 如果不是最后一次尝试，继续重试
+            if (attempt < maxRetries) {
+              lastError = new Error(`期望响应匹配失败: 期望 "${cmd.expected_response}", 实际 "${response.received_data}"`)
+              continue
+            } else {
+              // 最后一次尝试，返回不匹配的结果
+              return {
+                ...response,
+                matchesExpected: false
+              }
+            }
+          }
+        } else {
+          // 没有期望响应，只要有响应就算成功
+          return {
+            ...response,
+            matchesExpected: true
+          }
+        }
+      } else {
+        // 没有收到响应，继续重试
+        console.warn(`命令发送后 ${responseTimeout}ms 内未收到响应 (尝试 ${attempt}/${maxRetries})`)
+        lastError = new Error(`命令发送后 ${responseTimeout}ms 内未收到响应`)
+      }
+      
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`命令发送失败 (尝试 ${attempt}/${maxRetries}):`, error)
+    }
+    
+    // 如果不是最后一次尝试，等待后继续重试
+    if (attempt < maxRetries) {
+      console.log(`等待 1 秒后重试...`)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  // 所有重试都失败了
+  console.error(`命令发送失败，已重试 ${maxRetries} 次:`, lastError)
+  throw lastError || new Error('命令发送失败')
 }
 
 // 显示通知对话框
@@ -481,23 +677,50 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
   let userChoice: boolean | undefined = undefined
 
   try {
-    // 检查串口连接状态
-    if (cmd.target_serial_id && !webSerialService.isSerialConnected(cmd.target_serial_id)) {
-      throw new Error(`串口 ${cmd.target_serial_id} 未连接`)
-    }
-
     // 替换MAC地址
     const finalCommand = replaceMacAddress(cmd.command, form.value.macAddress)
     console.log('finalCommand', finalCommand);
     
-    // 使用Web Serial API发送命令
-    const response = await communicationStore.sendATCommand(
-      finalCommand, 
-      cmd.target_serial_id
-    )
+    // 使用带重试机制的命令发送和响应等待
+    const response = await sendCommandWithRetryAndWait(finalCommand, cmd, retryConfig.value.maxRetries, retryConfig.value.responseTimeout)
+    
+    // 手动添加发送日志到通信store
+    communicationStore.addLog({
+      type: 'at',
+      direction: 'sent',
+      data: finalCommand,
+      description: `发送指令 (串口#${cmd.target_serial_id})`,
+      success: true,
+      serial_id: cmd.target_serial_id
+    })
+    
+    // 手动添加接收日志到通信store
+    if (response.received_data && response.received_data.trim()) {
+      communicationStore.addLog({
+        type: 'at',
+        direction: 'received',
+        data: response.received_data,
+        description: `接收响应 (串口#${cmd.target_serial_id})`,
+        success: true,
+        serial_id: cmd.target_serial_id
+      })
+    }
     
     log.response = response.received_data
     log.status = 'success'
+    
+    // 检查是否匹配期望响应
+    if (response.matchesExpected === false) {
+      console.warn('响应不匹配期望值:', {
+        expected: cmd.expected_response,
+        actual: response.received_data
+      })
+    } else {
+      console.log('响应匹配期望值:', {
+        expected: cmd.expected_response,
+        actual: response.received_data
+      })
+    }
     
   } catch (error) {
     log.error = error instanceof Error ? error.message : '未知错误'
@@ -545,12 +768,25 @@ const createTestItemResult = (cmd: SavedCommand, log: ExecutionLog): TestItemRes
   } else {
     // 没有通知的测试项，比较预期响应
     if (expectedResponse) {
-      isOk = actualResponse.includes(expectedResponse.trim())
+      // 使用与sendCommandWithRetryAndWait相同的匹配逻辑
+      isOk = matchesExpectedResponse(actualResponse, expectedResponse) || 
+             matchesExpectedResponseRegex(actualResponse, expectedResponse)
       reason = isOk ? 'expected_match' : 'expected_mismatch'
+      console.log('期望响应检查:', {
+        expected: expectedResponse,
+        actual: actualResponse,
+        isOk: isOk,
+        reason: reason
+      })
     } else {
       // 没有预期响应，只要有响应就算OK
       isOk = actualResponse.length > 0
       reason = isOk ? 'has_response' : 'no_response'
+      console.log('无期望响应检查:', {
+        actual: actualResponse,
+        isOk: isOk,
+        reason: reason
+      })
     }
   }
 
@@ -621,8 +857,7 @@ const saveTestResultToBackend = async () => {
 
 // 检查串口连接状态
 const checkSerialConnection = () => {
-  const connectedSerials = webSerialService.getConnectedSerials()
-  if (connectedSerials.length === 0) {
+  if (!connectionStore.isConnected) {
     ElMessage.error('没有连接的串口，请先在串口配置页面连接串口设备')
     return false
   }
@@ -630,14 +865,20 @@ const checkSerialConnection = () => {
 }
 
 // 刷新串口连接状态
-const refreshSerialStatus = () => {
-  // 触发响应式更新
-  const connectedSerials = webSerialService.getConnectedSerials()
-  console.log('当前连接的串口:', connectedSerials)
-  if (connectedSerials.length > 0) {
-    ElMessage.success(`检测到 ${connectedSerials.length} 个已连接的串口`)
-  } else {
-    ElMessage.warning('没有检测到已连接的串口')
+const refreshSerialStatus = async () => {
+  try {
+    // 使用 connectionStore 检查状态
+    await connectionStore.checkStatus()
+    const connectedSerials = connectionStore.connectedSerials
+    console.log('当前连接的串口:', connectedSerials)
+    if (connectedSerials.length > 0) {
+      ElMessage.success(`检测到 ${connectedSerials.length} 个已连接的串口`)
+    } else {
+      ElMessage.warning('没有检测到已连接的串口')
+    }
+  } catch (error) {
+    console.error('刷新串口状态失败:', error)
+    ElMessage.error('刷新串口状态失败')
   }
 }
 
@@ -722,8 +963,11 @@ const executeWorkflow = async () => {
     await saveTestResultToBackend()
     
     // 显示测试结果摘要
-    showTestResultSummary()
+    await showTestResultSummary()
     console.log(testResult.value);
+    
+    // 清空MAC地址
+    form.value.macAddress = ""
     
     
   } catch (error) {
@@ -734,7 +978,7 @@ const executeWorkflow = async () => {
 }
 
 // 显示测试结果摘要
-const showTestResultSummary = () => {
+const showTestResultSummary = async () => {
   if (!testResult.value) return
   
   const { totalTests, passedTests, failedTests, skippedTests } = testResult.value
@@ -749,20 +993,37 @@ const showTestResultSummary = () => {
   const resultTitle = isSuccess ? '测试成功' : '测试失败'
   const resultIcon = isSuccess ? '✅' : '❌'
   
-  ElMessageBox.alert(
-    `${resultIcon} ${resultTitle}！\n\n` +
-    `MAC地址: ${testResult.value.macAddress}\n` +
-    `总测试数: ${totalTests}\n` +
-    `通过: ${passedTests}\n` +
-    `失败: ${failedTests}\n` +
-    `跳过: ${skippedTests}\n` +
-    `耗时: ${duration}秒`,
-    resultTitle,
-    {
-      confirmButtonText: '确定',
-      type: resultType
-    }
-  )
+  try {
+    await ElMessageBox.alert(
+      `${resultIcon} ${resultTitle}！<br/><br/>` +
+      `MAC地址: ${testResult.value.macAddress}<br/>` +
+      `总测试数: ${totalTests}<br/>` +
+      `通过: ${passedTests}<br/>` +
+      `失败: ${failedTests}<br/>` +
+      `跳过: ${skippedTests}<br/>` +
+      `耗时: ${duration}秒`,
+      resultTitle,
+      {
+        confirmButtonText: '确定',
+        type: resultType,
+        dangerouslyUseHTMLString: true
+      }
+    )
+    
+    // 用户点击确定后，聚焦到MAC地址输入框
+    setTimeout(() => {
+      if (macAddressInputRef.value) {
+        macAddressInputRef.value.focus()
+      }
+    }, 100)
+  } catch (error) {
+    // 用户可能按ESC或其他方式关闭对话框，也聚焦到输入框
+    setTimeout(() => {
+      if (macAddressInputRef.value) {
+        macAddressInputRef.value.focus()
+      }
+    }, 100)
+  }
 }
 
 // 停止执行
@@ -850,10 +1111,39 @@ const writeSerialNumber = async () => {
     }
 
     // 发送16进制命令到串口（假设使用串口ID 1）
-    const response = await communicationStore.sendRawData(finalCommand, 1)
+    await webSerialService.sendRawData(finalCommand, 1)
     
-    ElMessage.success(`SN序列号写入成功: ${actualSN} => ${response.received_data}`)
-    console.log('SN写入响应:', response.received_data)
+    // 手动添加发送日志到通信store
+    communicationStore.addLog({
+      type: 'raw',
+      direction: 'sent',
+      data: finalCommand,
+      description: `发送原始数据 (串口#1)`,
+      success: true,
+      serial_id: 1
+    })
+    
+    // 等待响应
+    const receiveResponse = await webSerialService.receiveData(3000, 1)
+    
+    // 手动添加接收日志到通信store
+    if (receiveResponse.received_data && receiveResponse.received_data.trim()) {
+      communicationStore.addLog({
+        type: 'raw',
+        direction: 'received',
+        data: receiveResponse.received_data,
+        description: `接收响应 (串口#1)`,
+        success: true,
+        serial_id: 1
+      })
+    }
+    verify_response_sn(receiveResponse.received_data, actualSN)
+    if(verify_response_sn(receiveResponse.received_data, actualSN)){
+      ElMessage.success(`SN序列号写入成功: ${actualSN}`)
+    }else{
+      ElMessage.error(`SN序列号写入失败: ${actualSN}`)
+    }
+    console.log('SN写入响应:', receiveResponse.received_data)
     
     
   } catch (error) {
@@ -863,6 +1153,41 @@ const writeSerialNumber = async () => {
     isWritingSN.value = false
   }
 }
+
+
+const verify_response_sn = (hex_sn: string, input_sn: string) => {
+  const paddedSN = input_sn.padStart(12, '0')
+  const hex_sn_header = hex_sn.substring(0, hex_sn.length - 4)
+  const sum_hex = hex_sn.substring(hex_sn.length - 4)
+  const sn = hex_sn.substring(2, 14)
+
+  const reversed_sn = reversing_sn(sn)
+  const checksum = checksum_sn(hex_sn_header)+"03"
+  if(checksum === sum_hex && reversed_sn === paddedSN){
+    return true
+  }
+
+  return false
+}
+
+
+const reversing_sn = (sn: string) => {
+    let reversed_sn = ''
+    for (let i = 0; i < sn.length; i += 2) {
+        const byte = sn.substring(i, i + 2)
+        reversed_sn = byte + reversed_sn
+    }
+    return reversed_sn
+}
+
+const checksum_sn = (hexString: string) => {
+    let sum = 0
+    for (let i = 0; i < hexString.length; i += 2) {
+      sum += parseInt(hexString.substring(i, i + 2), 16)
+    }
+
+    return (sum & 0xFF).toString(16).padStart(2, '0').toUpperCase()
+  }
 
 // 处理SN输入，检测S/N:格式并自动发送
 let snInputTimer: NodeJS.Timeout | null = null
@@ -893,6 +1218,29 @@ const handleSNInput = (value: string) => {
   }
 }
 
+// 检查是否可以执行工作流
+const canExecuteWorkflow = (): boolean => {
+  // 检查是否已经在执行
+  if (isExecuting.value) {
+    ElMessage.warning('工作流正在执行中，请等待完成')
+    return false
+  }
+  
+  // 检查是否有可用的命令
+  if (cmds.value.length === 0) {
+    ElMessage.warning('没有可用的测试命令')
+    return false
+  }
+  
+  // 检查串口连接状态
+  if (!connectionStore.isConnected) {
+    ElMessage.warning('串口未连接，请先连接串口设备')
+    return false
+  }
+  
+  return true
+}
+
 // 处理MAC地址输入，检测mac:格式并自动替换
 let macInputTimer: NodeJS.Timeout | null = null
 const handleMacInput = (value: string) => {
@@ -910,6 +1258,29 @@ const handleMacInput = (value: string) => {
       // 更新MAC地址值
       form.value.macAddress = extractedMac
       console.log('extractedMac', extractedMac);
+      
+      // 检查是否可以执行工作流
+      if (canExecuteWorkflow()) {
+        if (autoExecuteEnabled.value) {
+          // 自动执行模式：直接执行
+          executeWorkflow()
+        } else {
+          // 手动确认模式：询问用户
+          ElMessageBox.confirm(
+            `检测到MAC地址: ${extractedMac}\n是否要自动执行工作流？`,
+            '自动执行确认',
+            {
+              confirmButtonText: '执行',
+              cancelButtonText: '稍后',
+              type: 'info'
+            }
+          ).then(() => {
+            executeWorkflow()
+          }).catch(() => {
+            // 用户取消，不做任何操作
+          })
+        }
+      }
     }, 500) // 500ms防抖
   }
 }
@@ -948,16 +1319,133 @@ const getResultStatusClass = () => {
   }
 }
 
+// 导出所有测试报告
+const exportAllReports = async () => {
+  try {
+    isExporting.value = true
+    
+    // 获取测试结果数据
+    const response = await testResultsAPI.getTestResults({ page_size: 10000 })
+    const testResults = response.results
+    
+    // 生成CSV内容
+    const csvContent = generateCSV(testResults)
+    
+    // 创建Blob并下载，添加BOM以支持Excel正确显示中文
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // 生成文件名
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+    link.download = `test_results_list_${timestamp}.csv`
+    
+    // 触发下载
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // 清理URL对象
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success(`测试结果导出成功，共导出 ${testResults.length} 条记录`)
+    
+  } catch (error) {
+    console.error('导出测试报告失败:', error)
+    ElMessage.error('导出测试报告失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    isExporting.value = false
+  }
+}
+
+// 生成CSV内容
+const generateCSV = (data: any[]) => {
+  if (!data || data.length === 0) {
+    return '测试结果ID,MAC地址,开始时间,结束时间,总测试数,通过数,失败数,跳过数,通过率(%),操作员,工位,设备ID,创建时间,测试状态,耗时(秒)\n暂无数据,,,,,,,,,,,,,数据库中暂无测试结果数据,'
+  }
+  
+  // CSV头部
+  const headers = [
+    '测试结果ID',
+    'MAC地址', 
+    '开始时间',
+    '结束时间',
+    '总测试数',
+    '通过数',
+    '失败数',
+    '跳过数',
+    '通过率(%)',
+    '操作员',
+    '工位',
+    '设备ID',
+    '创建时间',
+    '测试状态',
+    '耗时(秒)'
+  ]
+  
+  // 转义CSV字段的函数
+  const escapeCSVField = (field: any) => {
+    if (field === null || field === undefined) {
+      return ''
+    }
+    const str = String(field)
+    // 如果包含逗号、引号或换行符，需要用引号包围并转义引号
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+  
+  // 生成CSV行
+  const rows = data.map(item => [
+    escapeCSVField(item.id),
+    escapeCSVField(item.mac_address),
+    escapeCSVField(item.start_time ? new Date(item.start_time).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.end_time ? new Date(item.end_time).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.total_tests || 0),
+    escapeCSVField(item.passed_tests || 0),
+    escapeCSVField(item.failed_tests || 0),
+    escapeCSVField(item.skipped_tests || 0),
+    escapeCSVField(item.pass_rate || 0),
+    escapeCSVField(item.operator),
+    escapeCSVField(item.workstation),
+    escapeCSVField(item.device_id),
+    escapeCSVField(item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : ''),
+    escapeCSVField(item.test_status),
+    escapeCSVField(item.duration || 0)
+  ])
+  
+  // 组合CSV内容
+  const csvLines = [headers.map(escapeCSVField).join(','), ...rows.map(row => row.join(','))]
+  return csvLines.join('\n')
+}
+
 // 组件挂载时加载命令和初始化Web Serial API
 onMounted(async () => {
   await loadCommands()
   
-  // 初始化Web Serial API
+  if (!connectionStore.isConnected) {
+    ElMessage.warning('请先连接串口')
+    router.push('/serial-config')
+    return
+  }
+  
+  // 自动选择第一个已连接的串口
+  if (!connectionStore.selectedSerialId && connectionStore.connectedSerials.length > 0) {
+    connectionStore.selectSerial(connectionStore.connectedSerials[0].serial_id)
+  }
+  
+
+  
+  // 初始化Web Serial API（设置数据接收回调）
   try {
     await communicationStore.initializeWebSerial()
+    console.log('Web Serial API initialized successfully')
   } catch (error) {
     console.error('Web Serial API初始化失败:', error)
-    ElMessage.warning('Web Serial API初始化失败，请确保已连接串口设备')
+    ElMessage.error('Web Serial API初始化失败')
   }
 })
 
@@ -967,6 +1455,34 @@ onMounted(async () => {
 .workflow-container {
   height: 100%;
   background: linear-gradient(135deg, #f5f7fa 0%, #f8fafc 100%);
+}
+
+.export-section {
+  margin-bottom: 20px;
+  text-align: center;
+  padding: 16px 0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+}
+
+.export-all-btn {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+  min-width: 200px;
+}
+
+.export-all-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(103, 194, 58, 0.4);
+}
+
+.export-all-btn:active {
+  transform: translateY(0);
 }
 
 .page-content {
@@ -1176,6 +1692,12 @@ onMounted(async () => {
 .mac-input {
   font-family: 'Courier New', monospace;
   font-size: 16px;
+}
+
+.form-help-text {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
 }
 
 .execute-btn, .stop-btn {
@@ -1590,6 +2112,20 @@ onMounted(async () => {
     width: 100%;
     margin: 0;
   }
+}
+
+/* 重试配置样式 */
+.retry-config {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.config-label {
+  font-size: 14px;
+  color: #606266;
+  white-space: nowrap;
 }
 
 @media (max-width: 480px) {

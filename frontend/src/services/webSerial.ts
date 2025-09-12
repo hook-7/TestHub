@@ -59,6 +59,7 @@ export class WebSerialService {
   private writers: Map<number, WritableStreamDefaultWriter> = new Map()
   private isReading: Map<number, boolean> = new Map()
   private dataBuffers: Map<number, string> = new Map() // 数据缓冲区
+  private dataTimeouts: Map<number, any> = new Map() // 定时器ID映射
 
 
   constructor() {
@@ -177,6 +178,9 @@ export class WebSerialService {
       this.startReading(serialId, port).catch(error => {
         console.error(`Error starting reading for serial ${serialId}:`, error)
       })
+      
+      // 确保读取状态正确设置
+      this.isReading.set(serialId, true)
 
       console.log(`Serial port connected: ${actualPort} at ${config.baudrate} baud with serial_id ${serialId}`)
       
@@ -589,7 +593,18 @@ export class WebSerialService {
         if (done) break
 
         const data = new TextDecoder().decode(value)
+        
+        // 打印原始接收数据详细信息
+        console.log(`🔍 RAW DATA - Serial ${serialId}:`, {
+          raw: data,
+          rawLength: data.length,
+          rawBytes: Array.from(data.split('').map(c => c.charCodeAt(0))),
+          hasNewline: data.includes('\n'),
+          hasCarriageReturn: data.includes('\r'),
+          hasBoth: data.includes('\r\n')
+        });
         console.log(`Serial ${serialId} raw data received:`, data);
+        console.log(`🔍 DEBUG: Serial ${serialId} data processing started`);
         
         // 将数据添加到缓冲区
         const currentBuffer = this.dataBuffers.get(serialId) || ''
@@ -597,14 +612,18 @@ export class WebSerialService {
         this.dataBuffers.set(serialId, newBuffer)
         console.log(`Serial ${serialId} buffer updated:`, newBuffer)
         
-        // 检查是否有完整的消息（以换行符结尾）
-        const lines = newBuffer.split('\r\n')
-        if (lines.length > 1) {
+        // 检查是否有回调函数
+        const callback = this.dataCallbacks.get(serialId)
+        console.log(`Serial ${serialId} callback status:`, callback ? 'exists' : 'missing')
+        
+        // 检查是否有完整的消息（以\r\n结尾）
+        if (newBuffer.endsWith('\r\n')) {
           // 处理完整的行
+          const lines = newBuffer.split('\r\n')
           for (let i = 0; i < lines.length - 1; i++) {
             const line = lines[i].trim()
             if (line) {
-              console.log(`Serial ${serialId} received line:`, line)
+              console.log(`Serial ${serialId} received complete line:`, line)
               const callback = this.dataCallbacks.get(serialId)
               if (callback) {
                 console.log(`Calling callback for serial ${serialId}`)
@@ -615,37 +634,52 @@ export class WebSerialService {
             }
           }
           
-          // 保留最后一个不完整的行
-          this.dataBuffers.set(serialId, lines[lines.length - 1])
+          // 清空缓冲区
+          this.dataBuffers.set(serialId, '')
         } else {
-          // 如果没有换行符，检查是否有其他分隔符（如\r）
-          const crLines = newBuffer.split('\r')
-          if (crLines.length > 1) {
-            for (let i = 0; i < crLines.length - 1; i++) {
-              const line = crLines[i].trim()
-              if (line) {
-                console.log(`Serial ${serialId} received line (CR):`, line)
-                const callback = this.dataCallbacks.get(serialId)
-                if (callback) {
-                  console.log(`Calling callback for serial ${serialId}`)
-                  callback(line, serialId)
-                } else {
-                  console.warn(`No callback set for serial ${serialId}`)
-                }
+          // 如果没有\r\n结尾，清除之前的定时器并设置新的100ms定时器
+          if (this.dataTimeouts && this.dataTimeouts.has(serialId)) {
+            clearTimeout(this.dataTimeouts.get(serialId))
+          }
+          
+          const timeoutId = setTimeout(() => {
+            const currentBuffer = this.dataBuffers.get(serialId) || ''
+            const trimmedBuffer = currentBuffer.trim()
+            if (trimmedBuffer && trimmedBuffer.length > 0) {
+              console.log(`Serial ${serialId} processing data after 100ms timeout:`, trimmedBuffer)
+              const callback = this.dataCallbacks.get(serialId)
+              if (callback) {
+                console.log(`Calling callback for serial ${serialId} (timeout)`)
+                callback(trimmedBuffer, serialId)
+                // 清空缓冲区
+                this.dataBuffers.set(serialId, '')
+              } else {
+                console.warn(`No callback set for serial ${serialId}`)
               }
             }
-            this.dataBuffers.set(serialId, crLines[crLines.length - 1])
+            // 清除定时器记录
+            if (this.dataTimeouts) {
+              this.dataTimeouts.delete(serialId)
+            }
+          }, 100) // 100ms延迟
+          
+          // 保存定时器ID
+          if (!this.dataTimeouts) {
+            this.dataTimeouts = new Map()
           }
+          this.dataTimeouts.set(serialId, timeoutId)
         }
         
         // 防止缓冲区无限增长
         if (newBuffer.length > 1000) {
+          console.warn(`Serial ${serialId} buffer too large, forcing flush`)
           const callback = this.dataCallbacks.get(serialId)
           if (callback) {
             callback(newBuffer, serialId)
           }
           this.dataBuffers.set(serialId, '')
         }
+        
       }
     } catch (error) {
       console.error(`Error reading from serial ${serialId}:`, error)
