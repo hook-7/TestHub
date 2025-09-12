@@ -94,6 +94,7 @@
             <el-form :model="form" label-width="120px" class="mac-form">
               <el-form-item label="MAC地址" required>
                 <el-input
+                  ref="macAddressInputRef"
                   v-model="form.macAddress"
                   placeholder="请输入MAC地址，如：026501123456 或 mac:026501123456"
                   clearable
@@ -482,6 +483,9 @@ const executionLogs = ref<ExecutionLog[]>([])
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const shouldStop = ref(false)
 
+// 输入框引用
+const macAddressInputRef = ref()
+
 // 测试结果状态
 const testResult = ref<TestResult | null>(null)
 
@@ -589,6 +593,13 @@ const waitForWebSocketResponse = (cmd: SavedCommand, timeout: number = 5000): Pr
     }, timeout)
     
     const checkResponse = () => {
+      // 检查是否需要停止执行
+      if (shouldStop.value) {
+        clearTimeout(timeoutId)
+        reject(new Error('执行已停止'))
+        return
+      }
+      
       // 检查是否有新的响应消息 - 检查所有消息而不是只检查最近5条
       const allMessages = wsStore.messageHistory
       
@@ -745,6 +756,11 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
     if (wsStore.isConnected) {
       console.log('使用WebSocket发送命令:', finalCommand)
       
+      // 检查是否需要停止执行
+      if (shouldStop.value) {
+        throw new Error('执行已停止')
+      }
+      
       // 发送WebSocket命令
       const success = await wsStore.sendCommand(finalCommand, cmd.target_serial_id)
       
@@ -762,6 +778,11 @@ const executeCommand = async (cmd: SavedCommand): Promise<ExecutionLog> => {
       }
     } else {
       console.log('使用HTTP发送命令:', finalCommand)
+      
+      // 检查是否需要停止执行
+      if (shouldStop.value) {
+        throw new Error('执行已停止')
+      }
       
       // 使用HTTP请求发送命令
       response = await serialAPI.sendATCommand(
@@ -994,9 +1015,11 @@ const executeWorkflow = async () => {
     await saveTestResultToBackend()
     
     // 显示测试结果摘要
-    showTestResultSummary()
+    await showTestResultSummary()
     console.log(testResult.value);
     
+    // 清空MAC地址
+    form.value.macAddress = ""
     
   } catch (error) {
     ElMessage.error('工作流执行失败: ' + (error instanceof Error ? error.message : '未知错误'))
@@ -1006,7 +1029,7 @@ const executeWorkflow = async () => {
 }
 
 // 显示测试结果摘要
-const showTestResultSummary = () => {
+const showTestResultSummary = async () => {
   if (!testResult.value) return
   
   const { totalTests, passedTests, failedTests, skippedTests } = testResult.value
@@ -1021,20 +1044,37 @@ const showTestResultSummary = () => {
   const resultTitle = isSuccess ? '测试成功' : '测试失败'
   const resultIcon = isSuccess ? '✅' : '❌'
   
-  ElMessageBox.alert(
-    `${resultIcon} ${resultTitle}！\n\n` +
-    `MAC地址: ${testResult.value.macAddress}\n` +
-    `总测试数: ${totalTests}\n` +
-    `通过: ${passedTests}\n` +
-    `失败: ${failedTests}\n` +
-    `跳过: ${skippedTests}\n` +
-    `耗时: ${duration}秒`,
-    resultTitle,
-    {
-      confirmButtonText: '确定',
-      type: resultType
-    }
-  )
+  try {
+    await ElMessageBox.alert(
+      `${resultIcon} ${resultTitle}！<br/><br/>` +
+      `MAC地址: ${testResult.value.macAddress}<br/>` +
+      `总测试数: ${totalTests}<br/>` +
+      `通过: ${passedTests}<br/>` +
+      `失败: ${failedTests}<br/>` +
+      `跳过: ${skippedTests}<br/>` +
+      `耗时: ${duration}秒`,
+      resultTitle,
+      {
+        confirmButtonText: '确定',
+        type: resultType,
+        dangerouslyUseHTMLString: true
+      }
+    )
+    
+    // 用户点击确定后，聚焦到MAC地址输入框
+    setTimeout(() => {
+      if (macAddressInputRef.value) {
+        macAddressInputRef.value.focus()
+      }
+    }, 100)
+  } catch (error) {
+    // 用户可能按ESC或其他方式关闭对话框，也聚焦到输入框
+    setTimeout(() => {
+      if (macAddressInputRef.value) {
+        macAddressInputRef.value.focus()
+      }
+    }, 100)
+  }
 }
 
 // 停止执行
