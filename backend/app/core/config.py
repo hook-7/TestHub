@@ -38,15 +38,6 @@ class Settings(BaseSettings):
     ]
     
     
-    SERIAL_TIMEOUT: float = 0.5  
-    SERIAL_BAUDRATE: int = 115200  
-    SERIAL_BYTESIZE: int = 8
-    SERIAL_PARITY: str = "N"  # None
-    SERIAL_STOPBITS: int = 1
-    
-    # 串口自动检测配置
-    AUTO_BAUDRATE_LIST: List[int] = [115200, 57600, 38400, 19200, 9600, 4800]  # 按优先级排序
-    
     # Logging settings
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

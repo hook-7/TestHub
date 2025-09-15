@@ -16,20 +16,7 @@ class ErrorCode(Enum):
     PARAM_ERROR = 400
     SYSTEM_ERROR = 500
     
-    # 串口相关业务错误 (1000-1099)
-    SERIAL_NO_PORTS = 1001
-    SERIAL_CONNECT_FAILED = 1002
-    SERIAL_DISCONNECT_FAILED = 1003
-    SERIAL_NOT_CONNECTED = 1004
-    SERIAL_READ_FAILED = 1005
-    SERIAL_WRITE_FAILED = 1006
-    SERIAL_INVALID_DATA = 1007
-    SERIAL_TIMEOUT = 1008
-    SERIAL_DEVICE_ERROR = 1009
-    
     # 配置错误 (1200-1299)
-    CONFIG_INVALID_PORT = 1201
-    CONFIG_INVALID_BAUDRATE = 1202
     CONFIG_INVALID_PARAMS = 1203
     
     # 会话相关错误 (1300-1399)
@@ -49,9 +36,6 @@ class HMIException(Exception):
         super().__init__(self.message)
 
 
-class SerialException(HMIException):
-    """串口相关异常"""
-    pass
 
 
 class ConfigException(HMIException):
@@ -72,20 +56,7 @@ ERROR_MESSAGES = {
     ErrorCode.PARAM_ERROR: "参数错误",
     ErrorCode.SYSTEM_ERROR: "系统内部错误",
     
-    # 串口错误
-    ErrorCode.SERIAL_NO_PORTS: "未检测到可用串口",
-    ErrorCode.SERIAL_CONNECT_FAILED: "串口连接失败",
-    ErrorCode.SERIAL_DISCONNECT_FAILED: "串口断开失败", 
-    ErrorCode.SERIAL_NOT_CONNECTED: "串口未连接",
-    ErrorCode.SERIAL_READ_FAILED: "串口读取失败",
-    ErrorCode.SERIAL_WRITE_FAILED: "串口写入失败",
-    ErrorCode.SERIAL_INVALID_DATA: "无效的串口数据格式",
-    ErrorCode.SERIAL_TIMEOUT: "串口通信超时",
-    ErrorCode.SERIAL_DEVICE_ERROR: "串口设备错误",
-    
     # 配置错误
-    ErrorCode.CONFIG_INVALID_PORT: "无效的串口配置",
-    ErrorCode.CONFIG_INVALID_BAUDRATE: "无效的波特率配置",
     ErrorCode.CONFIG_INVALID_PARAMS: "无效的配置参数",
     
     # 会话错误
