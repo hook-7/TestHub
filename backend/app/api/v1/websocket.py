@@ -19,8 +19,6 @@ from app.schemas.websocket import (
     SendMessageRequest,
     SendMessageResponse
 )
-from app.services.serial_service import serial_service
-from app.drivers.serial_driver import serial_driver
 from app.core.response import APIResponse
 
 logger = logging.getLogger(__name__)
@@ -32,41 +30,7 @@ class ConnectionManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self._setup_serial_data_callback()
     
-    def _setup_serial_data_callback(self):
-        """设置串口数据回调函数"""
-        async def serial_data_callback(serial_id: int, data: bytes):
-            """串口数据回调函数，将数据推送给所有WebSocket客户端"""
-            try:
-                # 将字节数据转换为可读格式
-                data_text = data.decode('utf-8', errors='ignore')
-                data_hex = data.hex().upper()
-                
-                # 构造实时数据消息
-                realtime_msg = WSResponseMessage(
-                    type=WSMessageType.REALTIME_DATA,
-                    message=data_text,
-                    serial_id=serial_id,
-                    data={
-                        "raw_data": data_text,
-                        "hex_data": data_hex,
-                        "timestamp": datetime.now().isoformat(),
-                        "serial_id": serial_id
-                    },
-                    timestamp=datetime.now().isoformat(),
-                    success=True
-                )
-                
-                # 广播给所有连接的客户端
-                await self.broadcast(realtime_msg.model_dump())
-                
-            except Exception as e:
-                logger.error(f"Error processing serial data callback: {e}")
-        
-        # 设置回调函数
-        serial_driver.set_data_callback(serial_data_callback)
-        logger.info("Serial data callback configured for real-time WebSocket broadcasting")
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """接受WebSocket连接"""
@@ -137,32 +101,25 @@ class ConnectionManager:
                 return
             
             command_text = data.get("command", "")
-            serial_id = data.get("serial_id")  # 获取目标串口ID
             if not command_text:
                 error_msg = WSErrorMessage(
                     error="命令不能为空",
                     code=400,
-                    serial_id=serial_id,
                     timestamp=datetime.now().isoformat()
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
                 return
             
-            # 执行AT指令通过串口服务
+            # 简单的命令响应（不再通过串口）
             try:
-                # 发送完整的指令字符串到指定串口
-                result = await serial_service.send_at_command(command_text, serial_id)
-                
                 # 构造成功响应
                 response_msg = WSResponseMessage(
                     type=WSMessageType.RESPONSE,
-                    message=result.received_data,
-                    serial_id=result.serial_id,  # 包含串口ID信息
+                    message=f"命令已接收: {command_text}",
                     data={
-                        "sent_data": result.sent_data,
-                        "received_data": result.received_data,
-                        "timestamp": result.timestamp,
-                        "serial_id": result.serial_id
+                        "sent_data": command_text,
+                        "received_data": f"命令已接收: {command_text}",
+                        "timestamp": datetime.now().isoformat()
                     },
                     timestamp=datetime.now().isoformat(),
                     success=True
@@ -170,12 +127,11 @@ class ConnectionManager:
                 
                 await self.send_personal_message(response_msg.model_dump(), websocket)
                 
-            except Exception as serial_error:
-                logger.error(f"串口指令执行失败: {str(serial_error)}")
+            except Exception as error:
+                logger.error(f"命令处理失败: {str(error)}")
                 error_msg = WSErrorMessage(
-                    error=f"指令执行失败: {str(serial_error)}",
+                    error=f"命令处理失败: {str(error)}",
                     code=500,
-                    serial_id=serial_id,
                     timestamp=datetime.now().isoformat()
                 )
                 await self.send_personal_message(error_msg.model_dump(), websocket)
@@ -251,36 +207,8 @@ async def websocket_status():
 
 
 
-@router.post("/start-realtime-reading/{serial_id}", response_model=APIResponse)
-async def start_realtime_reading(serial_id: int):
-    """启动指定串口的实时数据读取"""
-    try:
-        await serial_driver.start_realtime_reading(serial_id)
-        return APIResponse.success(
-            data={"serial_id": serial_id, "status": "started"},
-            msg=f"串口 {serial_id} 实时读取已启动"
-        )
-    except Exception as e:
-        logger.error(f"启动实时读取失败: {e}")
-        return APIResponse.error(code=500, msg=f"启动实时读取失败: {str(e)}")
-
-
-@router.post("/stop-realtime-reading/{serial_id}", response_model=APIResponse)
-async def stop_realtime_reading(serial_id: int):
-    """停止指定串口的实时数据读取"""
-    try:
-        await serial_driver.stop_realtime_reading(serial_id)
-        return APIResponse.success(
-            data={"serial_id": serial_id, "status": "stopped"},
-            msg=f"串口 {serial_id} 实时读取已停止"
-        )
-    except Exception as e:
-        logger.error(f"停止实时读取失败: {e}")
-        return APIResponse.error(code=500, msg=f"停止实时读取失败: {str(e)}")
-
-
 @router.post("/send-message", response_model=APIResponse)
-async def send_message_to_user(message_request: SendMessageRequest):# 做测试使用
+async def send_message_to_user(message_request: SendMessageRequest):
     """
     向所有连接的客户端发送WebSocket消息
 
@@ -291,19 +219,14 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
         APIResponse: 操作结果
     """
     try:
-        # 检查串口连接状态
-        connection_status = await serial_service.get_connection_status()
-        logger.info(f"Serial connection status before send: {connection_status}")
-
-        result = await serial_service.send_at_command(message_request.message, message_request.serial_id)
-        logger.info(f"Serial command result: {result}")
-        
         # 构造WebSocket消息
         ws_message = WSResponseMessage(
             type=message_request.message_type,
             message=message_request.message,
-            serial_id=result.serial_id,
-            data=result.model_dump(),
+            data={
+                "message": message_request.message,
+                "timestamp": datetime.now().isoformat()
+            },
             timestamp=datetime.now().isoformat(),
             success=True
         )
@@ -317,8 +240,7 @@ async def send_message_to_user(message_request: SendMessageRequest):# 做测试�
             return APIResponse.success(
                 data=SendMessageResponse(
                     success=True,
-                    message="消息发送成功",
-                    serial_id=result.serial_id
+                    message="消息发送成功"
                 ).model_dump(),
                 msg="WebSocket消息发送成功"
             )
