@@ -1,0 +1,82 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI (uv run)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/start.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "ENVIRONMENT": "development"
+            },
+            "args": [],
+            "justMyCode": false
+        },
+        {
+            "name": "FastAPI (uvicorn)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--host", "0.0.0.0",
+                "--port", "8000",
+                "--reload"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "ENVIRONMENT": "development"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "运行测试",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "app/tests/",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "ENVIRONMENT": "test"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "启动前端开发服务器",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/web/node_modules/.bin/vite",
+            "args": [
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "3000"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/web",
+            "env": {
+                "NODE_ENV": "development"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "启动全栈应用",
+            "configurations": [
+                "FastAPI (uvicorn)",
+                "启动前端开发服务器"
+            ],
+            "stopAll": true
+        }
+    ]
+}
