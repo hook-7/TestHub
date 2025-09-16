@@ -48,30 +48,7 @@ async def save_test_result(
         return APIResponse.error(code=500, msg=f"保存测试结果失败: {str(e)}")
 
 
-@router.get(
-    "/{test_result_id}",
-    response_model=APIResponse,
-    summary="获取测试结果详情",
-    description="根据ID获取测试结果详情",
-    responses={
-        200: {"description": "获取成功"},
-        404: {"description": "测试结果不存在"},
-        500: {"description": "系统错误"}
-    }
-)
-async def get_test_result_detail(
-    test_result_id: str,
-    db_session: Session = Depends(get_session)
-):
-    """获取测试结果详情"""
-    try:
-        result = await test_result_service.get_test_result_by_id(db_session, test_result_id)
-        if not result:
-            return APIResponse.error(code=404, msg="测试结果不存在")
-        return APIResponse.success(data=result, msg="获取测试结果详情成功")
-    except Exception as e:
-        logger.error(f"获取测试结果详情失败: {e}")
-        return APIResponse.error(code=500, msg=f"获取测试结果详情失败: {str(e)}")
+
 
 
 @router.get(
@@ -86,7 +63,7 @@ async def get_test_result_detail(
 )
 async def get_test_results(
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页大小"),
+    page_size: int = Query(20, ge=1, le=10000, description="每页大小"),
     mac_address: Optional[str] = Query(None, description="MAC地址筛选"),
     operator: Optional[str] = Query(None, description="操作员筛选"),
     workstation: Optional[str] = Query(None, description="工位筛选"),
@@ -157,3 +134,28 @@ async def delete_test_result(
     except Exception as e:
         logger.error(f"删除测试结果失败: {e}")
         return APIResponse.error(code=500, msg=f"删除测试结果失败: {str(e)}")
+
+@router.get(
+    "/{test_result_id}",
+    response_model=APIResponse,
+    summary="获取测试结果详情",
+    description="根据ID获取测试结果详情",
+    responses={
+        200: {"description": "获取成功"},
+        404: {"description": "测试结果不存在"},
+        500: {"description": "系统错误"}
+    }
+)
+async def get_test_result_detail(
+    test_result_id: str,
+    db_session: Session = Depends(get_session)
+):
+    """获取测试结果详情"""
+    try:
+        result = await test_result_service.get_test_result_by_id(db_session, test_result_id)
+        if not result:
+            return APIResponse.error(code=404, msg="测试结果不存在")
+        return APIResponse.success(data=result, msg="获取测试结果详情成功")
+    except Exception as e:
+        logger.error(f"获取测试结果详情失败: {e}")
+        return APIResponse.error(code=500, msg=f"获取测试结果详情失败: {str(e)}")
