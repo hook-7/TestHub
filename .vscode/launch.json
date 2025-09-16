@@ -35,27 +35,10 @@
             "justMyCode": false
         },
         {
-            "name": "运行测试",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "pytest",
-            "args": [
-                "app/tests/",
-                "-v"
-            ],
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}",
-                "ENVIRONMENT": "test"
-            },
-            "justMyCode": false
-        },
-        {
             "name": "启动前端开发服务器",
             "type": "node",
             "request": "launch",
-            "program": "${workspaceFolder}/web/node_modules/.bin/vite",
+            "program": "${workspaceFolder}/web/node_modules/vite/bin/vite.js",
             "args": [
                 "--host",
                 "0.0.0.0",

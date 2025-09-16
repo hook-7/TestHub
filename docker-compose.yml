@@ -7,12 +7,9 @@ services:
       dockerfile: Dockerfile
     container_name: testhub-dev
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./data:/app/data
     environment:
       - HMI_ENVIRONMENT=development
-      - HMI_DEBUG=true
-      - HMI_HOST=0.0.0.0
-      - HMI_PORT=8000
     restart: always
