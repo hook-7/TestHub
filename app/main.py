@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.error_handler import setup_exception_handlers
 from app.core.middleware import RequestLoggingMiddleware
-from app.core.config import settings
+from app.core.database import create_db_and_tables
 
 # Setup logging
 setup_logging()
@@ -31,8 +31,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
-    # 创建数据库表
-    from app.core.database import create_db_and_tables
+
     try:
         create_db_and_tables()
         logger.info("Database tables initialized successfully")
