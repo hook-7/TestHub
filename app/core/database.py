@@ -122,66 +122,84 @@ class TestItemResult(SQLModel, table=True):
         from_attributes = True
 
 
-# # 工作流和命令的多对多关联表
-# workflow_commands = Table(
-#     "workflow_commands",
-#     SQLModel.metadata,
-#     Column("workflow_id", ForeignKey("workflows.id"), primary_key=True),
-#     Column("command_id", ForeignKey("commands.id"), primary_key=True),
-#     Column("order_index", Field(default=0, description="命令在工作流中的执行顺序")),
-#     Column("created_at", DateTime(timezone=True), server_default=func.now())
-# )
+# -------------------------
+# 关联表 (多对多关系表)
+# -------------------------
+workflow_commands = Table(
+    "workflow_commands",
+    SQLModel.metadata,
+    Column("workflow_id", ForeignKey("workflows.id"), primary_key=True),
+    Column("command_id", ForeignKey("commands.id"), primary_key=True),
+    Column("order_index", Integer, nullable=False, server_default="0", comment="命令在工作流中的执行顺序"),
+    Column("created_at", DateTime(timezone=True), server_default=func.now())
+)
 
 
-# class Workflow(SQLModel, table=True):
-#     """工作流模型"""
-#     __tablename__ = "workflows"
+# -------------------------
+# 工作流表
+# -------------------------
+class Workflow(SQLModel, table=True):
+    """工作流模型"""
+    __tablename__ = "workflows"
 
-#     id: Optional[str] = Field(default=None, primary_key=True, description="工作流ID")
-#     name: str = Field(description="工作流名称", max_length=200)
-#     description: str = Field(default="", description="工作流描述", max_length=1000)
-#     created_at: datetime = Field(
-#         default_factory=datetime.now,
-#         sa_column=Column(DateTime(timezone=True), server_default=func.now()),
-#         description="创建时间"
-#     )
-#     updated_at: Optional[datetime] = Field(
-#         default=None,
-#         sa_column=Column(DateTime(timezone=True), onupdate=func.now()),
-#         description="更新时间"
-#     )
+    id: UUID = Field(
+        default_factory=uuid4,
+        sa_column=Column(String(36), primary_key=True),
+        description="工作流ID"
+    )
+    name: str = Field(description="工作流名称", max_length=200, index=True)
+    description: str = Field(default="", description="工作流描述", max_length=1000)
 
-#     # 关联关系
-#     commands: List["Command"] = Relationship(back_populates="workflows", link_table=workflow_commands)
-#     variables: List["WorkflowVariable"] = Relationship(back_populates="workflow")
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
+        description="更新时间"
+    )
 
-#     class Config:
-#         from_attributes = True
+    # 关系定义
+    commands: List["Command"] = Relationship(
+        back_populates="workflows",
+        link_model=workflow_commands,
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
+    variables: List["WorkflowVariable"] = Relationship(
+        back_populates="workflow",
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
 
-
-# class WorkflowVariable(SQLModel, table=True):
-#     """工作流变量模型"""
-#     __tablename__ = "workflow_variables"
-
-#     id: Optional[str] = Field(default=None, primary_key=True, description="变量ID")
-#     workflow_id: str = Field(foreign_key="workflows.id", description="工作流ID")
-#     name: str = Field(description="变量名称", max_length=100)
-#     description: str = Field(default="", description="变量描述", max_length=500)
-#     created_at: datetime = Field(
-#         default_factory=datetime.now,
-#         sa_column=Column(DateTime(timezone=True), server_default=func.now()),
-#         description="创建时间"
-#     )
-
-#     # 关联关系
-#     workflow: Optional[Workflow] = Relationship(back_populates="variables")
-
-#     class Config:
-#         from_attributes = True
+    class Config:
+        from_attributes = True
 
 
+# -------------------------
+# 工作流变量表
+# -------------------------
+class WorkflowVariable(SQLModel, table=True):
+    """工作流变量模型"""
+    __tablename__ = "workflow_variables"
 
+    id: UUID = Field(
+        default_factory=uuid4,
+        sa_column=Column(String(36), primary_key=True),
+        description="变量ID"
+    )
+    workflow_id: UUID = Field(
+        foreign_key="workflows.id",
+        description="工作流ID"
+    )
+    name: str = Field(description="变量名称", max_length=100, index=True)
+    description: str = Field(default="", description="变量描述", max_length=500)
 
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        description="创建时间"
+    )
 
+    # 关系定义
+    workflow: Optional[Workflow] = Relationship(back_populates="variables")
 
-
+    class Config:
+        from_attributes = True
