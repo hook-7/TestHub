@@ -38,7 +38,12 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
     # Database settings - 数据库配置
-    DB_NAME: str = Field(default="testhub.db", description="SQLite数据库文件名")
+    DB_TYPE: str = Field(default="postgresql", description="数据库类型: sqlite, postgresql")
+    DB_NAME: str = Field(default="testhub", description="数据库名称")
+    DB_HOST: str = Field(default="localhost", description="数据库主机地址")
+    DB_PORT: int = Field(default=5432, description="数据库端口")
+    DB_USER: str = Field(default="postgres", description="数据库用户名")
+    DB_PASSWORD: str = Field(default="", description="数据库密码")
     DB_ECHO: bool = Field(default=False, description="是否显示SQL语句")
     
     # Data storage settings - 数据存储配置
@@ -53,8 +58,13 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """数据库连接URL"""
-        db_path = self.DATA_DIR / self.DB_NAME
-        return f"sqlite:///{db_path}"
+        if self.DB_TYPE == "sqlite":
+            db_path = self.DATA_DIR / f"{self.DB_NAME}.db"
+            return f"sqlite:///{db_path}"
+        elif self.DB_TYPE == "postgresql":
+            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        else:
+            raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
     
     model_config = {
         "env_file": ".env",
