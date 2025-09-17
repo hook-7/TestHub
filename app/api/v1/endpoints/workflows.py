@@ -57,6 +57,22 @@ async def get_workflows(
         return APIResponse.error(code=500, msg="获取工作流列表失败")
 
 
+@router.get("/stats", response_model=APIResponse[WorkflowStats])
+async def get_stats():
+    """获取工作流统计信息"""
+    try:
+        stats = await workflow_service.get_stats()
+        
+        return APIResponse.success(
+            data=stats,
+            msg="获取统计信息成功"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        return APIResponse.error(code=500, msg="获取统计信息失败")
+
+
 @router.get("/{workflow_id}", response_model=APIResponse[WorkflowDefinition])
 async def get_workflow(workflow_id: str):
     """获取工作流详情"""
@@ -237,19 +253,3 @@ async def stop_execution(execution_id: str):
     except Exception as e:
         logger.error(f"Error stopping execution {execution_id}: {e}")
         return APIResponse.error(code=500, msg="停止执行失败")
-
-
-@router.get("/stats", response_model=APIResponse[WorkflowStats])
-async def get_stats():
-    """获取工作流统计信息"""
-    try:
-        stats = await workflow_service.get_stats()
-        
-        return APIResponse.success(
-            data=stats,
-            msg="获取统计信息成功"
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting stats: {e}")
-        return APIResponse.error(code=500, msg="获取统计信息失败")

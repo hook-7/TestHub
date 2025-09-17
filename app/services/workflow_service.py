@@ -338,7 +338,7 @@ class WorkflowService:
             else:
                 average_execution_time = 0.0
             
-            return WorkflowStats(
+            stats = WorkflowStats(
                 total_workflows=total_workflows,
                 active_workflows=active_workflows,
                 total_executions=total_executions,
@@ -346,6 +346,9 @@ class WorkflowService:
                 failed_executions=failed_executions,
                 average_execution_time=average_execution_time
             )
+            
+            logger.info(f"Generated stats: {stats}")
+            return stats
         except Exception as e:
             logger.error(f"Error getting stats: {e}")
             raise
