@@ -1,19 +1,19 @@
 <template>
-  <div class="serial-config-page">
+  <div class="interface-config-page">
 
     <!-- 左右布局容器 -->
     <div class="main-layout">
-      <!-- 左侧：串口配置 -->
+      <!-- 左侧：接口配置 -->
       <div class="left-panel">
         <el-card class="config-card">
           <template #header>
             <div class="card-header">
               <h3>
                 <el-icon><Setting /></el-icon>
-                串口配置
+                接口配置
               </h3>
               <div class="header-actions">
-                <!-- 串口配置不需要刷新按钮，连接时会自动选择设备 -->
+                <!-- 接口配置不需要刷新按钮，连接时会自动选择设备 -->
               </div>
             </div>
           </template>
@@ -27,11 +27,29 @@
             class="config-form"
           >
 
-            <!-- 串口参数 -->
+            <!-- 接口类型选择 -->
             <div class="form-section">
               <h4 class="section-title">
+                <el-icon><Connection /></el-icon>
+                接口类型
+              </h4>
+              <el-radio-group v-model="interfaceType" @change="onInterfaceTypeChange" class="interface-type-group">
+                <el-radio-button value="serial">
+                  <el-icon><Monitor /></el-icon>
+                  串口连接
+                </el-radio-button>
+                <el-radio-button value="tcp">
+                  <el-icon><Link /></el-icon>
+                  TCP连接
+                </el-radio-button>
+              </el-radio-group>
+            </div>
+
+            <!-- 串口参数 -->
+            <div v-if="interfaceType === 'serial'" class="form-section">
+              <h4 class="section-title">
                 <el-icon><Setting /></el-icon>
-                通信参数
+                串口参数
               </h4>
               <div class="form-row">
                 <el-form-item label="波特率" prop="baudrate">
@@ -81,6 +99,51 @@
               </el-form-item>
             </div>
 
+            <!-- TCP连接参数 -->
+            <div v-if="interfaceType === 'tcp'" class="form-section">
+              <h4 class="section-title">
+                <el-icon><Link /></el-icon>
+                TCP连接参数
+              </h4>
+              <div class="form-row">
+                <el-form-item label="IP地址" prop="tcpHost">
+                  <el-input
+                    v-model="tcpForm.host"
+                    placeholder="请输入IP地址，例如: 192.168.1.100"
+                    style="font-family: monospace;"
+                  />
+                </el-form-item>
+                
+                <el-form-item label="端口号" prop="tcpPort">
+                  <el-input-number
+                    v-model="tcpForm.port"
+                    :min="1"
+                    :max="65535"
+                    placeholder="请输入端口号"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </div>
+
+              <el-form-item label="连接超时(秒)" prop="tcpTimeout">
+                <el-input-number 
+                  v-model="tcpForm.timeout"
+                  :min="1"
+                  :max="30"
+                  :step="1"
+                  style="width: 100%"
+                />
+              </el-form-item>
+
+              <el-form-item label="自动重连" prop="tcpAutoReconnect">
+                <el-switch 
+                  v-model="tcpForm.autoReconnect"
+                  active-text="启用"
+                  inactive-text="禁用"
+                />
+              </el-form-item>
+            </div>
+
             <!-- 操作按钮 -->
             <div class="form-section">
               <h4 class="section-title">
@@ -89,8 +152,9 @@
               </h4>
               <div class="action-buttons">
                 <el-button 
+                  v-if="interfaceType === 'serial'"
                   type="primary" 
-                  @click="() => connect().catch(console.error)"
+                  @click="() => connectSerial().catch(console.error)"
                   :loading="connecting"
                   :disabled="!isWebSerialSupported"
                   size="large"
@@ -99,21 +163,33 @@
                   <el-icon><Connection /></el-icon>
                   {{ connectionStore.isConnected ? '连接新串口' : '连接串口' }}
                 </el-button>
+                
+                <el-button 
+                  v-if="interfaceType === 'tcp'"
+                  type="primary" 
+                  @click="() => connectTcp().catch(console.error)"
+                  :loading="tcpConnecting"
+                  size="large"
+                  class="action-btn primary"
+                >
+                  <el-icon><Link /></el-icon>
+                  {{ tcpConnected ? '连接新TCP' : '连接TCP' }}
+                </el-button>
               </div>
             </div>
           </el-form>
         </el-card>
       </div>
 
-      <!-- 右侧：已连接串口列表 -->
+      <!-- 右侧：已连接接口列表 -->
       <div class="right-panel">
         <el-card class="connected-card">
           <template #header>
             <div class="card-header">
               <h3>
                 <el-icon><InfoFilled /></el-icon>
-                已连接串口
-                <el-badge :value="connectedCount" class="connection-badge" />
+                已连接接口
+                <el-badge :value="totalConnectedCount" class="connection-badge" />
               </h3>
               <div class="header-actions">
                 <el-button 
@@ -121,32 +197,33 @@
                   size="small" 
                   @click="disconnectAll"
                   :loading="disconnectingAll"
-                  :disabled="connectedCount === 0"
+                  :disabled="totalConnectedCount === 0"
                 >
                   <el-icon><Close /></el-icon>
-                  断开所有 ({{ connectedCount }})
+                  断开所有 ({{ totalConnectedCount }})
                 </el-button>
               </div>
             </div>
           </template>
           
-          <div class="connected-serials" v-if="connectionStore.isConnected">
+          <div class="connected-interfaces" v-if="totalConnectedCount > 0">
+            <!-- 串口连接列表 -->
             <div 
               v-for="serial in connectionStore.connectedSerials" 
-              :key="serial.serial_id"
-              class="serial-card"
+              :key="`serial-${serial.serial_id}`"
+              class="interface-card serial-card"
               :class="{ active: connectionStore.selectedSerialId === serial.serial_id }"
-              @click="connectionStore.selectSerial(serial.serial_id)"
+              @click="selectSerial(serial.serial_id)"
             >
-              <div class="serial-header">
-                <div class="serial-info">
-                  <div class="serial-id">
+              <div class="interface-header">
+                <div class="interface-info">
+                  <div class="interface-id">
                     <el-icon><Monitor /></el-icon>
                     串口 #{{ serial.serial_id }}
                   </div>
-                  <div class="serial-port">{{ serial.port }}</div>
+                  <div class="interface-address">{{ serial.port }}</div>
                 </div>
-                <div class="serial-actions">
+                <div class="interface-actions">
                   <el-tag 
                     v-if="connectionStore.selectedSerialId === serial.serial_id" 
                     type="success" 
@@ -169,7 +246,7 @@
                 </div>
               </div>
               
-              <div class="serial-details">
+              <div class="interface-details">
                 <div class="detail-grid">
                   <div class="detail-item">
                     <span class="detail-label">波特率</span>
@@ -201,12 +278,80 @@
                 </div>
               </div>
             </div>
+
+            <!-- TCP连接列表 -->
+            <div 
+              v-for="tcp in connectedTcpConnections" 
+              :key="`tcp-${tcp.id}`"
+              class="interface-card tcp-card"
+              :class="{ active: selectedTcpId === tcp.id }"
+              @click="selectTcp(tcp.id)"
+            >
+              <div class="interface-header">
+                <div class="interface-info">
+                  <div class="interface-id">
+                    <el-icon><Link /></el-icon>
+                    TCP #{{ tcp.id }}
+                  </div>
+                  <div class="interface-address">{{ tcp.host }}:{{ tcp.port }}</div>
+                </div>
+                <div class="interface-actions">
+                  <el-tag 
+                    v-if="selectedTcpId === tcp.id" 
+                    type="success" 
+                    size="small"
+                    class="selected-tag"
+                  >
+                    <el-icon><Check /></el-icon>
+                    当前选择
+                  </el-tag>
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click.stop="disconnectTcp(tcp.id)"
+                    :loading="disconnectingTcp[tcp.id]"
+                    class="disconnect-btn"
+                  >
+                    <el-icon><Close /></el-icon>
+                    断开
+                  </el-button>
+                </div>
+              </div>
+              
+              <div class="interface-details">
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <span class="detail-label">IP地址</span>
+                    <span class="detail-value">{{ tcp.host }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">端口</span>
+                    <span class="detail-value">{{ tcp.port }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">超时</span>
+                    <span class="detail-value">{{ tcp.timeout }}s</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">重连</span>
+                    <span class="detail-value">{{ tcp.auto_reconnect ? '启用' : '禁用' }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">状态</span>
+                    <el-tag type="success" size="small" class="status-tag">
+                      <el-icon><CircleCheck /></el-icon>
+                      已连接
+                    </el-tag>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <!-- 无连接状态提示 -->
           <div v-else class="no-connection-hint">
-            <el-empty description="暂无已连接串口">
-              <el-button type="primary" @click="() => router.push('/communication')" :disabled="!connectionStore.isConnected">
+            <el-empty description="暂无已连接接口">
+              <el-button type="primary" @click="() => router.push('/communication')" :disabled="totalConnectedCount === 0">
                 前往通信页面
               </el-button>
             </el-empty>
@@ -229,10 +374,13 @@ import {
   InfoFilled, 
   Monitor, 
   Operation, 
-  Check 
+  Check,
+  Link
 } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { webSerialService } from '@/services/webSerial'
+import * as tcpAPI from '@/api/tcp'
+import type { TcpConnection, TcpConnectionConfig } from '@/api/tcp'
 
 
 const router = useRouter()
@@ -261,8 +409,21 @@ const checkWebSerialSupport = () => {
 // 表单引用
 const formRef = ref<FormInstance>()
 
+// 接口类型
+const interfaceType = ref<'serial' | 'tcp'>('serial')
+
 // 计算属性 - 已连接串口数量
 const connectedCount = computed(() => connectionStore.connectedSerials.length)
+
+// TCP连接相关状态
+const tcpConnected = ref(false)
+const tcpConnecting = ref(false)
+const selectedTcpId = ref<string | null>(null)
+const disconnectingTcp = ref<Record<string, boolean>>({})
+const connectedTcpConnections = ref<TcpConnection[]>([])
+
+// 总连接数量
+const totalConnectedCount = computed(() => connectedCount.value + connectedTcpConnections.value.length)
 
 // 状态
 const connecting = ref(false)
@@ -278,17 +439,39 @@ const form = reactive({
   timeout: 0.5,  
 })
 
+// TCP连接表单
+const tcpForm = reactive({
+  host: '192.168.1.100',
+  port: 8080,
+  timeout: 5,
+  autoReconnect: true
+})
+
 // 表单验证规则
 const rules: FormRules = {
   baudrate: [
     { required: true, message: '请选择波特率', trigger: 'change' }
   ],
+  tcpHost: [
+    { required: true, message: '请输入IP地址', trigger: 'blur' },
+    { pattern: /^(\d{1,3}\.){3}\d{1,3}$/, message: '请输入有效的IP地址', trigger: 'blur' }
+  ],
+  tcpPort: [
+    { required: true, message: '请输入端口号', trigger: 'blur' },
+    { type: 'number', min: 1, max: 65535, message: '端口号范围为1-65535', trigger: 'blur' }
+  ]
 }
 
 // 方法
 
+// 接口类型切换
+const onInterfaceTypeChange = (type: 'serial' | 'tcp') => {
+  interfaceType.value = type
+  console.log('接口类型切换为:', type)
+}
 
-const connect = async () => {
+// 串口连接方法
+const connectSerial = async () => {
   if (!formRef.value) {
     ElMessage.error('表单引用不存在')
     return
@@ -320,7 +503,10 @@ const connect = async () => {
       // 设置一个临时的端口标识，实际连接时会弹出设备选择对话框
       const configWithPort = {
         ...form,
-        port: 'user-selected' // 这个值不会真正使用，只是满足接口要求
+        port: 'user-selected', // 这个值不会真正使用，只是满足接口要求
+        bytesize: form.bytesize as 7 | 8,
+        parity: form.parity as 'none' | 'even' | 'odd',
+        stopbits: form.stopbits as 1 | 2
       }
       
       const response = await connectionStore.connect(configWithPort)
@@ -342,6 +528,61 @@ const connect = async () => {
   }
 }
 
+// TCP连接方法
+const connectTcp = async () => {
+  if (!formRef.value) {
+    ElMessage.error('表单引用不存在')
+    return
+  }
+  
+  try {
+    // 执行表单验证
+    let valid = false
+    try {
+      valid = await formRef.value.validate()
+    } catch (validationError) {
+      ElMessage.warning('表单验证失败，请检查输入')
+      return
+    }
+    
+    if (!valid) {
+      ElMessage.warning('请检查表单输入')
+      return
+    }
+    
+    tcpConnecting.value = true
+    try {
+      // 创建TCP连接配置
+      const config: TcpConnectionConfig = {
+        host: tcpForm.host,
+        port: tcpForm.port,
+        timeout: tcpForm.timeout,
+        auto_reconnect: tcpForm.autoReconnect
+      }
+      
+      // 调用后端API建立TCP连接
+      const newTcpConnection = await tcpAPI.createTcpConnection(config)
+      
+      // 添加到本地连接列表
+      connectedTcpConnections.value.push(newTcpConnection)
+      tcpConnected.value = true
+      selectedTcpId.value = newTcpConnection.id
+      
+      ElMessage.success(`TCP连接成功！连接到 ${tcpForm.host}:${tcpForm.port}`)
+      
+    } catch (error: any) {
+      console.error('TCP connection error:', error)
+      ElMessage.error(error.response?.data?.msg || error.message || 'TCP连接失败')
+    } finally {
+      tcpConnecting.value = false
+    }
+  } catch (error: any) {
+    console.error('Unexpected error in TCP connect:', error)
+    ElMessage.error('TCP连接过程中发生错误')
+    tcpConnecting.value = false
+  }
+}
+
 const disconnectSerial = async (serialId: number) => {
   disconnectingSerials.value[serialId] = true
   try {
@@ -360,27 +601,82 @@ const disconnectSerial = async (serialId: number) => {
   }
 }
 
+// TCP断开连接
+const disconnectTcp = async (tcpId: string) => {
+  disconnectingTcp.value[tcpId] = true
+  try {
+    // 调用后端API断开TCP连接
+    await tcpAPI.disconnectTcp(tcpId)
+    
+    // 从本地列表中移除
+    const index = connectedTcpConnections.value.findIndex(tcp => tcp.id === tcpId)
+    if (index !== -1) {
+      connectedTcpConnections.value.splice(index, 1)
+      if (selectedTcpId.value === tcpId) {
+        selectedTcpId.value = null
+      }
+      ElMessage.success(`TCP连接 ${tcpId} 断开成功`)
+    } else {
+      ElMessage.error(`TCP连接 ${tcpId} 不存在`)
+    }
+  } catch (error: any) {
+    console.error('Disconnect TCP error:', error)
+    ElMessage.error(error.response?.data?.msg || error.message || `TCP连接 ${tcpId} 断开失败`)
+  } finally {
+    disconnectingTcp.value[tcpId] = false
+  }
+}
+
+// 选择串口
+const selectSerial = (serialId: number) => {
+  connectionStore.selectSerial(serialId)
+  selectedTcpId.value = null // 取消TCP选择
+  ElMessage.info(`切换到串口 #${serialId}`)
+}
+
+// 选择TCP连接
+const selectTcp = (tcpId: string) => {
+  selectedTcpId.value = tcpId
+  connectionStore.selectedSerialId = null // 取消串口选择
+  ElMessage.info(`切换到TCP连接 #${tcpId}`)
+}
+
 const disconnectAll = async () => {
-  // 检查是否有连接的串口
-  if (connectionStore.connectedSerials.length === 0) {
-    ElMessage.info('当前没有已连接的串口')
+  // 检查是否有连接的接口
+  if (totalConnectedCount.value === 0) {
+    ElMessage.info('当前没有已连接的接口')
     return
   }
   
-  const connectedCount = connectionStore.connectedSerials.length
+  const totalCount = totalConnectedCount.value
   disconnectingAll.value = true
   
   try {
-    const success = await connectionStore.disconnect()
-    if (success) {
-      ElMessage.success(`成功断开所有串口 (共${connectedCount}个)`)
-      // 不需要手动调用loadPorts，状态监听器会自动处理
-    } else {
-      ElMessage.error('断开所有串口失败')
+    // 断开所有串口
+    if (connectionStore.connectedSerials.length > 0) {
+      const success = await connectionStore.disconnect()
+      if (!success) {
+        ElMessage.error('断开串口失败')
+      }
     }
+    
+    // 断开所有TCP连接
+    if (connectedTcpConnections.value.length > 0) {
+      try {
+        await tcpAPI.disconnectAllTcp()
+        connectedTcpConnections.value = []
+        selectedTcpId.value = null
+        tcpConnected.value = false
+      } catch (error: any) {
+        console.error('Disconnect all TCP error:', error)
+        ElMessage.warning('部分TCP连接断开失败')
+      }
+    }
+    
+    ElMessage.success(`成功断开所有接口 (共${totalCount}个)`)
   } catch (error: any) {
     console.error('Disconnect all error:', error)
-    ElMessage.error(error.message || '断开所有串口失败')
+    ElMessage.error(error.message || '断开所有接口失败')
   } finally {
     disconnectingAll.value = false
   }
@@ -400,6 +696,17 @@ const syncState = async () => {
   }
 }
 
+// 同步TCP连接状态
+const syncTcpState = async () => {
+  try {
+    const response = await tcpAPI.getTcpConnections()
+    connectedTcpConnections.value = response.connections
+    tcpConnected.value = response.connections.length > 0
+  } catch (error) {
+    console.error('TCP state sync failed:', error)
+  }
+}
+
 // 生命周期
 onMounted(async () => {
   // 首先检查Web Serial API支持
@@ -413,6 +720,9 @@ onMounted(async () => {
     // 如果不支持，显示提示信息
     ElMessage.warning(compatibilityMessage.value)
   }
+  
+  // 同步TCP连接状态
+  await syncTcpState()
 })
 
 // 监听连接状态变化，确保UI同步
@@ -437,7 +747,7 @@ onUnmounted(() => {
 
 <style scoped>
 /* 页面整体样式 */
-.serial-config-page {
+.interface-config-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: 24px;
@@ -653,8 +963,37 @@ onUnmounted(() => {
   color: white;
 }
 
-/* 已连接串口列表样式 */
-.connected-serials {
+/* 接口类型选择器样式 */
+.interface-type-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.interface-type-group :deep(.el-radio-button__inner) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.interface-type-group :deep(.el-radio-button__inner:hover) {
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+  border-color: #409eff;
+}
+
+.interface-type-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  background: linear-gradient(135deg, #409eff 0%, #1976d2 100%);
+  border-color: #409eff;
+  color: white;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+/* 已连接接口列表样式 */
+.connected-interfaces {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -663,25 +1002,26 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-.connected-serials::-webkit-scrollbar {
+.connected-interfaces::-webkit-scrollbar {
   width: 4px;
 }
 
-.connected-serials::-webkit-scrollbar-track {
+.connected-interfaces::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.05);
   border-radius: 2px;
 }
 
-.connected-serials::-webkit-scrollbar-thumb {
+.connected-interfaces::-webkit-scrollbar-thumb {
   background: #bdbdbd;
   border-radius: 2px;
 }
 
-.connected-serials::-webkit-scrollbar-thumb:hover {
+.connected-interfaces::-webkit-scrollbar-thumb:hover {
   background: #9e9e9e;
 }
 
-.serial-card {
+/* 接口卡片通用样式 */
+.interface-card {
   border: 2px solid var(--el-border-color-light);
   border-radius: 12px;
   padding: 16px;
@@ -692,50 +1032,60 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.serial-card::before {
+.interface-card::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
   transform: scaleX(0);
   transition: transform 0.3s ease;
 }
 
-.serial-card:hover {
+.interface-card:hover {
   border-color: var(--el-color-primary);
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.15);
   transform: translateY(-2px);
 }
 
-.serial-card:hover::before {
+.interface-card:hover::before {
   transform: scaleX(1);
 }
 
-.serial-card.active {
+.interface-card.active {
   border-color: var(--el-color-primary);
   background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.2);
 }
 
-.serial-card.active::before {
+.interface-card.active::before {
   transform: scaleX(1);
 }
 
-.serial-header {
+/* 串口卡片特殊样式 */
+.serial-card::before {
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+/* TCP卡片特殊样式 */
+.tcp-card::before {
+  background: linear-gradient(90deg, #4ecdc4 0%, #44a08d 100%);
+}
+
+/* 接口头部样式 */
+.interface-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 12px;
 }
 
-.serial-info {
+.interface-info {
   flex: 1;
 }
 
-.serial-id {
+.interface-id {
   font-weight: 600;
   color: var(--el-color-primary);
   font-size: 16px;
@@ -745,7 +1095,7 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
-.serial-port {
+.interface-address {
   color: var(--el-text-color-secondary);
   font-size: 14px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -755,7 +1105,7 @@ onUnmounted(() => {
   display: inline-block;
 }
 
-.serial-actions {
+.interface-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -773,8 +1123,8 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 串口详情样式 */
-.serial-details {
+/* 接口详情样式 */
+.interface-details {
   margin-top: 12px;
 }
 
@@ -860,13 +1210,13 @@ onUnmounted(() => {
     justify-content: center;
   }
   
-  .serial-header {
+  .interface-header {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
   
-  .serial-actions {
+  .interface-actions {
     justify-content: space-between;
   }
   
