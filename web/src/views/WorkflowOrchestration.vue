@@ -1,187 +1,207 @@
 <template>
-  <div class="workflow-orchestration-container">
-    <div class="page-content">
-      <!-- 顶部工具栏 -->
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <el-button type="primary" @click="showCreateDialog = true">
-            <el-icon><Plus /></el-icon>
-            创建工作流
-          </el-button>
-          <el-button @click="showTemplateDialog = true">
-            <el-icon><Document /></el-icon>
-            从模板创建
-          </el-button>
-          <el-button @click="loadWorkflows">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
-        </div>
-        <div class="toolbar-right">
-          <el-input
-            v-model="searchKeyword"
-            placeholder="搜索工作流..."
-            style="width: 200px"
-            clearable
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </div>
-      </div>
+  <div class="workflow-orchestration">
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <h1>工作流编排</h1>
+      <p>基于Command对象的工作流模板系统 - 选择模板，输入参数，一键执行</p>
+    </div>
 
-      <!-- 工作流列表 -->
-      <div class="workflow-list">
-        <el-card v-for="workflow in filteredWorkflows" :key="workflow.id" class="workflow-card" shadow="hover">
-          <template #header>
-            <div class="workflow-header">
-              <div class="workflow-info">
-                <h3 class="workflow-name">{{ workflow.name }}</h3>
-                <p class="workflow-description">{{ workflow.description || '暂无描述' }}</p>
-              </div>
-              <div class="workflow-actions">
-                <el-tag :type="getStatusType(workflow.status)" size="small">
-                  {{ getStatusText(workflow.status) }}
-                </el-tag>
-                <el-dropdown @command="handleWorkflowAction">
-                  <el-button type="text" size="small">
-                    <el-icon><MoreFilled /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item :command="{ action: 'edit', workflow }">
-                        <el-icon><Edit /></el-icon>
-                        编辑
-                      </el-dropdown-item>
-                      <el-dropdown-item :command="{ action: 'execute', workflow }">
-                        <el-icon><VideoPlay /></el-icon>
-                        执行
-                      </el-dropdown-item>
-                      <el-dropdown-item :command="{ action: 'duplicate', workflow }">
-                        <el-icon><CopyDocument /></el-icon>
-                        复制
-                      </el-dropdown-item>
-                      <el-dropdown-item :command="{ action: 'delete', workflow }" divided>
-                        <el-icon><Delete /></el-icon>
-                        删除
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-            </div>
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          创建模板
+        </el-button>
+        <el-button @click="loadTemplates">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+        <el-button @click="loadStats">
+          <el-icon><DataAnalysis /></el-icon>
+          统计
+        </el-button>
+      </div>
+      <div class="toolbar-right">
+        <el-select v-model="categoryFilter" placeholder="选择分类" clearable style="width: 150px; margin-right: 10px;">
+          <el-option label="全部" value="" />
+          <el-option label="测试" value="test" />
+          <el-option label="生产" value="production" />
+          <el-option label="调试" value="debug" />
+        </el-select>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜索模板..."
+          style="width: 300px"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
           </template>
-          
-          <div class="workflow-content">
-            <div class="workflow-stats">
-              <div class="stat-item">
-                <span class="stat-label">节点数:</span>
-                <span class="stat-value">{{ workflow.nodes.length }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">连接数:</span>
-                <span class="stat-value">{{ workflow.connections.length }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">版本:</span>
-                <span class="stat-value">{{ workflow.version }}</span>
-              </div>
-            </div>
-            
-            <div class="workflow-nodes">
-              <div class="nodes-preview">
-                <div 
-                  v-for="node in workflow.nodes.slice(0, 5)" 
-                  :key="node.id"
-                  class="node-preview"
-                  :class="node.type"
-                >
-                  <el-icon>
-                    <component :is="getNodeIcon(node.type)" />
-                  </el-icon>
-                  <span>{{ node.name }}</span>
-                </div>
-                <div v-if="workflow.nodes.length > 5" class="more-nodes">
-                  +{{ workflow.nodes.length - 5 }} 更多
-                </div>
-              </div>
-            </div>
-            
-            <div class="workflow-footer">
-              <div class="workflow-meta">
-                <span class="created-time">
-                  创建于 {{ formatTime(workflow.createdAt) }}
-                </span>
-                <span class="updated-time">
-                  更新于 {{ formatTime(workflow.updatedAt) }}
-                </span>
-              </div>
-              <div class="workflow-buttons">
-                <el-button size="small" @click="editWorkflow(workflow)">
-                  <el-icon><Edit /></el-icon>
-                  编辑
-                </el-button>
-                <el-button size="small" type="primary" @click="executeWorkflow(workflow)">
-                  <el-icon><VideoPlay /></el-icon>
-                  执行
-                </el-button>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-if="workflows.length === 0 && !isLoading" class="empty-state">
-        <div class="empty-icon">
-          <el-icon><Operation /></el-icon>
-        </div>
-        <h4 class="empty-title">暂无工作流</h4>
-        <p class="empty-description">创建您第一个工作流，开始自动化测试流程设计</p>
-        <div class="empty-actions">
-          <el-button type="primary" size="large" @click="showCreateDialog = true">
-            <el-icon><Plus /></el-icon>
-            创建工作流
-          </el-button>
-          <el-button size="large" @click="showTemplateDialog = true">
-            <el-icon><Document /></el-icon>
-            从模板创建
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 加载状态 -->
-      <div v-if="isLoading" class="loading-state">
-        <el-icon class="is-loading"><Loading /></el-icon>
-        <span>加载中...</span>
+        </el-input>
       </div>
     </div>
 
-    <!-- 创建工作流对话框 -->
+    <!-- 统计信息 -->
+    <div v-if="stats.total_templates > 0" class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_templates }}</div>
+        <div class="stat-label">总模板数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.active_templates }}</div>
+        <div class="stat-label">活跃模板</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_executions }}</div>
+        <div class="stat-label">总执行数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.success_rate.toFixed(1) }}%</div>
+        <div class="stat-label">成功率</div>
+      </div>
+    </div>
+
+    <!-- 工作流模板列表 -->
+    <div class="template-list">
+      <div v-if="loading" class="loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        加载中...
+      </div>
+      
+      <div v-else-if="filteredTemplates.length === 0" class="empty">
+        <el-empty description="暂无工作流模板">
+          <el-button type="primary" @click="showCreateDialog = true">
+            创建模板
+          </el-button>
+        </el-empty>
+      </div>
+      
+      <div v-else class="template-grid">
+        <div
+          v-for="template in filteredTemplates"
+          :key="template.id"
+          class="template-card"
+        >
+          <div class="template-header">
+            <h3>{{ template.name }}</h3>
+            <div class="template-badges">
+              <el-tag :type="getStatusType(template.status)" size="small">
+                {{ getStatusText(template.status) }}
+              </el-tag>
+              <el-tag size="small" type="info">{{ template.category }}</el-tag>
+            </div>
+          </div>
+          
+          <div class="template-content">
+            <p class="template-description">{{ template.description || '暂无描述' }}</p>
+            
+            <div class="template-steps">
+              <div class="steps-header">
+                <span>工作流步骤 ({{ template.steps.length }})</span>
+              </div>
+              <div class="steps-list">
+                <div
+                  v-for="(step, index) in template.steps.slice(0, 3)"
+                  :key="step.step_id"
+                  class="step-item"
+                >
+                  <div class="step-number">{{ index + 1 }}</div>
+                  <div class="step-info">
+                    <div class="step-name">{{ step.step_name }}</div>
+                    <div class="step-command">{{ step.command }}</div>
+                  </div>
+                </div>
+                <div v-if="template.steps.length > 3" class="step-item more">
+                  <div class="step-number">...</div>
+                  <div class="step-info">
+                    <div class="step-name">还有 {{ template.steps.length - 3 }} 个步骤</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="template-footer">
+            <div class="template-meta">
+              <span>版本: {{ template.version }}</span>
+              <span>创建时间: {{ formatTime(template.created_at) }}</span>
+            </div>
+            
+            <div class="template-actions">
+              <el-button size="small" @click="editTemplate(template)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-button size="small" type="primary" @click="executeTemplate(template)">
+                <el-icon><Play /></el-icon>
+                执行
+              </el-button>
+              <el-button size="small" @click="viewExecutions(template)">
+                <el-icon><View /></el-icon>
+                历史
+              </el-button>
+              <el-button size="small" type="danger" @click="deleteTemplate(template)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建模板对话框 -->
     <el-dialog
       v-model="showCreateDialog"
-      title="创建工作流"
-      width="500px"
-      :close-on-click-modal="false"
+      title="创建工作流模板"
+      width="800px"
+      :before-close="handleCreateClose"
     >
-      <el-form :model="createForm" label-width="80px">
-        <el-form-item label="名称" required>
-          <el-input v-model="createForm.name" placeholder="请输入工作流名称" />
+      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="100px">
+        <el-form-item label="模板名称" prop="name">
+          <el-input v-model="createForm.name" placeholder="请输入模板名称" />
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="createForm.description"
-            type="textarea"
-            placeholder="请输入工作流描述"
-            :rows="3"
-          />
+        <el-form-item label="模板描述" prop="description">
+          <el-textarea v-model="createForm.description" placeholder="请输入模板描述" />
+        </el-form-item>
+        <el-form-item label="分类" prop="category">
+          <el-select v-model="createForm.category" placeholder="请选择分类">
+            <el-option label="测试" value="test" />
+            <el-option label="生产" value="production" />
+            <el-option label="调试" value="debug" />
+            <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="选择命令" prop="command_ids">
+          <div class="command-selection">
+            <div v-if="commandsLoading" class="loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              加载命令中...
+            </div>
+            <div v-else class="command-list">
+              <el-checkbox-group v-model="createForm.command_ids">
+                <div
+                  v-for="command in availableCommands"
+                  :key="command.id"
+                  class="command-item"
+                >
+                  <el-checkbox :label="command.id">
+                    <div class="command-info">
+                      <div class="command-name">{{ command.name }}</div>
+                      <div class="command-desc">{{ command.description || command.command }}</div>
+                    </div>
+                  </el-checkbox>
+                </div>
+              </el-checkbox-group>
+            </div>
+          </div>
         </el-form-item>
       </el-form>
+      
       <template #footer>
         <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateWorkflow" :loading="isCreating">
+        <el-button type="primary" @click="handleCreate" :loading="creating">
           创建
         </el-button>
       </template>
@@ -191,65 +211,126 @@
     <el-dialog
       v-model="showExecuteDialog"
       title="执行工作流"
-      width="500px"
-      :close-on-click-modal="false"
+      width="600px"
+      :before-close="handleExecuteClose"
     >
-      <el-form :model="executeForm" label-width="100px">
-        <el-form-item label="MAC地址" required>
+      <div v-if="selectedTemplate" class="execute-info">
+        <h4>{{ selectedTemplate.name }}</h4>
+        <p>{{ selectedTemplate.description }}</p>
+        <div class="steps-preview">
+          <div
+            v-for="(step, index) in selectedTemplate.steps"
+            :key="step.step_id"
+            class="step-preview"
+          >
+            <div class="step-number">{{ index + 1 }}</div>
+            <div class="step-name">{{ step.step_name }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <el-form :model="executeForm" :rules="executeRules" ref="executeFormRef" label-width="100px">
+        <el-form-item label="MAC地址" prop="macAddress">
           <el-input v-model="executeForm.macAddress" placeholder="请输入MAC地址" />
         </el-form-item>
-        <el-form-item label="SN序列号">
-          <el-input v-model="executeForm.serialNumber" placeholder="请输入SN序列号" />
+        <el-form-item label="序列号" prop="serialNumber">
+          <el-input v-model="executeForm.serialNumber" placeholder="请输入序列号" />
         </el-form-item>
-        <el-form-item label="操作员">
+        <el-form-item label="操作员" prop="operator">
           <el-input v-model="executeForm.operator" placeholder="请输入操作员" />
         </el-form-item>
-        <el-form-item label="工位">
+        <el-form-item label="工位" prop="workstation">
           <el-input v-model="executeForm.workstation" placeholder="请输入工位" />
         </el-form-item>
-        <el-form-item label="设备ID">
+        <el-form-item label="设备ID" prop="deviceId">
           <el-input v-model="executeForm.deviceId" placeholder="请输入设备ID" />
         </el-form-item>
       </el-form>
+      
       <template #footer>
         <el-button @click="showExecuteDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleExecuteWorkflow" :loading="isExecuting">
-          开始执行
+        <el-button type="primary" @click="handleExecute" :loading="executing">
+          执行
         </el-button>
       </template>
     </el-dialog>
 
-    <!-- 模板选择对话框 -->
+    <!-- 执行历史对话框 -->
     <el-dialog
-      v-model="showTemplateDialog"
-      title="从模板创建"
-      width="800px"
-      :close-on-click-modal="false"
+      v-model="showHistoryDialog"
+      title="执行历史"
+      width="1000px"
+      :before-close="handleHistoryClose"
     >
-      <div class="template-list">
-        <el-card v-for="template in templates" :key="template.id" class="template-card" shadow="hover">
-          <div class="template-content">
-            <div class="template-info">
-              <h4 class="template-name">{{ template.name }}</h4>
-              <p class="template-description">{{ template.description || '暂无描述' }}</p>
-              <div class="template-meta">
-                <el-tag size="small">{{ template.category }}</el-tag>
-                <span class="template-stats">
-                  <el-icon><Download /></el-icon>
-                  {{ template.downloadCount }} 次下载
-                </span>
-              </div>
+      <div v-if="selectedTemplate" class="history-header">
+        <h4>{{ selectedTemplate.name }} - 执行历史</h4>
+      </div>
+      
+      <div v-if="executionsLoading" class="loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        加载执行历史中...
+      </div>
+      
+      <div v-else-if="executions.length === 0" class="empty">
+        <el-empty description="暂无执行记录" />
+      </div>
+      
+      <div v-else class="execution-list">
+        <div
+          v-for="execution in executions"
+          :key="execution.id"
+          class="execution-item"
+        >
+          <div class="execution-header">
+            <div class="execution-info">
+              <span class="execution-id">#{{ execution.id }}</span>
+              <el-tag :type="getExecutionStatusType(execution.status)" size="small">
+                {{ getExecutionStatusText(execution.status) }}
+              </el-tag>
             </div>
-            <div class="template-actions">
-              <el-button size="small" @click="createFromTemplate(template)">
-                使用此模板
-              </el-button>
+            <div class="execution-meta">
+              <span>{{ execution.operator }} - {{ execution.workstation }}</span>
+              <span>{{ formatTime(execution.created_at) }}</span>
             </div>
           </div>
-        </el-card>
+          
+          <div class="execution-details">
+            <div class="execution-params">
+              <span><strong>MAC:</strong> {{ execution.mac_address }}</span>
+              <span><strong>SN:</strong> {{ execution.serial_number }}</span>
+              <span><strong>设备ID:</strong> {{ execution.device_id }}</span>
+            </div>
+            
+            <div v-if="execution.status === 'running'" class="execution-progress">
+              <el-progress 
+                :percentage="execution.progress" 
+                :format="() => `${execution.current_step}/${execution.total_steps}`"
+              />
+            </div>
+            
+            <div v-if="execution.step_results.length > 0" class="execution-steps">
+              <div
+                v-for="(result, index) in execution.step_results"
+                :key="index"
+                class="step-result"
+              >
+                <div class="step-result-header">
+                  <span class="step-name">{{ result.step_name }}</span>
+                  <el-tag :type="result.status === 'success' ? 'success' : 'danger'" size="small">
+                    {{ result.status === 'success' ? '成功' : '失败' }}
+                  </el-tag>
+                </div>
+                <div v-if="result.response" class="step-response">
+                  {{ result.response }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+      
       <template #footer>
-        <el-button @click="showTemplateDialog = false">取消</el-button>
+        <el-button @click="showHistoryDialog = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -258,52 +339,40 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
-import { 
-  Operation, 
-  Plus, 
-  Document, 
-  Refresh,
-  Search,
-  MoreFilled,
-  Edit,
-  VideoPlay,
-  CopyDocument,
-  Delete,
-  Download,
-  Loading,
-  PlayCircle,
-  Command,
-  Workflow,
-  Condition,
-  Clock,
-  Bell
-} from '@element-plus/icons-vue'
-import { useWorkflowStore } from '@/stores/workflow'
-import type { WorkflowDefinition, WorkflowTemplate, WorkflowNodeType } from '@/types/workflow'
+import { Plus, Refresh, DataAnalysis, Search, Loading, Edit, Play, View, Delete } from '@element-plus/icons-vue'
+import { useWorkflowTemplateStore } from '@/stores/workflow-template'
+import { useCommandStore } from '@/stores/command'
+import type { WorkflowTemplate, WorkflowExecution } from '@/types/workflow-template'
+import type { SavedCommand } from '@/types/command'
 
-const router = useRouter()
-const workflowStore = useWorkflowStore()
+// 使用 stores
+const workflowTemplateStore = useWorkflowTemplateStore()
+const commandStore = useCommandStore()
 
 // 响应式数据
-const workflows = computed(() => workflowStore.workflows)
-const templates = computed(() => workflowStore.templates)
-const isLoading = ref(false)
-const isCreating = ref(false)
-const isExecuting = ref(false)
+const loading = ref(false)
+const commandsLoading = ref(false)
+const executionsLoading = ref(false)
+const creating = ref(false)
+const executing = ref(false)
 
-// 对话框状态
+const searchQuery = ref('')
+const categoryFilter = ref('')
+
 const showCreateDialog = ref(false)
 const showExecuteDialog = ref(false)
-const showTemplateDialog = ref(false)
+const showHistoryDialog = ref(false)
 
-// 搜索
-const searchKeyword = ref('')
+const selectedTemplate = ref<WorkflowTemplate | null>(null)
+const availableCommands = ref<SavedCommand[]>([])
+const executions = ref<WorkflowExecution[]>([])
 
 // 表单数据
 const createForm = ref({
   name: '',
-  description: ''
+  description: '',
+  category: 'test',
+  command_ids: [] as string[]
 })
 
 const executeForm = ref({
@@ -314,726 +383,678 @@ const executeForm = ref({
   deviceId: ''
 })
 
-const currentWorkflow = ref<WorkflowDefinition | null>(null)
+// 表单验证规则
+const createRules = {
+  name: [
+    { required: true, message: '请输入模板名称', trigger: 'blur' }
+  ],
+  category: [
+    { required: true, message: '请选择分类', trigger: 'change' }
+  ],
+  command_ids: [
+    { required: true, message: '请选择至少一个命令', trigger: 'change' }
+  ]
+}
+
+const executeRules = {
+  macAddress: [
+    { required: true, message: '请输入MAC地址', trigger: 'blur' }
+  ],
+  serialNumber: [
+    { required: true, message: '请输入序列号', trigger: 'blur' }
+  ],
+  operator: [
+    { required: true, message: '请输入操作员', trigger: 'blur' }
+  ],
+  workstation: [
+    { required: true, message: '请输入工位', trigger: 'blur' }
+  ],
+  deviceId: [
+    { required: true, message: '请输入设备ID', trigger: 'blur' }
+  ]
+}
 
 // 计算属性
-const filteredWorkflows = computed(() => {
-  if (!searchKeyword.value) {
-    return workflows.value
+const templates = computed(() => workflowTemplateStore.templates)
+const stats = computed(() => workflowTemplateStore.stats)
+
+const filteredTemplates = computed(() => {
+  let filtered = templates.value
+
+  // 按分类筛选
+  if (categoryFilter.value) {
+    filtered = filtered.filter(t => t.category === categoryFilter.value)
   }
-  return workflows.value.filter(workflow => 
-    workflow.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
-    workflow.description?.toLowerCase().includes(searchKeyword.value.toLowerCase())
-  )
+
+  // 按搜索关键词筛选
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(t => 
+      t.name.toLowerCase().includes(query) ||
+      t.description.toLowerCase().includes(query) ||
+      t.category.toLowerCase().includes(query)
+    )
+  }
+
+  return filtered
 })
 
 // 方法
-const loadWorkflows = async () => {
-  try {
-    isLoading.value = true
-    await workflowStore.loadWorkflows()
-  } catch (error) {
-    console.error('加载工作流失败:', error)
-    ElMessage.error('加载工作流失败')
-  } finally {
-    isLoading.value = false
-  }
-}
-
 const loadTemplates = async () => {
   try {
-    await workflowStore.loadTemplates()
+    loading.value = true
+    await workflowTemplateStore.loadTemplates()
   } catch (error) {
-    console.error('加载模板失败:', error)
     ElMessage.error('加载模板失败')
-  }
-}
-
-const handleSearch = () => {
-  // 搜索逻辑已在计算属性中处理
-}
-
-const handleCreateWorkflow = async () => {
-  if (!createForm.value.name.trim()) {
-    ElMessage.warning('请输入工作流名称')
-    return
-  }
-
-  try {
-    isCreating.value = true
-    const workflow = await workflowStore.createWorkflow({
-      name: createForm.value.name,
-      description: createForm.value.description
-    })
-    
-    ElMessage.success('工作流创建成功')
-    showCreateDialog.value = false
-    createForm.value = { name: '', description: '' }
-    
-    // 跳转到工作流设计器
-    router.push(`/workflow-designer/${workflow.id}`)
-  } catch (error) {
-    console.error('创建工作流失败:', error)
-    ElMessage.error('创建工作流失败')
   } finally {
-    isCreating.value = false
+    loading.value = false
   }
 }
 
-const handleExecuteWorkflow = async () => {
-  if (!currentWorkflow.value) return
-  
-  if (!executeForm.value.macAddress.trim()) {
-    ElMessage.warning('请输入MAC地址')
-    return
-  }
-
+const loadStats = async () => {
   try {
-    isExecuting.value = true
-    await workflowStore.executeWorkflow({
-      workflowId: currentWorkflow.value.id,
-      macAddress: executeForm.value.macAddress,
-      serialNumber: executeForm.value.serialNumber,
-      operator: executeForm.value.operator,
-      workstation: executeForm.value.workstation,
-      deviceId: executeForm.value.deviceId
-    })
-    
-    ElMessage.success('工作流执行已开始')
-    showExecuteDialog.value = false
-    executeForm.value = {
-      macAddress: '',
-      serialNumber: '',
-      operator: '',
-      workstation: '',
-      deviceId: ''
-    }
+    await workflowTemplateStore.loadStats()
   } catch (error) {
-    console.error('执行工作流失败:', error)
-    ElMessage.error('执行工作流失败')
+    ElMessage.error('加载统计信息失败')
+  }
+}
+
+const loadCommands = async () => {
+  try {
+    commandsLoading.value = true
+    await commandStore.loadCommands()
+    availableCommands.value = commandStore.commands
+  } catch (error) {
+    ElMessage.error('加载命令失败')
   } finally {
-    isExecuting.value = false
+    commandsLoading.value = false
   }
 }
 
-const editWorkflow = (workflow: WorkflowDefinition) => {
-  router.push(`/workflow-designer/${workflow.id}`)
-}
-
-const executeWorkflow = (workflow: WorkflowDefinition) => {
-  currentWorkflow.value = workflow
-  showExecuteDialog.value = true
-}
-
-const createFromTemplate = async (template: WorkflowTemplate) => {
+const loadExecutions = async (templateId: string) => {
   try {
-    const workflow = await workflowStore.createFromTemplate(template.id, `${template.name} - 副本`)
-    ElMessage.success('从模板创建工作流成功')
-    showTemplateDialog.value = false
-    router.push(`/workflow-designer/${workflow.id}`)
+    executionsLoading.value = true
+    await workflowTemplateStore.loadExecutions({ template_id: templateId })
+    executions.value = workflowTemplateStore.executions
   } catch (error) {
-    console.error('从模板创建工作流失败:', error)
-    ElMessage.error('从模板创建工作流失败')
-  }
-}
-
-const handleWorkflowAction = async (command: { action: string; workflow: WorkflowDefinition }) => {
-  const { action, workflow } = command
-  
-  switch (action) {
-    case 'edit':
-      editWorkflow(workflow)
-      break
-    case 'execute':
-      executeWorkflow(workflow)
-      break
-    case 'duplicate':
-      try {
-        await workflowStore.duplicateWorkflow(workflow.id, `${workflow.name} - 副本`)
-        ElMessage.success('工作流复制成功')
-      } catch (error) {
-        console.error('复制工作流失败:', error)
-        ElMessage.error('复制工作流失败')
-      }
-      break
-    case 'delete':
-      try {
-        await ElMessageBox.confirm(
-          `确定要删除工作流 "${workflow.name}" 吗？此操作不可恢复。`,
-          '确认删除',
-          {
-            confirmButtonText: '删除',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        )
-        await workflowStore.deleteWorkflow(workflow.id)
-        ElMessage.success('工作流删除成功')
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('删除工作流失败:', error)
-          ElMessage.error('删除工作流失败')
-        }
-      }
-      break
+    ElMessage.error('加载执行历史失败')
+  } finally {
+    executionsLoading.value = false
   }
 }
 
 const getStatusType = (status: string) => {
-  switch (status) {
-    case 'active': return 'success'
-    case 'draft': return 'info'
-    case 'inactive': return 'warning'
-    case 'running': return 'primary'
-    case 'completed': return 'success'
-    case 'failed': return 'danger'
-    case 'cancelled': return 'info'
-    default: return 'info'
+  const statusMap: Record<string, string> = {
+    'active': 'success',
+    'inactive': 'info',
+    'draft': 'warning'
   }
+  return statusMap[status] || 'info'
 }
 
 const getStatusText = (status: string) => {
-  switch (status) {
-    case 'active': return '激活'
-    case 'draft': return '草稿'
-    case 'inactive': return '未激活'
-    case 'running': return '运行中'
-    case 'completed': return '已完成'
-    case 'failed': return '失败'
-    case 'cancelled': return '已取消'
-    default: return '未知'
+  const statusMap: Record<string, string> = {
+    'active': '活跃',
+    'inactive': '非活跃',
+    'draft': '草稿'
   }
+  return statusMap[status] || status
 }
 
-const getNodeIcon = (type: WorkflowNodeType) => {
-  switch (type) {
-    case 'start': return PlayCircle
-    case 'end': return PlayCircle
-    case 'command': return Command
-    case 'workflow': return Workflow
-    case 'condition': return Condition
-    case 'delay': return Clock
-    case 'notification': return Bell
-    default: return Command
+const getExecutionStatusType = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'completed': 'success',
+    'running': 'warning',
+    'failed': 'danger',
+    'cancelled': 'info',
+    'pending': 'info'
   }
+  return statusMap[status] || 'info'
+}
+
+const getExecutionStatusText = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'completed': '已完成',
+    'running': '执行中',
+    'failed': '失败',
+    'cancelled': '已取消',
+    'pending': '等待中'
+  }
+  return statusMap[status] || status
 }
 
 const formatTime = (timestamp: number) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
+  return new Date(timestamp).toLocaleString()
 }
 
-// 组件挂载
+const editTemplate = (template: WorkflowTemplate) => {
+  ElMessage.info('编辑功能开发中...')
+}
+
+const executeTemplate = (template: WorkflowTemplate) => {
+  selectedTemplate.value = template
+  executeForm.value = {
+    macAddress: '',
+    serialNumber: '',
+    operator: '',
+    workstation: '',
+    deviceId: ''
+  }
+  showExecuteDialog.value = true
+}
+
+const viewExecutions = async (template: WorkflowTemplate) => {
+  selectedTemplate.value = template
+  await loadExecutions(template.id)
+  showHistoryDialog.value = true
+}
+
+const deleteTemplate = async (template: WorkflowTemplate) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除模板 "${template.name}" 吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await workflowTemplateStore.deleteTemplate(template.id)
+    ElMessage.success('删除成功')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const handleCreate = async () => {
+  try {
+    creating.value = true
+    await workflowTemplateStore.createTemplate(createForm.value)
+    ElMessage.success('创建成功')
+    showCreateDialog.value = false
+    createForm.value = {
+      name: '',
+      description: '',
+      category: 'test',
+      command_ids: []
+    }
+  } catch (error) {
+    ElMessage.error('创建失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+const handleExecute = async () => {
+  try {
+    executing.value = true
+    const execution = await workflowTemplateStore.executeTemplate({
+      template_id: selectedTemplate.value!.id,
+      mac_address: executeForm.value.macAddress,
+      serial_number: executeForm.value.serialNumber,
+      operator: executeForm.value.operator,
+      workstation: executeForm.value.workstation,
+      device_id: executeForm.value.deviceId,
+      input_data: {}
+    })
+    
+    ElMessage.success('工作流已开始执行')
+    showExecuteDialog.value = false
+    
+    // 可以在这里跳转到执行详情页面或显示执行状态
+    console.log('执行实例:', execution)
+  } catch (error) {
+    ElMessage.error('执行失败')
+  } finally {
+    executing.value = false
+  }
+}
+
+const handleCreateClose = () => {
+  createForm.value = {
+    name: '',
+    description: '',
+    category: 'test',
+    command_ids: []
+  }
+  showCreateDialog.value = false
+}
+
+const handleExecuteClose = () => {
+  selectedTemplate.value = null
+  showExecuteDialog.value = false
+}
+
+const handleHistoryClose = () => {
+  selectedTemplate.value = null
+  executions.value = []
+  showHistoryDialog.value = false
+}
+
+// 生命周期
 onMounted(async () => {
-  await loadWorkflows()
-  await loadTemplates()
+  await Promise.all([
+    loadTemplates(),
+    loadStats(),
+    loadCommands()
+  ])
 })
 </script>
 
 <style scoped>
-.workflow-orchestration-container {
-  height: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #f8fafc 100%);
+.workflow-orchestration {
+  padding: 20px;
 }
 
-.page-content {
-  height: 100%;
-  padding: 24px;
-  overflow: auto;
+.page-header {
+  margin-bottom: 24px;
 }
 
-/* 工具栏 */
+.page-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.page-header p {
+  margin: 0;
+  color: #606266;
+  font-size: 14px;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-  padding: 16px 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .toolbar-left {
   display: flex;
   gap: 12px;
-  align-items: center;
 }
 
 .toolbar-right {
   display: flex;
-  gap: 12px;
   align-items: center;
+  gap: 12px;
 }
 
-/* 工作流列表 */
-.workflow-list {
+.stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
   margin-bottom: 24px;
 }
 
-.workflow-card {
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.workflow-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  border-color: #667eea;
-}
-
-.workflow-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 0;
-}
-
-.workflow-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.workflow-name {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a202c;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.workflow-description {
-  margin: 0;
-  font-size: 14px;
-  color: #64748b;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.workflow-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.workflow-content {
-  padding: 16px 0;
-}
-
-.workflow-stats {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #f8fafc;
+.stat-card {
+  padding: 20px;
+  background: #fff;
   border-radius: 8px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
 }
 
 .stat-value {
-  font-size: 16px;
+  font-size: 32px;
   font-weight: 600;
-  color: #1a202c;
+  color: #409eff;
+  margin-bottom: 8px;
 }
 
-.workflow-nodes {
+.stat-label {
+  font-size: 14px;
+  color: #606266;
+}
+
+.template-list {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-height: 400px;
+}
+
+.loading, .empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 400px;
+  color: #909399;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+  padding: 20px;
+}
+
+.template-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 20px;
+  transition: all 0.3s;
+  background: #fff;
+}
+
+.template-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.template-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 16px;
 }
 
-.nodes-preview {
+.template-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  flex: 1;
+}
+
+.template-badges {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
 }
 
-.node-preview {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  font-size: 12px;
-  color: #374151;
-  transition: all 0.2s ease;
+.template-content {
+  margin-bottom: 16px;
 }
 
-.node-preview:hover {
-  background: #f8fafc;
-  border-color: #667eea;
+.template-description {
+  margin: 0 0 16px 0;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.node-preview.start {
-  background: #f0fdf4;
-  border-color: #22c55e;
-  color: #16a34a;
-}
-
-.node-preview.end {
-  background: #fef2f2;
-  border-color: #ef4444;
-  color: #dc2626;
-}
-
-.node-preview.command {
-  background: #f0f9ff;
-  border-color: #3b82f6;
-  color: #2563eb;
-}
-
-.node-preview.workflow {
-  background: #faf5ff;
-  border-color: #8b5cf6;
-  color: #7c3aed;
-}
-
-.node-preview.condition {
-  background: #fffbeb;
-  border-color: #f59e0b;
-  color: #d97706;
-}
-
-.node-preview.delay {
-  background: #f1f5f9;
-  border-color: #64748b;
-  color: #475569;
-}
-
-.node-preview.notification {
-  background: #fef3c7;
-  border-color: #f59e0b;
-  color: #d97706;
-}
-
-.more-nodes {
-  padding: 6px 12px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.workflow-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.template-steps {
+  border-top: 1px solid #f0f0f0;
   padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
 }
 
-.workflow-meta {
+.steps-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.steps-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.created-time,
-.updated-time {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.workflow-buttons {
-  display: flex;
   gap: 8px;
 }
 
-/* 空状态 */
-.empty-state {
-  text-align: center;
-  padding: 80px 20px;
-  background: white;
-  border-radius: 16px;
-  border: 2px dashed #cbd5e1;
-  margin: 40px 0;
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
 }
 
-.empty-icon {
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.step-item.more {
+  background: #e9ecef;
+  color: #6c757d;
+}
+
+.step-number {
+  width: 24px;
+  height: 24px;
+  background: #409eff;
+  color: #fff;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 24px;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
-}
-
-.empty-icon .el-icon {
-  font-size: 40px;
-  color: white;
-}
-
-.empty-title {
-  margin: 0 0 16px 0;
-  font-size: 24px;
+  font-size: 12px;
   font-weight: 600;
-  color: #1a202c;
+  flex-shrink: 0;
 }
 
-.empty-description {
-  margin: 0 0 32px 0;
-  font-size: 16px;
-  color: #64748b;
-  line-height: 1.6;
-}
-
-.empty-actions {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.empty-actions .el-button {
-  padding: 12px 24px;
-  font-size: 16px;
-  font-weight: 500;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-/* 加载状态 */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  color: #64748b;
-  font-size: 16px;
-  gap: 16px;
-}
-
-.loading-state .el-icon {
-  font-size: 32px;
-}
-
-/* 模板列表 */
-.template-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.template-card {
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
-}
-
-.template-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  border-color: #667eea;
-}
-
-.template-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 16px;
-}
-
-.template-info {
+.step-info {
   flex: 1;
   min-width: 0;
 }
 
-.template-name {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a202c;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.step-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 2px;
 }
 
-.template-description {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  color: #64748b;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.step-command {
+  font-size: 12px;
+  color: #909399;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+}
+
+.template-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
 }
 
 .template-meta {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.template-stats {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
   font-size: 12px;
-  color: #94a3b8;
+  color: #909399;
 }
 
 .template-actions {
-  flex-shrink: 0;
-  margin-left: 12px;
+  display: flex;
+  gap: 8px;
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .page-content {
-    padding: 16px;
-  }
-  
-  .toolbar {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .toolbar-left,
-  .toolbar-right {
-    justify-content: center;
-  }
-  
-  .workflow-list {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  
-  .workflow-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-  
-  .workflow-actions {
-    justify-content: flex-end;
-  }
-  
-  .workflow-stats {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .workflow-footer {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-  
-  .workflow-buttons {
-    justify-content: center;
-  }
-  
-  .empty-actions {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .empty-actions .el-button {
-    width: 200px;
-  }
-  
-  .template-list {
-    grid-template-columns: 1fr;
-  }
-  
-  .template-content {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .template-actions {
-    margin-left: 0;
-    align-self: flex-end;
-  }
+.command-selection {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px;
 }
 
-@media (max-width: 480px) {
-  .page-content {
-    padding: 12px;
-  }
-  
-  .toolbar {
-    padding: 12px 16px;
-  }
-  
-  .workflow-card {
-    margin: 0;
-  }
-  
-  .workflow-name {
-    font-size: 16px;
-  }
-  
-  .workflow-description {
-    font-size: 13px;
-  }
-  
-  .stat-value {
-    font-size: 14px;
-  }
-  
-  .node-preview {
-    font-size: 11px;
-    padding: 4px 8px;
-  }
-  
-  .empty-state {
-    padding: 60px 16px;
-  }
-  
-  .empty-icon {
-    width: 60px;
-    height: 60px;
-  }
-  
-  .empty-icon .el-icon {
-    font-size: 30px;
-  }
-  
-  .empty-title {
-    font-size: 20px;
-  }
-  
-  .empty-description {
-    font-size: 14px;
-  }
-  
-  .empty-actions .el-button {
-    width: 100%;
-    max-width: 200px;
-  }
+.command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.command-item {
+  padding: 8px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.command-item:hover {
+  background: #f8f9fa;
+}
+
+.command-info {
+  margin-left: 8px;
+}
+
+.command-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.command-desc {
+  font-size: 12px;
+  color: #909399;
+  font-family: 'Courier New', monospace;
+}
+
+.execute-info {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.execute-info h4 {
+  margin: 0 0 8px 0;
+  color: #303133;
+}
+
+.execute-info p {
+  margin: 0 0 16px 0;
+  color: #606266;
+  font-size: 14px;
+}
+
+.steps-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #e1f3d8;
+  border-radius: 16px;
+  font-size: 12px;
+}
+
+.step-preview .step-number {
+  width: 20px;
+  height: 20px;
+  background: #67c23a;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.history-header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.history-header h4 {
+  margin: 0;
+  color: #303133;
+}
+
+.execution-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.execution-item {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #fff;
+}
+
+.execution-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.execution-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.execution-id {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #909399;
+}
+
+.execution-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  color: #909399;
+}
+
+.execution-details {
+  margin-top: 12px;
+}
+
+.execution-params {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.execution-progress {
+  margin-bottom: 12px;
+}
+
+.execution-steps {
+  margin-top: 12px;
+}
+
+.step-result {
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.step-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.step-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.step-response {
+  font-size: 12px;
+  color: #606266;
+  font-family: 'Courier New', monospace;
+  background: #fff;
+  padding: 4px 8px;
+  border-radius: 2px;
+  margin-top: 4px;
 }
 </style>
