@@ -35,27 +35,56 @@
             </span>
           </div>
         </div>
+
+        <!-- TCP连接状态 -->
+        <div class="status-item">
+          <div class="status-label">
+            <el-icon class="label-icon"><Link /></el-icon>
+            TCP连接
+          </div>
+          <div class="tcp-badge" :class="{ connected: connectedTcpConnections.length > 0, disconnected: connectedTcpConnections.length === 0 }">
+            <el-icon class="status-icon">
+              <span v-if="connectedTcpConnections.length > 0" class="connected-icon">●</span>
+              <span v-else class="disconnected-icon">●</span>
+            </el-icon>
+            <span class="status-text">
+              {{ connectedTcpConnections.length > 0 ? `已连接 ${connectedTcpConnections.length} 个TCP` : '未连接' }}
+            </span>
+          </div>
+        </div>
       </div>
               
-      <!-- 串口选择器 -->
-      <div v-if="connectionStore.isConnected" class="status-right">
-        <div class="serial-selector">
+      <!-- 接口选择器 -->
+      <div v-if="connectionStore.isConnected || connectedTcpConnections.length > 0" class="status-right">
+        <div class="interface-selector">
           <div class="selector-label">
             <el-icon><Setting /></el-icon>
-            选择串口
+            选择接口
           </div>
           <el-select 
-            v-model="connectionStore.selectedSerialId" 
-            placeholder="选择串口"
-            class="serial-select"
-            @change="onSerialChange"
+            v-model="selectedInterfaceId" 
+            placeholder="选择接口"
+            class="interface-select"
+            @change="onInterfaceChange"
           >
-            <el-option
-              v-for="serial in connectionStore.connectedSerials"
-              :key="serial.serial_id"
-              :label="`串口 #${serial.serial_id} (${serial.port})`"
-              :value="serial.serial_id"
-            />
+            <!-- 串口选项 -->
+            <el-option-group label="串口连接">
+              <el-option
+                v-for="serial in connectionStore.connectedSerials"
+                :key="`serial-${serial.serial_id}`"
+                :label="`串口 #${serial.serial_id} (${serial.port})`"
+                :value="`serial-${serial.serial_id}`"
+              />
+            </el-option-group>
+            <!-- TCP选项 -->
+            <el-option-group label="TCP连接">
+              <el-option
+                v-for="tcp in connectedTcpConnections"
+                :key="`tcp-${tcp.id}`"
+                :label="`TCP #${tcp.id} (${tcp.host}:${tcp.port})`"
+                :value="`tcp-${tcp.id}`"
+              />
+            </el-option-group>
           </el-select>
         </div>
       </div>
@@ -89,7 +118,7 @@
                   <el-button 
                     type="primary" 
                     @click="sendCommand"
-                    :disabled="!connectionStore.isConnected"
+                    :disabled="!selectedInterfaceId"
                     :loading="commandLoading"
                   >
                     <el-icon><Position /></el-icon>
@@ -137,7 +166,7 @@
                   <el-button 
                     type="primary" 
                     @click="sendRawData"
-                    :disabled="!connectionStore.isConnected"
+                    :disabled="!selectedInterfaceId"
                     :loading="rawLoading"
                   >
                     <el-icon><Position /></el-icon>
@@ -169,7 +198,7 @@
                 :key="cmd.id"
                 class="quick-command-btn"
                 @click="sendQuickCommand(cmd)"
-                :class="{ disabled: !connectionStore.isConnected }"
+                :class="{ disabled: !selectedInterfaceId }"
                 :title="cmd.description"
               >
                 <div class="command-content">
@@ -277,6 +306,9 @@
                   {{ log.description }}
                   <el-tag v-if="log.serial_id" size="small" type="info" style="margin-left: 8px;">
                     串口#{{ log.serial_id }}
+                  </el-tag>
+                  <el-tag v-if="log.tcp_id" size="small" type="success" style="margin-left: 8px;">
+                    TCP#{{ log.tcp_id }}
                   </el-tag>
                 </span>
                 <span class="log-timestamp">
@@ -443,15 +475,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Edit, Connection, Monitor, Setting } from '@element-plus/icons-vue'
+import { Delete, Download, Edit, Connection, Monitor, Setting, Link } from '@element-plus/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import type { CommunicationLog } from '@/stores/communication'
 import * as commandsAPI from '@/api/commands'
 import { InputMode, InputModeType } from '@/api/commands'
+import * as tcpAPI from '@/api/tcp'
+import type { TcpConnection, TcpCommandRequest } from '@/api/tcp'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
@@ -464,6 +498,33 @@ const showHistory = ref(false)
 const showAddCommand = ref(false)
 const showEditCommand = ref(false)
 const commandHistory = ref<string[]>([])
+
+// TCP连接相关状态
+const connectedTcpConnections = ref<TcpConnection[]>([])
+const selectedTcpId = ref<string | null>(null)
+const selectedInterfaceId = ref<string | null>(null)
+
+// 计算属性 - 当前选择的接口类型
+const currentInterfaceType = computed(() => {
+  if (!selectedInterfaceId.value) return null
+  return selectedInterfaceId.value.startsWith('serial-') ? 'serial' : 'tcp'
+})
+
+// 计算属性 - 当前选择的串口ID
+const currentSerialId = computed(() => {
+  if (currentInterfaceType.value === 'serial' && selectedInterfaceId.value) {
+    return parseInt(selectedInterfaceId.value.replace('serial-', ''))
+  }
+  return null
+})
+
+// 计算属性 - 当前选择的TCP ID
+const currentTcpId = computed(() => {
+  if (currentInterfaceType.value === 'tcp' && selectedInterfaceId.value) {
+    return selectedInterfaceId.value.replace('tcp-', '')
+  }
+  return null
+})
 
 // 表单数据
 const commandForm = reactive({
@@ -560,16 +621,65 @@ const sendCommand = async () => {
     return
   }
   
-  if (!connectionStore.selectedSerialId) {
-    ElMessage.error('请先选择一个串口')
+  if (!selectedInterfaceId.value) {
+    ElMessage.error('请先选择一个接口')
     return
   }
   
   commandLoading.value = true
   try {
     const formattedCommand = formatCommand(commandForm.command)
-    await communicationStore.sendATCommand(formattedCommand, connectionStore.selectedSerialId)
-    ElMessage.success(`指令发送成功 (串口 #${connectionStore.selectedSerialId})`)
+    
+    if (currentInterfaceType.value === 'serial') {
+      // 通过串口发送
+      await communicationStore.sendATCommand(formattedCommand, currentSerialId.value!)
+      ElMessage.success(`指令发送成功 (串口 #${currentSerialId.value})`)
+    } else if (currentInterfaceType.value === 'tcp') {
+      // 通过TCP发送
+      const request: TcpCommandRequest = {
+        connection_id: currentTcpId.value!,
+        command: formattedCommand,
+        auto_add_crlf: commandForm.autoAddCRLF
+      }
+      
+      const response = await tcpAPI.sendTcpCommand(request)
+      
+      if (response.success) {
+        ElMessage.success(`TCP指令发送成功 (${currentTcpId.value})`)
+        
+        // 添加到通信日志
+        communicationStore.addLog({
+          type: 'at',
+          direction: 'sent',
+          description: `TCP命令发送`,
+          data: formattedCommand,
+          success: true,
+          tcp_id: currentTcpId.value!
+        })
+        
+        // 添加响应日志
+        communicationStore.addLog({
+          type: 'at',
+          direction: 'received',
+          description: `TCP响应接收`,
+          data: response.response,
+          success: true,
+          tcp_id: currentTcpId.value!
+        })
+      } else {
+        ElMessage.error(`TCP指令发送失败: ${response.response}`)
+        
+        // 添加错误日志
+        communicationStore.addLog({
+          type: 'at',
+          direction: 'sent',
+          description: `TCP命令发送`,
+          data: formattedCommand,
+          success: false,
+          tcp_id: currentTcpId.value!
+        })
+      }
+    }
     
     // 添加到历史记录
     addToHistory(commandForm.command)
@@ -611,29 +721,152 @@ const handleCommandInput = (value: string) => {
 }
 
 const sendQuickCommand = async (cmd: SavedCommand) => {
-  // 确定要使用的串口ID
-  const targetSerialId = cmd.target_serial_id || connectionStore.selectedSerialId
-  
-  if (!targetSerialId) {
-    ElMessage.error('请先选择一个串口或为指令设置目标串口')
-    return
-  }
-  
   commandLoading.value = true
   try {
     if (cmd.input_mode === InputMode.HEX_READ) {
-      // 十六进制读取
-      await communicationStore.sendRawData(cmd.command, targetSerialId)
-      ElMessage.success(`十六进制指令发送成功 (串口 #${targetSerialId})`)
+      // 十六进制读取 - 通过当前选择的接口发送
+      if (currentInterfaceType.value === 'serial') {
+        await communicationStore.sendRawData(cmd.command, currentSerialId.value!)
+        ElMessage.success(`十六进制指令发送成功 (串口 #${currentSerialId.value})`)
+      } else if (currentInterfaceType.value === 'tcp') {
+        // TCP连接发送十六进制数据
+        const request: TcpCommandRequest = {
+          connection_id: currentTcpId.value!,
+          command: cmd.command,
+          auto_add_crlf: false
+        }
+        const response = await tcpAPI.sendTcpCommand(request)
+        if (response.success) {
+          ElMessage.success(`十六进制指令发送成功 (TCP #${currentTcpId.value})`)
+          
+          // 添加TCP通信日志
+          communicationStore.addLog({
+            type: 'raw',
+            direction: 'sent',
+            description: `TCP十六进制数据发送`,
+            data: cmd.command,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+          
+          communicationStore.addLog({
+            type: 'raw',
+            direction: 'received',
+            description: `TCP十六进制响应接收`,
+            data: response.response,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+        } else {
+          ElMessage.error(`十六进制指令发送失败: ${response.response}`)
+          
+          // 添加错误日志
+          communicationStore.addLog({
+            type: 'raw',
+            direction: 'sent',
+            description: `TCP十六进制数据发送`,
+            data: cmd.command,
+            success: false,
+            tcp_id: currentTcpId.value!
+          })
+        }
+      }
     } else if (cmd.input_mode === InputMode.TCP_INPUT) {
-      // TCP形式输入
-      await communicationStore.sendRawData(cmd.command, targetSerialId)
-      ElMessage.success(`TCP指令发送成功 (串口 #${targetSerialId})`)
+      // TCP形式输入 - 通过当前选择的接口发送
+      if (currentInterfaceType.value === 'serial') {
+        await communicationStore.sendRawData(cmd.command, currentSerialId.value!)
+        ElMessage.success(`TCP指令发送成功 (串口 #${currentSerialId.value})`)
+      } else if (currentInterfaceType.value === 'tcp') {
+        const request: TcpCommandRequest = {
+          connection_id: currentTcpId.value!,
+          command: cmd.command,
+          auto_add_crlf: true
+        }
+        const response = await tcpAPI.sendTcpCommand(request)
+        if (response.success) {
+          ElMessage.success(`TCP指令发送成功 (TCP #${currentTcpId.value})`)
+          
+          // 添加TCP通信日志
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'sent',
+            description: `TCP指令发送`,
+            data: cmd.command,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+          
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'received',
+            description: `TCP指令响应接收`,
+            data: response.response,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+        } else {
+          ElMessage.error(`TCP指令发送失败: ${response.response}`)
+          
+          // 添加错误日志
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'sent',
+            description: `TCP指令发送`,
+            data: cmd.command,
+            success: false,
+            tcp_id: currentTcpId.value!
+          })
+        }
+      }
     } else {
-      // 文本输入
+      // 文本输入 - 通过当前选择的接口发送
       const formattedCommand = formatCommand(cmd.command)
-      await communicationStore.sendATCommand(formattedCommand, targetSerialId)
-      ElMessage.success(`指令发送成功 (串口 #${targetSerialId})`)
+      
+      if (currentInterfaceType.value === 'serial') {
+        await communicationStore.sendATCommand(formattedCommand, currentSerialId.value!)
+        ElMessage.success(`指令发送成功 (串口 #${currentSerialId.value})`)
+      } else if (currentInterfaceType.value === 'tcp') {
+        const request: TcpCommandRequest = {
+          connection_id: currentTcpId.value!,
+          command: formattedCommand,
+          auto_add_crlf: commandForm.autoAddCRLF
+        }
+        const response = await tcpAPI.sendTcpCommand(request)
+        if (response.success) {
+          ElMessage.success(`指令发送成功 (TCP #${currentTcpId.value})`)
+          
+          // 添加TCP通信日志
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'sent',
+            description: `TCP文本指令发送`,
+            data: formattedCommand,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+          
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'received',
+            description: `TCP文本指令响应接收`,
+            data: response.response,
+            success: true,
+            tcp_id: currentTcpId.value!
+          })
+        } else {
+          ElMessage.error(`指令发送失败: ${response.response}`)
+          
+          // 添加错误日志
+          communicationStore.addLog({
+            type: 'at',
+            direction: 'sent',
+            description: `TCP文本指令发送`,
+            data: formattedCommand,
+            success: false,
+            tcp_id: currentTcpId.value!
+          })
+        }
+      }
     }
     
     // 同时更新输入框显示（显示原始指令，不显示终止符）
@@ -904,8 +1137,8 @@ const sendRawData = async () => {
     return
   }
   
-  if (!connectionStore.selectedSerialId) {
-    ElMessage.error('请先选择一个串口')
+  if (!selectedInterfaceId.value) {
+    ElMessage.error('请先选择一个接口')
     return
   }
   
@@ -925,8 +1158,51 @@ const sendRawData = async () => {
   
   rawLoading.value = true
   try {
-    await communicationStore.sendRawData(rawForm.data, connectionStore.selectedSerialId)
-    ElMessage.success(`原始数据发送成功 (串口 #${connectionStore.selectedSerialId})`)
+    if (currentInterfaceType.value === 'serial') {
+      await communicationStore.sendRawData(rawForm.data, currentSerialId.value!)
+      ElMessage.success(`原始数据发送成功 (串口 #${currentSerialId.value})`)
+    } else if (currentInterfaceType.value === 'tcp') {
+      const request: TcpCommandRequest = {
+        connection_id: currentTcpId.value!,
+        command: rawForm.data,
+        auto_add_crlf: false
+      }
+      const response = await tcpAPI.sendTcpCommand(request)
+      if (response.success) {
+        ElMessage.success(`原始数据发送成功 (TCP #${currentTcpId.value})`)
+        
+        // 添加TCP通信日志
+        communicationStore.addLog({
+          type: 'raw',
+          direction: 'sent',
+          description: `TCP原始数据发送`,
+          data: rawForm.data,
+          success: true,
+          tcp_id: currentTcpId.value!
+        })
+        
+        communicationStore.addLog({
+          type: 'raw',
+          direction: 'received',
+          description: `TCP原始数据响应接收`,
+          data: response.response,
+          success: true,
+          tcp_id: currentTcpId.value!
+        })
+      } else {
+        ElMessage.error(`原始数据发送失败: ${response.response}`)
+        
+        // 添加错误日志
+        communicationStore.addLog({
+          type: 'raw',
+          direction: 'sent',
+          description: `TCP原始数据发送`,
+          data: rawForm.data,
+          success: false,
+          tcp_id: currentTcpId.value!
+        })
+      }
+    }
   } catch (error) {
     console.error('Send raw data error:', error)
     ElMessage.error(`原始数据发送失败: ${error instanceof Error ? error.message : '未知错误'}`)
@@ -1019,23 +1295,50 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
-const onSerialChange = (serialId: number) => {
-  ElMessage.info(`切换到串口 #${serialId}`)
+const onInterfaceChange = (interfaceId: string) => {
+  if (interfaceId.startsWith('serial-')) {
+    const serialId = parseInt(interfaceId.replace('serial-', ''))
+    connectionStore.selectSerial(serialId)
+    selectedTcpId.value = null
+    ElMessage.info(`切换到串口 #${serialId}`)
+  } else if (interfaceId.startsWith('tcp-')) {
+    const tcpId = interfaceId.replace('tcp-', '')
+    selectedTcpId.value = tcpId
+    connectionStore.selectedSerialId = null
+    ElMessage.info(`切换到TCP连接 #${tcpId}`)
+  }
+}
+
+// 同步TCP连接状态
+const syncTcpConnections = async () => {
+  try {
+    const response = await tcpAPI.getTcpConnections()
+    connectedTcpConnections.value = response.connections
+  } catch (error) {
+    console.error('同步TCP连接状态失败:', error)
+  }
 }
 
 // 生命周期
 onMounted(async () => {
   // 初始化通信状态
   
-  if (!connectionStore.isConnected) {
-    ElMessage.warning('请先连接串口')
+  // 检查是否有任何连接（串口或TCP）
+  await syncTcpConnections()
+  
+  if (!connectionStore.isConnected && connectedTcpConnections.value.length === 0) {
+    ElMessage.warning('请先连接接口')
     router.push('/serial-config')
     return
   }
   
-  // 自动选择第一个已连接的串口
-  if (!connectionStore.selectedSerialId && connectionStore.connectedSerials.length > 0) {
+  // 自动选择第一个已连接的接口
+  if (connectionStore.connectedSerials.length > 0) {
     connectionStore.selectSerial(connectionStore.connectedSerials[0].serial_id)
+    selectedInterfaceId.value = `serial-${connectionStore.connectedSerials[0].serial_id}`
+  } else if (connectedTcpConnections.value.length > 0) {
+    selectedTcpId.value = connectedTcpConnections.value[0].id
+    selectedInterfaceId.value = `tcp-${connectedTcpConnections.value[0].id}`
   }
   
   // 加载保存的指令
@@ -1112,7 +1415,7 @@ onMounted(async () => {
   align-items: center;
 }
 
-.serial-selector {
+.interface-selector {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1130,12 +1433,13 @@ onMounted(async () => {
   letter-spacing: 0.5px;
 }
 
-.serial-select {
+.interface-select {
   width: 200px;
 }
 
 .connection-badge,
-.realtime-badge {
+.realtime-badge,
+.tcp-badge {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1150,7 +1454,8 @@ onMounted(async () => {
 }
 
 .connection-badge:hover,
-.realtime-badge:hover {
+.realtime-badge:hover,
+.tcp-badge:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -1177,6 +1482,18 @@ onMounted(async () => {
   background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
   color: #f57c00;
   border-color: #ff9800;
+}
+
+.tcp-badge.connected {
+  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+  color: #2e7d32;
+  border-color: #4caf50;
+}
+
+.tcp-badge.disconnected {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  color: #c62828;
+  border-color: #f44336;
 }
 
 .connected-icon {
@@ -2026,11 +2343,11 @@ onMounted(async () => {
     justify-content: center;
   }
   
-  .serial-selector {
+  .interface-selector {
     align-items: center;
   }
   
-  .serial-select {
+  .interface-select {
     width: 100%;
     max-width: 300px;
   }

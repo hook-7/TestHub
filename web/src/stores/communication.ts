@@ -12,6 +12,7 @@ export interface CommunicationLog {
   description: string
   success?: boolean
   serial_id?: number // 关联的串口ID
+  tcp_id?: string // 关联的TCP连接ID
 }
 
 export const useCommunicationStore = defineStore('communication', () => {
