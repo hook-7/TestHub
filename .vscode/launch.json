@@ -12,27 +12,22 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "ENVIRONMENT": "development"
             },
-            "args": [],
-            "justMyCode": false
+            "justMyCode": false,
+            "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
             "name": "FastAPI (uvicorn)",
             "type": "debugpy",
             "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "app.main:app",
-                "--host", "0.0.0.0",
-                "--port", "8000",
-                "--reload"
-            ],
+            "program": "${workspaceFolder}/start.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
                 "ENVIRONMENT": "development"
             },
-            "justMyCode": false
+            "justMyCode": false,
+            "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
             "name": "启动前端开发服务器",
