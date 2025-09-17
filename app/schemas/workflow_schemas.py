@@ -14,7 +14,6 @@ class WorkflowNodeType(str, Enum):
     START = "start"
     END = "end"
     COMMAND = "command"
-    WORKFLOW = "workflow"
     CONDITION = "condition"
     DELAY = "delay"
     NOTIFICATION = "notification"

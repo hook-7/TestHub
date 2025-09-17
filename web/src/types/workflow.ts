@@ -7,7 +7,6 @@ export enum WorkflowNodeType {
   START = 'start',           // 开始节点
   END = 'end',              // 结束节点
   COMMAND = 'command',      // 命令执行节点
-  WORKFLOW = 'workflow',    // 工作流引用节点
   CONDITION = 'condition',  // 条件判断节点
   DELAY = 'delay',         // 延迟节点
   NOTIFICATION = 'notification' // 通知节点
