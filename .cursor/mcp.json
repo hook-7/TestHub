@@ -10,7 +10,22 @@
       "context7": {
           "command": "npx",
           "args": ["-y", "@upstash/context7-mcp"]
+        },
+        "dbhub-postgres-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://testhub:F7zxC6yYmfXmba2R@192.168.100.10:5432/testhub?sslmode=disable"
+          ]
         }
   
     }
+
+
   }

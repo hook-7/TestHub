@@ -6,8 +6,6 @@ Command Schemas
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_serializer
 from datetime import datetime
-
-
 class SavedCommand(BaseModel):
     """保存的指令模型"""
     id: str = Field(..., description="指令唯一标识")
@@ -15,7 +13,7 @@ class SavedCommand(BaseModel):
     command: str = Field(..., description="实际指令内容")
     description: str = Field(default="", description="指令描述")
     expected_response: str = Field(default="", description="期望返回值")
-    send_as_hex: bool = Field(default=False, description="是否以原始16进制发送")
+    input_mode: str = Field(default="TEXT_INPUT", description="输入模式：TEXT_INPUT-文本输入，HEX_READ-十六进制读取，TCP_INPUT-TCP形式输入")
     show_notification: bool = Field(default=False, description="是否弹出通知")
     target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
@@ -24,6 +22,7 @@ class SavedCommand(BaseModel):
     def serialize_created_at(self, dt: datetime) -> int:
         """将datetime序列化为毫秒时间戳"""
         return int(dt.timestamp() * 1000)
+    
     
     model_config = {
         "from_attributes": True
@@ -36,9 +35,11 @@ class CreateCommandRequest(BaseModel):
     command: str = Field(..., min_length=1, max_length=200, description="实际指令内容")
     description: str = Field(default="", max_length=200, description="指令描述")
     expected_response: str = Field(default="", max_length=1000, description="期望返回值")
-    send_as_hex: bool = Field(default=False, description="是否以原始16进制发送")
+    input_mode: str = Field(default="TEXT_INPUT", description="输入模式：TEXT_INPUT-文本输入，HEX_READ-十六进制读取，TCP_INPUT-TCP形式输入")
     show_notification: bool = Field(default=False, description="是否弹出通知")
     target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
+    
+    model_config = {}
 
 
 class UpdateCommandRequest(BaseModel):
@@ -47,9 +48,11 @@ class UpdateCommandRequest(BaseModel):
     command: Optional[str] = Field(None, min_length=1, max_length=200, description="实际指令内容")
     description: Optional[str] = Field(None, max_length=200, description="指令描述")
     expected_response: Optional[str] = Field(None, max_length=1000, description="期望返回值")
-    send_as_hex: Optional[bool] = Field(None, description="是否以原始16进制发送")
+    input_mode: Optional[str] = Field(None, description="输入模式：TEXT_INPUT-文本输入，HEX_READ-十六进制读取，TCP_INPUT-TCP形式输入")
     show_notification: Optional[bool] = Field(None, description="是否弹出通知")
     target_serial_id: Optional[int] = Field(None, description="目标串口ID，null表示使用当前选择的串口")
+    
+    model_config = {}
 
 
 class CommandsListResponse(BaseModel):

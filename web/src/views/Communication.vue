@@ -176,7 +176,8 @@
                   <div class="command-header-row">
                     <span class="command-name">{{ cmd.name }}</span>
                     <div class="command-tags">
-                      <el-tag v-if="cmd.send_as_hex" size="small" type="warning">HEX</el-tag>
+                      <el-tag v-if="cmd.input_mode === InputMode.HEX_READ" size="small" type="warning">HEX</el-tag>
+                      <el-tag v-if="cmd.input_mode === InputMode.TCP_INPUT" size="small" type="info">TCP</el-tag>
                       <el-tag v-if="cmd.show_notification" size="small" type="success">通知</el-tag>
                       <el-tag v-if="cmd.target_serial_id" size="small" type="primary">
                         #{{ cmd.target_serial_id }}
@@ -332,10 +333,11 @@
             show-word-limit
           />
         </el-form-item>
-        <el-form-item label="发送方式">
-          <el-radio-group v-model="newCommand.send_as_hex">
-            <el-radio :value="false">文本发送</el-radio>
-            <el-radio :value="true">16进制发送</el-radio>
+        <el-form-item label="输入模式">
+          <el-radio-group v-model="newCommand.input_mode">
+            <el-radio :value="InputMode.TEXT_INPUT">文本输入</el-radio>
+            <el-radio :value="InputMode.HEX_READ">十六进制读取</el-radio>
+            <el-radio :value="InputMode.TCP_INPUT">TCP形式输入</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="目标串口">
@@ -404,10 +406,11 @@
             show-word-limit
           />
         </el-form-item>
-        <el-form-item label="发送方式">
-          <el-radio-group v-model="editCommand.send_as_hex">
-            <el-radio :value="false">文本发送</el-radio>
-            <el-radio :value="true">16进制发送</el-radio>
+        <el-form-item label="输入模式">
+          <el-radio-group v-model="editCommand.input_mode">
+            <el-radio :value="InputMode.TEXT_INPUT">文本输入</el-radio>
+            <el-radio :value="InputMode.HEX_READ">十六进制读取</el-radio>
+            <el-radio :value="InputMode.TCP_INPUT">TCP形式输入</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="目标串口">
@@ -448,6 +451,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useCommunicationStore } from '@/stores/communication'
 import type { CommunicationLog } from '@/stores/communication'
 import * as commandsAPI from '@/api/commands'
+import { InputMode, InputModeType } from '@/api/commands'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
@@ -474,7 +478,7 @@ const newCommand = reactive({
   command: '',
   description: '',
   expected_response: '',
-  send_as_hex: false,
+  input_mode: InputMode.TEXT_INPUT as InputModeType,
   show_notification: false,
   target_serial_id: undefined as number | undefined,
 })
@@ -486,7 +490,7 @@ const editCommand = reactive({
   command: '',
   description: '',
   expected_response: '',
-  send_as_hex: false,
+  input_mode: InputMode.TEXT_INPUT as InputModeType,
   show_notification: false,
   target_serial_id: undefined as number | undefined,
 })
@@ -502,7 +506,7 @@ interface SavedCommand {
   command: string
   description: string
   expected_response: string
-  send_as_hex: boolean
+  input_mode: InputModeType
   show_notification: boolean
   target_serial_id?: number
   createdAt: number
@@ -617,12 +621,16 @@ const sendQuickCommand = async (cmd: SavedCommand) => {
   
   commandLoading.value = true
   try {
-    if (cmd.send_as_hex) {
-      // 16进制发送
+    if (cmd.input_mode === InputMode.HEX_READ) {
+      // 十六进制读取
       await communicationStore.sendRawData(cmd.command, targetSerialId)
-      ElMessage.success(`16进制指令发送成功 (串口 #${targetSerialId})`)
+      ElMessage.success(`十六进制指令发送成功 (串口 #${targetSerialId})`)
+    } else if (cmd.input_mode === InputMode.TCP_INPUT) {
+      // TCP形式输入
+      await communicationStore.sendRawData(cmd.command, targetSerialId)
+      ElMessage.success(`TCP指令发送成功 (串口 #${targetSerialId})`)
     } else {
-      // 文本发送
+      // 文本输入
       const formattedCommand = formatCommand(cmd.command)
       await communicationStore.sendATCommand(formattedCommand, targetSerialId)
       ElMessage.success(`指令发送成功 (串口 #${targetSerialId})`)
@@ -653,7 +661,7 @@ const loadSavedCommands = async () => {
       command: cmd.command,
       description: cmd.description,
       expected_response: cmd.expected_response,
-      send_as_hex: cmd.send_as_hex,
+      input_mode: cmd.input_mode,
       show_notification: cmd.show_notification,
       target_serial_id: cmd.target_serial_id,
       createdAt: cmd.created_at // API返回毫秒时间戳
@@ -669,7 +677,7 @@ const loadSavedCommands = async () => {
         command: 'AT+MAC=026501123456',
         description: '设置设备MAC地址',
         expected_response: 'OK',
-        send_as_hex: false,
+        input_mode: InputMode.TEXT_INPUT,
         show_notification: false,
         target_serial_id: 1, // 指定串口1
         createdAt: Date.now()
@@ -680,7 +688,7 @@ const loadSavedCommands = async () => {
         command: 'AT+MAC?',
         description: '查询设备MAC地址',
         expected_response: '+MAC:026501123456',
-        send_as_hex: false,
+        input_mode: InputMode.TEXT_INPUT,
         show_notification: true,
         target_serial_id: 1, // 使用当前选择的串口
         createdAt: Date.now()
@@ -691,7 +699,7 @@ const loadSavedCommands = async () => {
         command: 'AT+GMR',
         description: '查询固件版本信息',
         expected_response: 'AT version:1.0.0',
-        send_as_hex: false,
+        input_mode: InputMode.TEXT_INPUT,
         show_notification: false,
         target_serial_id: 2, // 指定串口2（演示：如果串口2不存在会复用ID）
         createdAt: Date.now()
@@ -702,7 +710,7 @@ const loadSavedCommands = async () => {
         command: 'AT+RST',
         description: '重启设备',
         expected_response: 'OK',
-        send_as_hex: false,
+        input_mode: InputMode.TEXT_INPUT,
         show_notification: true,
         target_serial_id: 2,
         createdAt: Date.now()
@@ -713,7 +721,7 @@ const loadSavedCommands = async () => {
         command: '41540D0A',
         description: '发送AT\\r\\n的16进制格式',
         expected_response: '4F4B0D0A',
-        send_as_hex: true,
+        input_mode: InputMode.HEX_READ,
         show_notification: false,
         target_serial_id: 1,
         createdAt: Date.now()
@@ -734,7 +742,7 @@ const addNewCommand = async () => {
       command: newCommand.command.trim(),
       description: newCommand.description.trim(),
       expected_response: newCommand.expected_response.trim(),
-      send_as_hex: newCommand.send_as_hex,
+      input_mode: newCommand.input_mode,
       show_notification: newCommand.show_notification,
       target_serial_id: newCommand.target_serial_id
     }
@@ -748,7 +756,7 @@ const addNewCommand = async () => {
       command: createdCommand.command,
       description: createdCommand.description,
       expected_response: createdCommand.expected_response,
-      send_as_hex: createdCommand.send_as_hex,
+      input_mode: createdCommand.input_mode,
       show_notification: createdCommand.show_notification,
       target_serial_id: createdCommand.target_serial_id,
       createdAt: createdCommand.created_at
@@ -761,7 +769,7 @@ const addNewCommand = async () => {
     newCommand.command = ''
     newCommand.description = ''
     newCommand.expected_response = ''
-    newCommand.send_as_hex = false
+    newCommand.input_mode = InputMode.TEXT_INPUT
     newCommand.show_notification = false
     newCommand.target_serial_id = undefined
     showAddCommand.value = false
@@ -779,7 +787,7 @@ const handleCloseAddCommand = () => {
   newCommand.command = ''
   newCommand.description = ''
   newCommand.expected_response = ''
-  newCommand.send_as_hex = false
+  newCommand.input_mode = InputMode.TEXT_INPUT
   newCommand.show_notification = false
   newCommand.target_serial_id = undefined
   showAddCommand.value = false
@@ -817,7 +825,7 @@ const openEditCommand = (cmd: SavedCommand) => {
   editCommand.command = cmd.command
   editCommand.description = cmd.description
   editCommand.expected_response = cmd.expected_response
-  editCommand.send_as_hex = cmd.send_as_hex
+  editCommand.input_mode = cmd.input_mode
   editCommand.show_notification = cmd.show_notification
   editCommand.target_serial_id = cmd.target_serial_id
   showEditCommand.value = true
@@ -835,7 +843,7 @@ const updateCommand = async () => {
       command: editCommand.command.trim(),
       description: editCommand.description.trim(),
       expected_response: editCommand.expected_response.trim(),
-      send_as_hex: editCommand.send_as_hex,
+      input_mode: editCommand.input_mode,
       show_notification: editCommand.show_notification,
       target_serial_id: editCommand.target_serial_id
     }
@@ -851,7 +859,7 @@ const updateCommand = async () => {
         command: updatedCommand.command,
         description: updatedCommand.description,
         expected_response: updatedCommand.expected_response,
-        send_as_hex: updatedCommand.send_as_hex,
+        input_mode: updatedCommand.input_mode,
         show_notification: updatedCommand.show_notification,
         target_serial_id: updatedCommand.target_serial_id,
         createdAt: updatedCommand.created_at
@@ -864,7 +872,7 @@ const updateCommand = async () => {
     editCommand.command = ''
     editCommand.description = ''
     editCommand.expected_response = ''
-    editCommand.send_as_hex = false
+    editCommand.input_mode = InputMode.TEXT_INPUT
     editCommand.show_notification = false
     editCommand.target_serial_id = undefined
     showEditCommand.value = false
@@ -883,7 +891,7 @@ const handleCloseEditCommand = () => {
   editCommand.command = ''
   editCommand.description = ''
   editCommand.expected_response = ''
-  editCommand.send_as_hex = false
+  editCommand.input_mode = InputMode.TEXT_INPUT
   editCommand.show_notification = false
   editCommand.target_serial_id = undefined
   showEditCommand.value = false

@@ -11,7 +11,6 @@ import logging
 from datetime import datetime
 import json
 from uuid import uuid4, UUID
-
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,7 @@ class Command(SQLModel, table=True):
     command: str = Field(description="指令内容", max_length=1000)
     description: str = Field(description="指令描述", max_length=500)
     expected_response: str = Field(default="", description="期望返回值", max_length=1000)
-    send_as_hex: bool = Field(default=False, description="是否以原始16进制发送")
+    input_mode: str = Field(default="TEXT_INPUT", description="输入模式：TEXT_INPUT-文本输入，HEX_READ-十六进制读取，TCP_INPUT-TCP形式输入")
     show_notification: bool = Field(default=False, description="是否弹出通知")
     target_serial_id: Optional[int] = Field(default=None, description="目标串口ID，null表示使用当前选择的串口")
     created_at: datetime = Field(
