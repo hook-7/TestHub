@@ -272,9 +272,9 @@ const disconnectingSerials = ref<Record<number, boolean>>({})
 
 const form = reactive({
   baudrate: 9600,  
-  bytesize: 8,
-  parity: 'none',
-  stopbits: 1,
+  bytesize: 8 as 7 | 8,
+  parity: 'none' as 'none' | 'even' | 'odd',
+  stopbits: 1 as 1 | 2,
   timeout: 0.5,  
 })
 
