@@ -7,9 +7,8 @@ export enum WorkflowNodeType {
   START = 'start',           // 开始节点
   END = 'end',              // 结束节点
   COMMAND = 'command',      // 命令执行节点
+  WORKFLOW = 'workflow',    // 工作流引用节点
   CONDITION = 'condition',  // 条件判断节点
-  LOOP = 'loop',           // 循环节点
-  PARALLEL = 'parallel',   // 并行执行节点
   DELAY = 'delay',         // 延迟节点
   NOTIFICATION = 'notification' // 通知节点
 }
@@ -57,19 +56,15 @@ export interface WorkflowNodeConfig {
   timeout?: number         // 超时时间(ms)
   retryCount?: number      // 重试次数
   
+  // 工作流引用节点配置
+  workflowId?: string      // 引用的工作流ID
+  workflowName?: string    // 引用的工作流名称
+  inputVariables?: Record<string, any> // 传递给子工作流的变量
+  
   // 条件节点配置
   condition?: string       // 条件表达式
   trueNext?: string        // 条件为真时的下一个节点ID
   falseNext?: string       // 条件为假时的下一个节点ID
-  
-  // 循环节点配置
-  loopCount?: number       // 循环次数
-  loopCondition?: string   // 循环条件
-  loopNext?: string        // 循环内的下一个节点ID
-  loopEnd?: string         // 循环结束后的下一个节点ID
-  
-  // 并行节点配置
-  parallelNodes?: string[] // 并行执行的节点ID列表
   
   // 延迟节点配置
   delayTime?: number       // 延迟时间(ms)
@@ -122,8 +117,9 @@ export interface WorkflowSettings {
   maxExecutionTime: number     // 最大执行时间(ms)
   retryOnFailure: boolean      // 失败时重试
   maxRetries: number          // 最大重试次数
-  parallelExecution: boolean   // 允许并行执行
   timeout: number             // 全局超时时间(ms)
+  requireMacAddress: boolean   // 是否需要MAC地址
+  requireSerialNumber: boolean // 是否需要SN序列号
 }
 
 // 工作流执行实例
@@ -220,9 +216,11 @@ export interface ExecuteWorkflowRequest {
   workflowId: string
   variables?: Record<string, any>
   macAddress?: string
+  serialNumber?: string
   operator?: string
   workstation?: string
   deviceId?: string
+  inputData?: Record<string, any> // 其他输入数据
 }
 
 // 工作流列表响应
