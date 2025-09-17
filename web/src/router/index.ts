@@ -3,6 +3,7 @@ import SerialConfig from '@/views/SerialConfig.vue'
 import Communication from '@/views/Communication.vue'
 import Workflow from '@/views/Workflow.vue'
 import WorkflowOrchestration from '@/views/WorkflowOrchestration.vue'
+import WorkflowDesigner from '@/views/WorkflowDesigner.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -41,6 +42,14 @@ const router = createRouter({
       component: WorkflowOrchestration,
       meta: { 
         title: '工作流编排'
+      }
+    },
+    {
+      path: '/workflow-designer/:id',
+      name: 'WorkflowDesigner',
+      component: WorkflowDesigner,
+      meta: { 
+        title: '工作流设计器'
       }
     }
   ]
