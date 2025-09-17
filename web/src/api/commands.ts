@@ -4,13 +4,21 @@
 
 import { api } from './index'
 
+export const InputMode = {
+  TEXT_INPUT: "TEXT_INPUT",  // 支持文本输入
+  HEX_READ: "HEX_READ",      // 十六进制读取
+  TCP_INPUT: "TCP_INPUT"     // 以TCP形式输入
+} as const
+
+export type InputModeType = typeof InputMode[keyof typeof InputMode]
+
 export interface SavedCommand {
   id: string
   name: string
   command: string
   description: string
   expected_response: string
-  send_as_hex: boolean
+  input_mode: InputModeType
   show_notification: boolean
   target_serial_id?: number // 目标串口ID，null表示使用当前选择的串口
   created_at: number // 毫秒时间戳
@@ -21,7 +29,7 @@ export interface CreateCommandRequest {
   command: string
   description?: string
   expected_response?: string
-  send_as_hex?: boolean
+  input_mode?: InputModeType
   show_notification?: boolean
   target_serial_id?: number
 }
@@ -31,7 +39,7 @@ export interface UpdateCommandRequest {
   command?: string
   description?: string
   expected_response?: string
-  send_as_hex?: boolean
+  input_mode?: InputModeType
   show_notification?: boolean
   target_serial_id?: number
 }

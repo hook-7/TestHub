@@ -34,7 +34,7 @@ class CommandService:
             command=db_command.command,
             description=db_command.description,
             expected_response=db_command.expected_response,
-            send_as_hex=db_command.send_as_hex,
+            input_mode=db_command.input_mode,
             show_notification=db_command.show_notification,
             target_serial_id=db_command.target_serial_id,
             created_at=db_command.created_at
@@ -96,7 +96,7 @@ class CommandService:
                     command=request.command.strip(),
                     description=request.description.strip(),
                     expected_response=request.expected_response.strip(),
-                    send_as_hex=request.send_as_hex,
+                    input_mode=request.input_mode,
                     show_notification=request.show_notification,
                     target_serial_id=request.target_serial_id
                 )
@@ -149,8 +149,8 @@ class CommandService:
                     db_command.description = request.description.strip()
                 if request.expected_response is not None:
                     db_command.expected_response = request.expected_response.strip()
-                if request.send_as_hex is not None:
-                    db_command.send_as_hex = request.send_as_hex
+                if request.input_mode is not None:
+                    db_command.input_mode = request.input_mode
                 if request.show_notification is not None:
                     db_command.show_notification = request.show_notification
                 if request.target_serial_id is not None:
