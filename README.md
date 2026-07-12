@@ -1,135 +1,93 @@
-# Industrial HMI - AT指令交互系统
+# TestHub — 电子制造生产测试系统
 
-工业上位机系统，专注于AT指令通信交互。
+基于 Web 的工业上位机与生产测试系统，面向电子设备的多串口通信、AT 指令编排、批量测试和结果追溯。仓库提供脱敏后的工程实现，用于展示从设备通信到测试工作流的完整链路。
+
+## 项目成果
+
+在实际生产测试场景中，通过测试固件、串口协议、并行校验和失败重试，将单次硬件测试由 **60 秒缩短至 10 秒**，单线产能提升 **5 倍**，良率提升 **2.3 个百分点**。
+
+## 核心能力
+
+- **多串口隔离**：每个连接使用独立 `serial_id`，避免并行工位之间串台。
+- **协议交互**：支持 AT 指令、十六进制原始数据、可配置终止符和自动波特率检测。
+- **批量测试**：维护指令模板与预期响应，支持批量发送、异常重试和人工确认。
+- **实时通信**：REST API 与 WebSocket 协同，实时推送串口响应、测试状态和错误信息。
+- **结果追溯**：记录设备、工位、操作员、测试项、实际响应与通过/失败结果。
+- **跨平台运行**：支持开发模式、前后端一体化生产运行和 PyInstaller 打包。
+
+## 架构
+
+```mermaid
+flowchart LR
+  operator[Operator] --> ui[Vue 3 HMI]
+  ui -->|REST| api[FastAPI]
+  ui <-->|WebSocket| ws[Realtime service]
+  api --> service[Test workflow services]
+  ws --> service
+  service --> driver[Multi-port serial driver]
+  driver --> devices[Devices under test]
+  service --> db[(SQLModel / SQLite)]
+```
 
 ## 技术栈
 
-- 后端: FastAPI + Python
-- 前端: Vue3 + Element Plus + Vite
-- 包管理: uv
-- 通信协议: AT指令 (串口通信)
-
-## 功能特性
-
-- 串口自动检测和配置
-- AT指令发送和响应（前端完全控制格式）
-- 常用AT指令快捷按钮
-- AT指令历史记录
-- 批量AT指令发送
-- 终止符控制（\r\n, \r, \n 或无终止符）
-- 原始十六进制数据收发
-- 通信日志记录和导出
-- 现代化Web界面
-
-## 支持的AT指令
-
-系统预置了常用的AT指令快捷按钮：
-
-- `AT` - 测试连接
-- `AT+GMR` - 查询固件版本
-- `AT+CGMI` - 查询制造商
-- `AT+CGMM` - 查询模块型号
-- `AT+CGMR` - 查询软件版本
-- `AT+CGSN` - 查询IMEI
-- `AT+CIMI` - 查询IMSI
-- `AT+CCID` - 查询ICCID
-- `AT+CSQ` - 查询信号强度
-- `AT+CREG?` - 查询网络注册状态
-- `AT+CGATT?` - 查询GPRS附着状态
-- `AT+COPS?` - 查询运营商
-
-## 环境要求
-
-- Python 3.8+
-- uv (Python包管理器)
-- Node.js 16+ (仅开发模式需要)
-
-**安装uv:**
-- Linux/macOS: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Windows: `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+- **后端**：Python、FastAPI、Pydantic、SQLModel、pyserial、WebSocket
+- **前端**：Vue 3、TypeScript、Element Plus、Pinia、Vite
+- **工程化**：uv、pytest、PyInstaller
 
 ## 快速开始
 
-### 跨平台启动 (推荐)
+### 环境要求
 
-项目提供了Python启动脚本，支持Windows和Linux：
+- Python 3.9+
+- Node.js 16+
+- [uv](https://docs.astral.sh/uv/)
 
-**生产模式启动:**
+### 开发模式
+
 ```bash
-python3 start.py
-```
-
-**开发模式启动:**
-```bash
+uv sync
+cd frontend && npm install && cd ..
 python3 start.py --dev
 ```
 
-### 传统启动方式
-
-**后端启动:**
-```bash
-uv sync
-uv run python backend/start.py
-```
-
-### 前端开发
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### 生产部署
+### 生产模式
 
 ```bash
 cd frontend
 npm run build
 cd ..
-uv run python backend/app/main.py
+python3 start.py
 ```
 
-## 使用说明
+启动后可访问：
 
-1. **串口配置**: 首先在串口配置页面选择串口并设置通信参数
+- 应用界面：`http://localhost:8000`
+- OpenAPI 文档：`http://localhost:8000/docs`
 
-2. **AT指令交互**: 进入通信页面，可以：
-   - **手动输入AT指令**: 在输入框中输入指令，支持回车快速发送
-   - **终止符控制**: 选择合适的终止符（\r\n, \r, \n）或无终止符
-   - **快捷按钮**: 使用预置的常用AT指令快捷按钮
-   - **历史记录**: 查看和重用之前发送的指令
-   - **批量发送**: 一次性发送多个AT指令，可设置发送间隔
-   - **原始数据**: 发送十六进制原始数据
-   - **日志管理**: 查看通信日志并导出为CSV文件
+## 测试
 
-3. **前端完全控制**: 
-   - 后端只做数据透传，不修改AT指令格式
-   - 前端控制指令格式化、终止符添加等所有细节
-   - 支持任意自定义AT指令格式
+```bash
+uv run pytest
+```
 
-## 接口地址
-
-- 前端界面: http://localhost:8000 (生产模式) 或 http://localhost:3000 (开发模式)
-- 后端API: http://localhost:8000
-- API文档: http://localhost:8000/docs
+自动化测试覆盖健康检查与基础 API 行为；涉及真实串口的场景需要连接测试设备或使用串口模拟器验证。
 
 ## 项目结构
 
+```text
+backend/app/api/       REST 与 WebSocket 接口
+backend/app/drivers/   多串口通信驱动
+backend/app/services/  指令、会话、测试结果与串口服务
+backend/app/schemas/   API 与 WebSocket 数据模型
+frontend/src/          Vue 3 操作界面、状态管理和 API 客户端
+tests/                 后端自动化测试
 ```
-├── backend/                # 后端代码
-│   ├── app/
-│   │   ├── api/           # API路由
-│   │   ├── core/          # 核心配置
-│   │   ├── drivers/       # 串口驱动
-│   │   ├── schemas/       # 数据模型
-│   │   └── services/      # 业务逻辑
-│   └── start.py           # 后端启动脚本
-├── frontend/              # 前端代码
-│   ├── src/
-│   │   ├── api/          # API接口
-│   │   ├── stores/       # 状态管理
-│   │   ├── views/        # 页面组件
-│   │   └── router/       # 路由配置
-│   └── package.json
-└── start.py              # 项目启动脚本
-```
+
+## 数据安全
+
+SQLite 数据库为本地运行时数据，不纳入版本控制。仓库不应包含真实设备标识、操作员信息、生产记录或客户数据；首次运行会按模型自动创建本地数据库。
+
+## License
+
+[MIT](LICENSE)
