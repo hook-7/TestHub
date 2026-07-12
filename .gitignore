@@ -208,3 +208,7 @@ __marimo__/
 
 
 node_modules/
+
+# Local runtime databases
+*.db
+*.db-*
