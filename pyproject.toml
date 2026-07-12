@@ -3,7 +3,7 @@ name = "industrial-hmi"
 version = "0.1.0"
 description = "Industrial HMI with AT command communication"
 authors = [
-    {name = "Developer", email = "dev@example.com"},
+    {name = "Yang Chao", email = "war7ng@gmail.com"},
 ]
 dependencies = [
     "fastapi>=0.104.1",
