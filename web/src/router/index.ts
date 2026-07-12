@@ -16,7 +16,7 @@ const router = createRouter({
       name: 'SerialConfig',
       component: SerialConfig,
       meta: { 
-        title: '串口配置'
+        title: '接口配置'
       }
     },
     {

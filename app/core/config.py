@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
     # Database settings - 数据库配置
-    DB_TYPE: str = Field(default="postgresql", description="数据库类型: sqlite, postgresql")
+    DB_TYPE: str = Field(default="sqlite", description="数据库类型: sqlite, postgresql")
     DB_NAME: str = Field(default="testhub", description="数据库名称")
     DB_HOST: str = Field(default="localhost", description="数据库主机地址")
     DB_PORT: int = Field(default=5432, description="数据库端口")
